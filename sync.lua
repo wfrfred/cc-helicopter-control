@@ -127,6 +127,16 @@ local function encodePathSegment(value)
     return encoded
 end
 
+local function encodeRelativePath(value)
+    local out = {}
+
+    for segment in value:gmatch("[^/]+") do
+        out[#out + 1] = encodePathSegment(segment)
+    end
+
+    return table.concat(out, "/")
+end
+
 local function pathFromUrl(value)
     local path = value:match("^https?://[^/]+(/.*)$")
 
@@ -137,16 +147,38 @@ local function pathFromUrl(value)
     return stripQueryAndFragment(value)
 end
 
+local function baseName(path)
+    return path:match("[^/]+$") or path
+end
+
+local function safeRelativePath(path)
+    if not path or path == "" then
+        return false
+    end
+
+    if path:sub(1, 1) == "/" then
+        return false
+    end
+
+    if path:find("\\", 1, true) or path:find("%z") then
+        return false
+    end
+
+    for segment in path:gmatch("[^/]+") do
+        if segment == "." or segment == ".." then
+            return false
+        end
+    end
+
+    return not path:find("//", 1, true)
+end
+
 local function safeLuaName(name)
-    if not name or name == "" then
-        return false
-    end
+    return safeRelativePath(name) and name:sub(-4) == ".lua"
+end
 
-    if name:find("/", 1, true) or name:find("\\", 1, true) or name:find("%z") then
-        return false
-    end
-
-    return name:sub(-4) == ".lua"
+local function safeDirName(name)
+    return safeRelativePath(name) and name:sub(-1) ~= "/"
 end
 
 local function currentProgramPath()
@@ -171,6 +203,10 @@ local protectedNames = {
     ["sync.lua"] = true,
 }
 
+local function protectedName(name)
+    return protectedNames[name] or protectedNames[baseName(name)]
+end
+
 local function localPath(name)
     if localDir == "" then
         return name
@@ -179,14 +215,14 @@ local function localPath(name)
     return fs.combine(localDir, name)
 end
 
-local function listLocalDir()
-    local ok, files = pcall(fs.list, localDir)
+local function listDir(path)
+    local ok, files = pcall(fs.list, path)
 
     if ok then
         return files
     end
 
-    if localDir == "" then
+    if path == "" then
         ok, files = pcall(fs.list, "/")
 
         if ok then
@@ -194,7 +230,26 @@ local function listLocalDir()
         end
     end
 
-    error("Cannot list local directory " .. tostring(localDir), 0)
+    error("Cannot list local directory " .. tostring(path), 0)
+end
+
+local function listLocalLuaFilesAt(dir, prefix, out)
+    for _, name in ipairs(listDir(dir)) do
+        local path = dir == "" and name or fs.combine(dir, name)
+        local relative = prefix == "" and name or (prefix .. "/" .. name)
+
+        if fs.isDir(path) then
+            listLocalLuaFilesAt(path, relative, out)
+        elseif safeLuaName(relative) then
+            out[#out + 1] = relative
+        end
+    end
+end
+
+local function listLocalLuaFiles()
+    local out = {}
+    listLocalLuaFilesAt(localDir, "", out)
+    return out
 end
 
 local function openFile(path, mode)
@@ -230,6 +285,12 @@ local function readFile(path)
 end
 
 local function writeFile(path, data)
+    local dir = fs.getDir(path)
+
+    if dir and dir ~= "" and not fs.exists(dir) then
+        fs.makeDir(dir)
+    end
+
     local file, err = openFile(path, "wb")
 
     if not file then
@@ -273,7 +334,7 @@ local function httpRead(options)
     return body
 end
 
-local function hrefToName(href, basePath)
+local function hrefToEntry(href, basePath)
     href = trim(xmlDecode(href))
 
     if href == "" then
@@ -291,48 +352,82 @@ local function hrefToName(href, basePath)
         return nil
     end
 
-    if relative == "" or relative:find("/", 1, true) then
+    if relative == "" then
         return nil
     end
 
-    if not safeLuaName(relative) then
+    local isDir = relative:sub(-1) == "/"
+
+    while relative:sub(-1) == "/" do
+        relative = relative:sub(1, -2)
+    end
+
+    if relative == "" then
         return nil
     end
 
-    return relative
+    if isDir then
+        if safeDirName(relative) then
+            return {
+                name = relative,
+                isDir = true,
+            }
+        end
+
+        return nil
+    end
+
+    if safeLuaName(relative) then
+        return {
+            name = relative,
+            isDir = false,
+        }
+    end
+
+    return nil
 end
 
-local function collectName(out, seen, href, basePath)
-    local name = hrefToName(href, basePath)
+local function collectEntry(out, seen, href, basePath)
+    local entry = hrefToEntry(href, basePath)
 
-    if name and not protectedNames[name] and not seen[name] then
-        seen[name] = true
-        out[#out + 1] = name
+    if entry then
+        local key = (entry.isDir and "d:" or "f:") .. entry.name
+
+        if not seen[key] then
+            seen[key] = true
+            out[#out + 1] = entry
+        end
     end
 end
 
-local function parseRemoteNames(body, basePath)
+local function parseRemoteEntries(body, basePath)
     local out = {}
     local seen = {}
 
     for href in body:gmatch("<[^>]-[Hh][Rr][Ee][Ff][^>]*>(.-)</[^>]-[Hh][Rr][Ee][Ff]>") do
-        collectName(out, seen, href, basePath)
+        collectEntry(out, seen, href, basePath)
     end
 
     for href in body:gmatch("[Hh][Rr][Ee][Ff]%s*=%s*\"([^\"]+)\"") do
-        collectName(out, seen, href, basePath)
+        collectEntry(out, seen, href, basePath)
     end
 
     for href in body:gmatch("[Hh][Rr][Ee][Ff]%s*=%s*'([^']+)'") do
-        collectName(out, seen, href, basePath)
+        collectEntry(out, seen, href, basePath)
     end
 
-    table.sort(out)
+    table.sort(out, function(a, b)
+        if a.isDir ~= b.isDir then
+            return a.isDir
+        end
+
+        return a.name < b.name
+    end)
 
     return out
 end
 
-local function getRemoteNames(remoteDir, basePath)
+local function getRemoteEntries(remoteDir, basePath)
     local body = httpRead({
         url = remoteDir,
         method = "PROPFIND",
@@ -340,10 +435,10 @@ local function getRemoteNames(remoteDir, basePath)
     })
 
     if body then
-        local names = parseRemoteNames(body, basePath)
+        local entries = parseRemoteEntries(body, basePath)
 
-        if #names > 0 then
-            return names
+        if #entries > 0 then
+            return entries
         end
     end
 
@@ -354,7 +449,36 @@ local function getRemoteNames(remoteDir, basePath)
         error(("Cannot read remote directory %s: %s"):format(remoteDir, tostring(err)), 0)
     end
 
-    local names = parseRemoteNames(body, basePath)
+    return parseRemoteEntries(body, basePath)
+end
+
+local function collectRemoteNames(remoteDir, basePath, prefix, out, seen, visited)
+    if visited[remoteDir] then
+        return
+    end
+
+    visited[remoteDir] = true
+
+    for _, entry in ipairs(getRemoteEntries(remoteDir, basePath)) do
+        local relative = prefix == "" and entry.name or (prefix .. "/" .. entry.name)
+
+        if entry.isDir then
+            local childDir = ensureTrailingSlash(remoteDir .. encodeRelativePath(entry.name))
+            local childBasePath = urlDecode(pathFromUrl(childDir))
+            collectRemoteNames(childDir, childBasePath, relative, out, seen, visited)
+        elseif safeLuaName(relative) and not protectedName(relative) and not seen[relative] then
+            seen[relative] = true
+            out[#out + 1] = relative
+        end
+    end
+end
+
+local function getRemoteNames(remoteDir, basePath)
+    local names = {}
+
+    collectRemoteNames(remoteDir, basePath, "", names, {}, {})
+
+    table.sort(names)
 
     if #names == 0 then
         error("No remote .lua files found. Stop to avoid deleting local files.", 0)
@@ -365,7 +489,7 @@ end
 
 local function downloadFile(remoteDir, name)
     local body, err = httpRead({
-        url = remoteDir .. encodePathSegment(name),
+        url = remoteDir .. encodeRelativePath(name),
         binary = true,
     })
 
@@ -529,10 +653,10 @@ local function buildPlan()
     local plan = newPlan()
     addAll(plan.skip, skippedNames)
 
-    for _, name in ipairs(listLocalDir()) do
+    for _, name in ipairs(listLocalLuaFiles()) do
         local path = localPath(name)
 
-        if safeLuaName(name) and shouldDeleteLocal(name) and not protectedNames[name] and not fs.isDir(path) and not remoteSet[name] then
+        if shouldDeleteLocal(name) and not protectedName(name) and not fs.isDir(path) and not remoteSet[name] then
             plan.delete[#plan.delete + 1] = name
         end
     end

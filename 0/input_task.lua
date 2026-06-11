@@ -1,0 +1,51 @@
+local protocol = require("protocol")
+local input = require("input")
+local config = require("config")
+
+local input_task = {}
+
+local MODEM_SIDE = config.modem.side
+local SEND_DT = config.input.send_dt
+
+local function defaultInput()
+    return {
+        roll = 0.0,
+        pitch = 0.0,
+        yaw = 0.0,
+        climb = 0.0,
+    }
+end
+
+function input_task.defaultInput()
+    return defaultInput()
+end
+
+function input_task.run(shared)
+    rednet.open(MODEM_SIDE)
+
+    shared.input = shared.input or defaultInput()
+    shared.inputTime = shared.inputTime or 0.0
+    shared.inputSeq = shared.inputSeq or 0
+
+    while shared.running do
+        local now = os.clock()
+        local ctl = input.read()
+
+        shared.input = ctl
+        shared.inputTime = now
+        shared.inputSeq = shared.inputSeq + 1
+
+        rednet.broadcast({
+            roll = ctl.roll,
+            pitch = ctl.pitch,
+            yaw = ctl.yaw,
+            climb = ctl.climb,
+            seq = shared.inputSeq,
+            time = now,
+        }, protocol.CONTROL.INPUT)
+
+        sleep(SEND_DT)
+    end
+end
+
+return input_task

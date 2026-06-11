@@ -203,8 +203,16 @@ local protectedNames = {
     ["sync.lua"] = true,
 }
 
+local protectedDirs = {
+    ["rom"] = true,
+}
+
 local function protectedName(name)
     return protectedNames[name] or protectedNames[baseName(name)]
+end
+
+local function protectedDir(name)
+    return protectedDirs[name] or protectedDirs[baseName(name)]
 end
 
 local function localPath(name)
@@ -239,7 +247,9 @@ local function listLocalLuaFilesAt(dir, prefix, out)
         local relative = prefix == "" and name or (prefix .. "/" .. name)
 
         if fs.isDir(path) then
-            listLocalLuaFilesAt(path, relative, out)
+            if not protectedDir(relative) then
+                listLocalLuaFilesAt(path, relative, out)
+            end
         elseif safeLuaName(relative) then
             out[#out + 1] = relative
         end

@@ -126,6 +126,8 @@ local function waitForState(shared)
 end
 
 function control_task.run(shared)
+    local mixer = rotor.new(config.rotor)
+
     waitForState(shared)
 
     local initial = shared.state
@@ -268,8 +270,8 @@ function control_task.run(shared)
             COLLECTIVE_MAX
         )
 
-        rotor.set(collective, rollCmd, yawCmd, pitchCmd)
-        local rotorOutput = rotor.update()
+        mixer:set(collective, rollCmd, yawCmd, pitchCmd)
+        local rotorOutput = mixer:update()
 
         telemetryTimer = telemetryTimer + dt
         if telemetryTimer >= TELEMETRY_DT then

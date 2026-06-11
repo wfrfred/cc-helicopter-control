@@ -1,34 +1,9 @@
 local protocol = require("lib.protocol")
-local config = require("config")
 
 local rotor = {}
 
-local MODEM_SIDE = config.rotor.modem_side
-
-local UPPER_BEARING = config.rotor.upper_bearing
-local LOWER_BEARING = config.rotor.lower_bearing
-
-local PHASE_OFFSET_UPPER = config.rotor.phase_offset_upper
-local PHASE_OFFSET_LOWER = config.rotor.phase_offset_lower
-
-local ROLL_SIGN = config.rotor.roll_sign
-local PITCH_SIGN = config.rotor.pitch_sign
-local YAW_SIGN = config.rotor.yaw_sign
-
-local upper = peripheral.wrap(UPPER_BEARING)
-local lower = peripheral.wrap(LOWER_BEARING)
-
-assert(upper, "upper swivel bearing not found: " .. UPPER_BEARING)
-assert(lower, "lower swivel bearing not found: " .. LOWER_BEARING)
-
-rednet.open(MODEM_SIDE)
-
-local collective_cmd = 0.0
-local roll_cmd = 0.0
-local yaw_cmd = 0.0
-local pitch_cmd = 0.0
-
-local BLADE_MOUNT = config.rotor.blade_mount
+local Mixer = {}
+Mixer.__index = Mixer
 
 local function getPhaseRad(bearing)
     if bearing.getTargetAngleRad then
@@ -50,10 +25,10 @@ local function getPhaseRad(bearing)
     error("no usable angle getter")
 end
 
-local function makeTuple(rotorPhase, phaseOffset, collective, roll, pitch)
+local function makeTuple(bladeMount, rotorPhase, phaseOffset, collective, roll, pitch)
     local out = {}
 
-    for blade, mount in pairs(BLADE_MOUNT) do
+    for blade, mount in pairs(bladeMount) do
         local phase = rotorPhase - mount + phaseOffset
         out[blade] = collective + roll * math.sin(phase) + pitch * math.cos(phase)
     end
@@ -61,34 +36,61 @@ local function makeTuple(rotorPhase, phaseOffset, collective, roll, pitch)
     return out
 end
 
-function rotor.set(collective, roll, yaw, pitch)
-    collective_cmd = tonumber(collective) or 0.0
-    roll_cmd = tonumber(roll) or 0.0
-    yaw_cmd = tonumber(yaw) or 0.0
-    pitch_cmd = tonumber(pitch) or 0.0
+function rotor.new(config)
+    local upper = peripheral.wrap(config.upper_bearing)
+    local lower = peripheral.wrap(config.lower_bearing)
+
+    assert(upper, "upper swivel bearing not found: " .. config.upper_bearing)
+    assert(lower, "lower swivel bearing not found: " .. config.lower_bearing)
+
+    rednet.open(config.modem_side)
+
+    return setmetatable({
+        upper = upper,
+        lower = lower,
+        phase_offset_upper = config.phase_offset_upper,
+        phase_offset_lower = config.phase_offset_lower,
+        roll_sign = config.roll_sign,
+        pitch_sign = config.pitch_sign,
+        yaw_sign = config.yaw_sign,
+        blade_mount = config.blade_mount,
+        collective_cmd = 0.0,
+        roll_cmd = 0.0,
+        yaw_cmd = 0.0,
+        pitch_cmd = 0.0,
+    }, Mixer)
 end
 
-function rotor.update()
-    local upperPhase = getPhaseRad(upper)
-    local lowerPhase = getPhaseRad(lower)
+function Mixer:set(collective, roll, yaw, pitch)
+    self.collective_cmd = tonumber(collective) or 0.0
+    self.roll_cmd = tonumber(roll) or 0.0
+    self.yaw_cmd = tonumber(yaw) or 0.0
+    self.pitch_cmd = tonumber(pitch) or 0.0
+end
 
-    local upperCollective = collective_cmd + YAW_SIGN * yaw_cmd
-    local lowerCollective = collective_cmd - YAW_SIGN * yaw_cmd
+function Mixer:update()
+    local upperPhase = getPhaseRad(self.upper)
+    local lowerPhase = getPhaseRad(self.lower)
+
+    local upperCollective = self.collective_cmd + self.yaw_sign * self.yaw_cmd
+    local lowerCollective = self.collective_cmd - self.yaw_sign * self.yaw_cmd
 
     local upperMsg = makeTuple(
+        self.blade_mount,
         upperPhase,
-        PHASE_OFFSET_UPPER,
+        self.phase_offset_upper,
         upperCollective,
-        ROLL_SIGN * roll_cmd,
-        PITCH_SIGN * pitch_cmd
+        self.roll_sign * self.roll_cmd,
+        self.pitch_sign * self.pitch_cmd
     )
 
     local lowerMsg = makeTuple(
+        self.blade_mount,
         lowerPhase,
-        PHASE_OFFSET_LOWER,
+        self.phase_offset_lower,
         lowerCollective,
-        ROLL_SIGN * roll_cmd,
-        PITCH_SIGN * pitch_cmd
+        self.roll_sign * self.roll_cmd,
+        self.pitch_sign * self.pitch_cmd
     )
 
     rednet.broadcast(upperMsg, protocol.LAYER.UPPER)

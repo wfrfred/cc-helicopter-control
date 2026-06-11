@@ -18,7 +18,7 @@ local function say(...)
 end
 
 local function usage()
-    say("Usage: sync <target> [--logic|--config|--all] [--quiet]")
+    say("Usage: sync <target> [--logic|--config|--all] [--dry-run] [--quiet]")
     say("       sync --update [--quiet]")
     say("Example: sync 0")
     say("Default: --logic")
@@ -28,10 +28,13 @@ local selfUpdate = false
 local targetName = nil
 local mode = "logic"
 local modeSet = false
+local dryRun = false
 
 for _, arg in ipairs(args) do
     if arg == "--quiet" then
         -- parsed above
+    elseif arg == "--dry-run" then
+        dryRun = true
     elseif arg == "--update" then
         if selfUpdate or targetName then
             usage()
@@ -68,7 +71,7 @@ local function safeTargetName(name)
         and not name:find("%z")
 end
 
-if selfUpdate and (targetName or modeSet) then
+if selfUpdate and (targetName or modeSet or dryRun) then
     usage()
     return
 end
@@ -416,12 +419,15 @@ local remoteDir = ensureTrailingSlash(BASE_URL .. encodePathSegment(targetName))
 local basePath = urlDecode(pathFromUrl(remoteDir))
 local remoteNames = getRemoteNames(remoteDir, basePath)
 local selectedNames = {}
+local skippedNames = {}
 local remoteSet = {}
 
 for _, name in ipairs(remoteNames) do
     if selectedName(name) then
         selectedNames[#selectedNames + 1] = name
         remoteSet[name] = true
+    else
+        skippedNames[#skippedNames + 1] = name
     end
 end
 
@@ -450,6 +456,9 @@ end
 say("Remote: " .. remoteDir)
 say("Local: " .. (localDir == "" and "/" or localDir))
 say("Mode: " .. mode)
+if dryRun then
+    say("Dry run: no local changes will be made")
+end
 
 local remoteData = {}
 
@@ -467,18 +476,106 @@ if #failures > 0 then
     error(("%d sync errors before local changes"):format(#failures), 0)
 end
 
-for _, name in ipairs(listLocalDir()) do
+local function newPlan()
+    return {
+        add = {},
+        update = {},
+        same = {},
+        delete = {},
+        skip = {},
+        blocked = {},
+    }
+end
+
+local function addAll(target, source)
+    for _, item in ipairs(source) do
+        target[#target + 1] = item
+    end
+end
+
+local function printPlanList(label, list)
+    if #list == 0 then
+        return
+    end
+
+    say(label .. ":")
+
+    for _, item in ipairs(list) do
+        say("  " .. item)
+    end
+end
+
+local function printPlan(plan)
+    say("Plan:")
+    printPlanList("add", plan.add)
+    printPlanList("update", plan.update)
+    printPlanList("same", plan.same)
+    printPlanList("skip", plan.skip)
+    printPlanList("delete stale", plan.delete)
+    printPlanList("blocked", plan.blocked)
+
+    if #plan.add == 0
+        and #plan.update == 0
+        and #plan.same == 0
+        and #plan.skip == 0
+        and #plan.delete == 0
+        and #plan.blocked == 0
+    then
+        say("  no changes")
+    end
+end
+
+local function buildPlan()
+    local plan = newPlan()
+    addAll(plan.skip, skippedNames)
+
+    for _, name in ipairs(listLocalDir()) do
+        local path = localPath(name)
+
+        if safeLuaName(name) and shouldDeleteLocal(name) and not protectedNames[name] and not fs.isDir(path) and not remoteSet[name] then
+            plan.delete[#plan.delete + 1] = name
+        end
+    end
+
+    for _, name in ipairs(selectedNames) do
+        local path = localPath(name)
+
+        if fs.exists(path) and fs.isDir(path) then
+            plan.blocked[#plan.blocked + 1] = name .. " is a local directory"
+        else
+            local data = remoteData[name]
+            local old = readFile(path)
+
+            if old == data then
+                plan.same[#plan.same + 1] = name
+            elseif old == nil then
+                plan.add[#plan.add + 1] = name
+            else
+                plan.update[#plan.update + 1] = name
+            end
+        end
+    end
+
+    return plan
+end
+
+local plan = buildPlan()
+
+if dryRun then
+    printPlan(plan)
+    return
+end
+
+for _, name in ipairs(plan.delete) do
     local path = localPath(name)
 
-    if safeLuaName(name) and shouldDeleteLocal(name) and not protectedNames[name] and not fs.isDir(path) and not remoteSet[name] then
-        local ok, err = pcall(fs.delete, path)
+    local ok, err = pcall(fs.delete, path)
 
-        if ok then
-            stats.deleted = stats.deleted + 1
-            say("delete " .. name)
-        else
-            fail(("delete %s failed: %s"):format(name, tostring(err)))
-        end
+    if ok then
+        stats.deleted = stats.deleted + 1
+        say("delete " .. name)
+    else
+        fail(("delete %s failed: %s"):format(name, tostring(err)))
     end
 end
 

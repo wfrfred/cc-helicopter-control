@@ -1,4 +1,4 @@
-local mathx = require("mathx")
+local mathx = require("lib.mathx")
 local quat = require("quat")
 local config = require("config")
 

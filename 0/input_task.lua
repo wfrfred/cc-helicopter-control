@@ -1,4 +1,4 @@
-local protocol = require("protocol")
+local protocol = require("lib.protocol")
 local input = require("input")
 local config = require("config")
 

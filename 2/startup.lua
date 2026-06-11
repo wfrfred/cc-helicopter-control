@@ -19,7 +19,7 @@ term.clear()
 term.setCursorPos(1, 1)
 print("startup: actuator controller")
 
-local protocol = require("protocol")
+local protocol = require("lib.protocol")
 local pwm = require("pwm")
 
 local MODEM_SIDE = config.modem.side

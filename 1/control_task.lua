@@ -1,4 +1,4 @@
-local mathx = require("mathx")
+local mathx = require("lib.mathx")
 local pid = require("pid")
 local rotor = require("rotor")
 local config = require("config")

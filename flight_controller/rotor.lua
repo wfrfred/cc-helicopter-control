@@ -36,7 +36,7 @@ local function makeTuple(bladeMount, rotorPhase, phaseOffset, collective, roll, 
     return out
 end
 
-function rotor.new(hardware, calibration)
+function rotor.new(hardware, calibration, mixerAxis)
     local upper = peripheral.wrap(hardware.upper_bearing)
     local lower = peripheral.wrap(hardware.lower_bearing)
 
@@ -50,9 +50,7 @@ function rotor.new(hardware, calibration)
         lower = lower,
         phase_offset_upper = calibration.phase_offset_upper,
         phase_offset_lower = calibration.phase_offset_lower,
-        roll_sign = calibration.roll_sign,
-        pitch_sign = calibration.pitch_sign,
-        yaw_sign = calibration.yaw_sign,
+        mixer_axis = mixerAxis,
         blade_mount = hardware.blade_mount,
         collective_cmd = 0.0,
         roll_cmd = 0.0,
@@ -71,17 +69,21 @@ end
 function Mixer:update()
     local upperPhase = getPhaseRad(self.upper)
     local lowerPhase = getPhaseRad(self.lower)
+    local collectiveCmd = self.mixer_axis.collective * self.collective_cmd
+    local rollCmd = self.mixer_axis.roll * self.roll_cmd
+    local pitchCmd = self.mixer_axis.pitch * self.pitch_cmd
+    local yawCmd = self.mixer_axis.yaw * self.yaw_cmd
 
-    local upperCollective = self.collective_cmd + self.yaw_sign * self.yaw_cmd
-    local lowerCollective = self.collective_cmd - self.yaw_sign * self.yaw_cmd
+    local upperCollective = collectiveCmd + yawCmd
+    local lowerCollective = collectiveCmd - yawCmd
 
     local upperMsg = makeTuple(
         self.blade_mount,
         upperPhase,
         self.phase_offset_upper,
         upperCollective,
-        self.roll_sign * self.roll_cmd,
-        self.pitch_sign * self.pitch_cmd
+        rollCmd,
+        pitchCmd
     )
 
     local lowerMsg = makeTuple(
@@ -89,8 +91,8 @@ function Mixer:update()
         lowerPhase,
         self.phase_offset_lower,
         lowerCollective,
-        self.roll_sign * self.roll_cmd,
-        self.pitch_sign * self.pitch_cmd
+        rollCmd,
+        pitchCmd
     )
 
     rednet.broadcast(upperMsg, protocol.LAYER.UPPER)

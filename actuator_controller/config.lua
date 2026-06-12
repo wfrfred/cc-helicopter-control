@@ -15,12 +15,12 @@ config.actuator = {
     outputs = {
         {
             blade = 1,
-            sign = -1,
+            polarity = -1,
             side = "back",
         },
         {
             blade = 2,
-            sign = 1,
+            polarity = 1,
             side = "left",
         },
     },

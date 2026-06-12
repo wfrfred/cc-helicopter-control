@@ -14,7 +14,6 @@ local MAX_DT = CONTROL.max_dt
 local INPUT_STALE_DT = CONTROL.input_stale_dt
 
 local BASE_COLLECTIVE = CONTROL.base_collective
-local HEIGHT_OUTPUT_SIGN = CONTROL.height_output_sign
 
 local COLLECTIVE_MIN = CONTROL.collective_min
 local COLLECTIVE_MAX = CONTROL.collective_max
@@ -34,10 +33,6 @@ local ROLL_CENTER_RATE = CONTROL.roll_center_rate
 local PITCH_CENTER_RATE = CONTROL.pitch_center_rate
 
 local YAW_LOCK_RATE_DEADBAND = CONTROL.yaw_lock_rate_deadband
-
-local ROLL_OUTPUT_SIGN = CONTROL.roll_output_sign
-local PITCH_OUTPUT_SIGN = CONTROL.pitch_output_sign
-local YAW_OUTPUT_SIGN = CONTROL.yaw_output_sign
 
 local heightPid = pid.new(CONTROL.pid.height)
 local rollPid = pid.new(CONTROL.pid.roll)
@@ -108,7 +103,7 @@ local function waitForSensors(shared)
 end
 
 function control_task.run(shared)
-    local mixer = rotor.new(config.hardware.rotor, config.calibration.rotor)
+    local mixer = rotor.new(config.hardware.rotor, config.calibration.rotor, config.calibration.mixer_axis)
 
     waitForSensors(shared)
 
@@ -202,12 +197,8 @@ function control_task.run(shared)
         local pitchCmd = pitchPid:update(pitchErr, 0.0, dt)
         local yawCmd, yawRateErr = yawRatePid:update(targetYawRate, yawRate, dt)
 
-        rollCmd = ROLL_OUTPUT_SIGN * rollCmd
-        pitchCmd = PITCH_OUTPUT_SIGN * pitchCmd
-        yawCmd = YAW_OUTPUT_SIGN * yawCmd
-
         local collective = mathx.clamp(
-            BASE_COLLECTIVE + HEIGHT_OUTPUT_SIGN * heightOut,
+            BASE_COLLECTIVE + heightOut,
             COLLECTIVE_MIN,
             COLLECTIVE_MAX
         )

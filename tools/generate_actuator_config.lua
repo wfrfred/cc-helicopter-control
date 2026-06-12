@@ -244,7 +244,7 @@ local function renderConfig(old)
     for _, out in ipairs(old.outputs or {}) do
         add("        {")
         add("            blade = " .. tostring(out.blade) .. ",")
-        add("            sign = " .. tostring(out.sign) .. ",")
+        add("            polarity = " .. tostring(out.sign) .. ",")
         add("            side = " .. quoted(out.side) .. ",")
         add("        },")
     end

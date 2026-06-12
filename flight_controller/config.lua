@@ -49,9 +49,13 @@ config.calibration = {
     rotor = {
         phase_offset_upper = math.pi / 2,
         phase_offset_lower = math.pi / 2,
-        roll_sign = 1,
-        pitch_sign = 1,
-        yaw_sign = -1,
+    },
+
+    mixer_axis = {
+        collective = 1,
+        roll = -1,
+        pitch = 1,
+        yaw = -1,
     },
 }
 
@@ -62,8 +66,6 @@ config.control = {
     input_stale_dt = 0.5,
 
     base_collective = 0.2,
-    height_output_sign = 1.0,
-
     collective_min = 0.0,
     collective_max = 10.0,
 
@@ -82,10 +84,6 @@ config.control = {
     pitch_center_rate = math.rad(60),
 
     yaw_lock_rate_deadband = math.rad(2),
-
-    roll_output_sign = -1.0,
-    pitch_output_sign = 1.0,
-    yaw_output_sign = 1.0,
 
     pid = {
         height = {

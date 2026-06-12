@@ -37,10 +37,10 @@ for _, out in ipairs(OUTPUTS) do
     pwm.set(out.side, 0)
 end
 
-local function signedValue(value, sign)
+local function polarizedValue(value, polarity)
     value = tonumber(value) or 0
 
-    if sign == protocol.SIGN.NEG then
+    if polarity < 0 then
         value = -value
     end
 
@@ -59,7 +59,7 @@ local function receiverTask()
 
             for _, out in ipairs(OUTPUTS) do
                 local raw = tonumber(msg[out.blade]) or 0
-                local value = signedValue(raw, out.sign)
+                local value = polarizedValue(raw, out.polarity)
 
                 pwm.set(out.side, value)
             end
@@ -81,7 +81,7 @@ local function displayTask()
 
         for _, out in ipairs(OUTPUTS) do
             local value = pwm.get(out.side)
-            print(("blade=%d sign=%+d side=%s"):format(out.blade, out.sign, out.side))
+            print(("blade=%d polarity=%+d side=%s"):format(out.blade, out.polarity, out.side))
             print(("pwm=%.2f"):format(value))
             print()
         end

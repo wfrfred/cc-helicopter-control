@@ -2,10 +2,10 @@ local config = require("config")
 local sync = config.runtime.sync
 
 if sync.enabled == true then
-    print("startup sync: " .. sync.target)
+    print("startup sync: " .. table.concat(sync.sources, " -> "))
 
     local ok, err = pcall(function()
-        shell.run("sync", sync.target)
+        shell.run("sync", table.unpack(sync.sources))
     end)
 
     if not ok then

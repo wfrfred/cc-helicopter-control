@@ -1,13 +1,13 @@
 local args = { ... }
 
 local function usage()
-    print("Usage: lua tools/generate_actuator_config.lua <old-startup.lua> [config.lua] [--target actuator_controller] [--display-dt 0.5] [--sync-enabled true|false]")
+    print("Usage: lua tools/generate_actuator_config.lua <old-startup.lua> [config.lua] [--source actuator_controller] [--display-dt 0.5] [--sync-enabled true|false]")
 end
 
 local inputPath = nil
 local outputPath = "config.lua"
 local outputSet = false
-local target = "actuator_controller"
+local source = "actuator_controller"
 local displayDt = nil
 local syncEnabled = true
 
@@ -15,8 +15,8 @@ local i = 1
 while i <= #args do
     local arg = args[i]
 
-    if arg == "--target" then
-        target = args[i + 1]
+    if arg == "--source" then
+        source = args[i + 1]
         i = i + 2
     elseif arg == "--display-dt" then
         displayDt = tonumber(args[i + 1])
@@ -41,7 +41,7 @@ while i <= #args do
     end
 end
 
-if not inputPath or not target then
+if not inputPath or not source then
     usage()
     error("missing required input", 0)
 end
@@ -233,7 +233,7 @@ local function renderConfig(old)
     add()
     add("config.sync = {")
     add("    enabled = " .. tostring(syncEnabled) .. ",")
-    add("    target = " .. quoted(target) .. ",")
+    add("    sources = { " .. quoted(source) .. " },")
     add("}")
     add()
     add("config.actuator = {")

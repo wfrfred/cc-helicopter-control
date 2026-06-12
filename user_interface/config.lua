@@ -6,7 +6,7 @@ config.modem = {
 
 config.sync = {
     enabled = true,
-    target = "user_interface",
+    sources = { "user_interface" },
 }
 
 config.displays = {

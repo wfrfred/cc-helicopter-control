@@ -5,20 +5,6 @@ local REQUEST_TIMEOUT = 15
 local CONFIG_NAME = "config.lua"
 local quiet = false
 
-local TARGET_SOURCES = {
-    user_interface = { "common", "user_interface" },
-    flight_controller = { "common", "flight_controller" },
-    actuator_controller = { "common", "actuator_controller" },
-}
-
-local OPTIONAL_SOURCES = {
-    common = true,
-}
-
-local SOURCE_ONLY_TARGETS = {
-    common = true,
-}
-
 for _, arg in ipairs(args) do
     if arg == "--quiet" then
         quiet = true
@@ -32,14 +18,15 @@ local function say(...)
 end
 
 local function usage()
-    say("Usage: sync <target> [--logic|--config|--all] [--dry-run] [--quiet]")
+    say("Usage: sync <source> [<source> ...] [--logic|--config|--all] [--dry-run] [--quiet]")
     say("       sync --update [--quiet]")
     say("Example: sync flight_controller")
+    say("         sync common flight_controller")
     say("Default: --logic")
 end
 
 local selfUpdate = false
-local targetName = nil
+local sourceNames = {}
 local mode = "logic"
 local modeSet = false
 local dryRun = false
@@ -50,7 +37,7 @@ for _, arg in ipairs(args) do
     elseif arg == "--dry-run" then
         dryRun = true
     elseif arg == "--update" then
-        if selfUpdate or targetName then
+        if selfUpdate or #sourceNames > 0 then
             usage()
             return
         end
@@ -68,16 +55,16 @@ for _, arg in ipairs(args) do
         usage()
         return
     else
-        if selfUpdate or targetName then
+        if selfUpdate then
             usage()
             return
         end
 
-        targetName = arg
+        sourceNames[#sourceNames + 1] = arg
     end
 end
 
-local function safeTargetName(name)
+local function safeSourceName(name)
     return name ~= nil
         and name ~= ""
         and not name:find("/", 1, true)
@@ -85,22 +72,21 @@ local function safeTargetName(name)
         and not name:find("%z")
 end
 
-if selfUpdate and (targetName or modeSet or dryRun) then
+if selfUpdate and (#sourceNames > 0 or modeSet or dryRun) then
     usage()
     return
 end
 
-if not selfUpdate and not safeTargetName(targetName) then
+if not selfUpdate and #sourceNames == 0 then
     usage()
     return
 end
 
-if SOURCE_ONLY_TARGETS[targetName] then
-    error(targetName .. " is a source layer, not a sync target", 0)
-end
-
-if not selfUpdate and not TARGET_SOURCES[targetName] then
-    error("Unknown sync target: " .. tostring(targetName), 0)
+for _, sourceName in ipairs(sourceNames) do
+    if not safeSourceName(sourceName) then
+        usage()
+        return
+    end
 end
 
 if not http or not http.get then
@@ -519,15 +505,6 @@ local function getRemoteNames(remoteDir, basePath)
     return names
 end
 
-local function missingOptionalSourceError(err)
-    return tostring(err):find("HTTP 404", 1, true)
-        or tostring(err):find("No remote .lua files found", 1, true)
-end
-
-local function sourceNamesForTarget(name)
-    return TARGET_SOURCES[name]
-end
-
 local function remoteDirForSource(sourceName)
     return ensureTrailingSlash(BASE_URL .. encodePathSegment(sourceName))
 end
@@ -542,27 +519,16 @@ local function loadSource(sourceName)
             name = sourceName,
             remoteDir = remoteDir,
             names = names,
-            skipped = false,
-        }
-    end
-
-    if OPTIONAL_SOURCES[sourceName] and missingOptionalSourceError(names) then
-        return {
-            name = sourceName,
-            remoteDir = remoteDir,
-            names = {},
-            skipped = true,
-            error = names,
         }
     end
 
     error(names, 0)
 end
 
-local function loadSources(target)
+local function loadSources(names)
     local sources = {}
 
-    for _, sourceName in ipairs(sourceNamesForTarget(target)) do
+    for _, sourceName in ipairs(names) do
         sources[#sources + 1] = loadSource(sourceName)
     end
 
@@ -621,20 +587,15 @@ local function shouldDeleteLocal(name)
     return selectedName(name)
 end
 
-local sources = loadSources(targetName)
+local sources = loadSources(sourceNames)
 local selectedNames = {}
 local skippedNames = {}
 local remoteSet = {}
 local selectedSource = {}
 local sourceLabels = {}
-local skippedSources = {}
 
 for _, source in ipairs(sources) do
-    if source.skipped then
-        skippedSources[#skippedSources + 1] = source
-    else
-        sourceLabels[#sourceLabels + 1] = source.name
-    end
+    sourceLabels[#sourceLabels + 1] = source.name
 
     for _, name in ipairs(source.names) do
         if selectedName(name) then
@@ -675,11 +636,7 @@ local function fail(message)
     say("ERROR " .. message)
 end
 
-say("Target: " .. targetName)
 say("Sources: " .. table.concat(sourceLabels, " -> "))
-for _, source in ipairs(skippedSources) do
-    say("Skip source " .. source.name .. ": " .. tostring(source.error))
-end
 say("Local: " .. (localDir == "" and "/" or localDir))
 say("Mode: " .. mode)
 if dryRun then

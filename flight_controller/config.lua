@@ -3,7 +3,7 @@ local config = {}
 config.runtime = {
     sync = {
         enabled = true,
-        target = "flight_controller",
+        sources = { "flight_controller" },
     },
 
     modem = {

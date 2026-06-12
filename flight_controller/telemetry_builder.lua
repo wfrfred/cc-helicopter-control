@@ -22,13 +22,6 @@ local function zeroPidTerms()
 end
 
 function telemetry_builder.running(data)
-    local shared = data.shared
-    local state = data.state
-    local input = data.input
-    local velocity = data.velocity
-    local rotorOutput = data.rotorOutput
-    local controllers = data.controllers
-
     return {
         status = "running",
         time = data.time,
@@ -40,18 +33,18 @@ function telemetry_builder.running(data)
 
         inputAge = data.inputAge,
         inputStale = data.inputStale,
-        inputSender = shared.inputSender,
+        inputSender = data.shared.inputSender,
         input = {
-            roll = input.roll,
-            pitch = input.pitch,
-            yaw = input.yaw,
-            climb = input.climb,
+            roll = data.input.roll,
+            pitch = data.input.pitch,
+            yaw = data.input.yaw,
+            climb = data.input.climb,
         },
 
         position = {
-            x = state.pos.x,
-            y = state.pos.y,
-            z = state.pos.z,
+            x = data.state.pos.x,
+            y = data.state.pos.y,
+            z = data.state.pos.z,
         },
 
         output = {
@@ -60,17 +53,17 @@ function telemetry_builder.running(data)
             pitch = data.pitchCmd,
             yaw = data.yawCmd,
             rotor = {
-                upper = rotorOutput.upper,
-                lower = rotorOutput.lower,
+                upper = data.rotorOutput.upper,
+                lower = data.rotorOutput.lower,
             },
         },
 
         pid = {
-            height = pidTerms(controllers.height),
-            roll = pidTerms(controllers.roll),
-            pitch = pidTerms(controllers.pitch),
-            yawAngle = data.yawAngleActive and pidTerms(controllers.yawAngle) or zeroPidTerms(),
-            yawRate = pidTerms(controllers.yawRate),
+            height = pidTerms(data.controllers.height),
+            roll = pidTerms(data.controllers.roll),
+            pitch = pidTerms(data.controllers.pitch),
+            yawAngle = data.yawAngleActive and pidTerms(data.controllers.yawAngle) or zeroPidTerms(),
+            yawRate = pidTerms(data.controllers.yawRate),
         },
 
         target = {
@@ -82,18 +75,18 @@ function telemetry_builder.running(data)
         },
 
         current = {
-            height = state.pos.y,
-            roll = state.roll,
-            pitch = state.pitch,
-            yaw = state.yaw,
+            height = data.state.pos.y,
+            roll = data.state.roll,
+            pitch = data.state.pitch,
+            yaw = data.state.yaw,
             yawRate = data.yawRate,
             velocity = {
-                x = velocity.x,
-                y = velocity.y,
-                z = velocity.z,
-                total = velocity.total,
-                horizontal = velocity.horizontal,
-                vertical = velocity.vertical,
+                x = data.velocity.x,
+                y = data.velocity.y,
+                z = data.velocity.z,
+                total = data.velocity.total,
+                horizontal = data.velocity.horizontal,
+                vertical = data.velocity.vertical,
             },
         },
 

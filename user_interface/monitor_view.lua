@@ -385,13 +385,25 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     end
 
     if y <= limitY then
-        draw.writeAt(mon, x, y, ("target %.1f %.1f  velocity %+.1f %+.1f/%+.1f %+.1f"):format(
+        draw.writeAt(mon, x, y, ("target %.1f %.1f  velocity x %+.1f/%+.1f z %+.1f/%+.1f"):format(
             target.x,
             target.z,
             targetVelocity.x,
-            targetVelocity.z,
             currentVelocity.x,
+            targetVelocity.z,
             currentVelocity.z
+        ), colors.lightGray, colors.black, width)
+        y = y + 1
+    end
+
+    if y <= limitY then
+        draw.writeAt(mon, x, y, ("output x %+.2f ff %+.2f fb %+.2f  z %+.2f ff %+.2f fb %+.2f"):format(
+            output.x,
+            output.feedforwardX,
+            output.feedbackX,
+            output.z,
+            output.feedforwardZ,
+            output.feedbackZ
         ), colors.lightGray, colors.black, width)
         y = y + 1
     end

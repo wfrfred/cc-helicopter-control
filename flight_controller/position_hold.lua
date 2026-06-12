@@ -32,6 +32,7 @@ function position_hold.new(initial, control)
         targetX = initial.pos.x,
         targetZ = initial.pos.z,
         active = false,
+        velocityFeedforwardGain = control.position_hold_velocity_feedforward_gain,
         controllers = controllers,
     }, Hold)
 end
@@ -53,6 +54,10 @@ function Hold:update(input, pose, velocity, dt)
             errorZ = 0.0,
             targetVelocityX = 0.0,
             targetVelocityZ = 0.0,
+            feedforwardX = 0.0,
+            feedforwardZ = 0.0,
+            feedbackX = 0.0,
+            feedbackZ = 0.0,
             outputX = 0.0,
             outputZ = 0.0,
             roll = nil,
@@ -69,8 +74,12 @@ function Hold:update(input, pose, velocity, dt)
     local targetVelocityX, errorX = self.controllers.positionX:update(self.targetX, pose.pos.x, dt)
     local targetVelocityZ, errorZ = self.controllers.positionZ:update(self.targetZ, pose.pos.z, dt)
 
-    local outputX = self.controllers.velocityX:update(targetVelocityX, velocity.x, dt)
-    local outputZ = self.controllers.velocityZ:update(targetVelocityZ, velocity.z, dt)
+    local feedforwardX = self.velocityFeedforwardGain * targetVelocityX
+    local feedforwardZ = self.velocityFeedforwardGain * targetVelocityZ
+    local feedbackX = self.controllers.velocityX:update(targetVelocityX, velocity.x, dt)
+    local feedbackZ = self.controllers.velocityZ:update(targetVelocityZ, velocity.z, dt)
+    local outputX = feedforwardX + feedbackX
+    local outputZ = feedforwardZ + feedbackZ
     local body = worldToBody(outputX, outputZ, pose.yaw)
 
     return {
@@ -81,6 +90,10 @@ function Hold:update(input, pose, velocity, dt)
         errorZ = errorZ,
         targetVelocityX = targetVelocityX,
         targetVelocityZ = targetVelocityZ,
+        feedforwardX = feedforwardX,
+        feedforwardZ = feedforwardZ,
+        feedbackX = feedbackX,
+        feedbackZ = feedbackZ,
         outputX = outputX,
         outputZ = outputZ,
         roll = mathx.clamp(body.right, -self.control.max_target_roll, self.control.max_target_roll),

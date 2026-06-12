@@ -86,6 +86,7 @@ config.control = {
 
     height_lock_speed_deadband = 0.1,
     yaw_lock_rate_deadband = math.rad(2),
+    position_hold_velocity_feedforward_gain = 0.08,
 
     pid = {
         height = {
@@ -111,7 +112,7 @@ config.control = {
         },
 
         position_x = {
-            kp = 0.5,
+            kp = 0.2,
             ki = 0.0,
             kd = 0.0,
             i_min = -1.0,
@@ -122,7 +123,7 @@ config.control = {
         },
 
         position_z = {
-            kp = 0.5,
+            kp = 0.2,
             ki = 0.0,
             kd = 0.0,
             i_min = -1.0,
@@ -133,7 +134,7 @@ config.control = {
         },
 
         velocity_x = {
-            kp = 0.08,
+            kp = 0.1,
             ki = 0.0,
             kd = 0.0,
             i_min = -0.1,
@@ -144,7 +145,7 @@ config.control = {
         },
 
         velocity_z = {
-            kp = 0.08,
+            kp = 0.1,
             ki = 0.0,
             kd = 0.0,
             i_min = -0.1,

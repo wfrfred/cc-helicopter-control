@@ -133,6 +133,10 @@ function telemetry_builder.running(data)
             output = {
                 x = position.outputX,
                 z = position.outputZ,
+                feedforwardX = position.feedforwardX,
+                feedforwardZ = position.feedforwardZ,
+                feedbackX = position.feedbackX,
+                feedbackZ = position.feedbackZ,
                 roll = position.roll,
                 pitch = position.pitch,
             },

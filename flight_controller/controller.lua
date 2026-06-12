@@ -57,7 +57,7 @@ function Controller:update(input)
             yaw = yawCmd,
         },
 
-        debug = {
+        terms = {
             height = {
                 target = targets.height,
                 current = s.pos.y,

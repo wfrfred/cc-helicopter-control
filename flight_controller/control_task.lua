@@ -1,4 +1,4 @@
-local controller = require("controller")
+local Controller = require("controller")
 local rotor = require("rotor")
 local target_state = require("target_state")
 local yaw_lock = require("yaw_lock")
@@ -9,17 +9,12 @@ local control_task = {}
 
 local CONTROL = config.control
 
-local LOOP_DT = CONTROL.loop_dt
-local TELEMETRY_DT = CONTROL.telemetry_dt
-local MAX_DT = CONTROL.max_dt
-local INPUT_STALE_DT = CONTROL.input_stale_dt
-
 local function clampDt(dt)
     if dt <= 0 then
-        return LOOP_DT
+        return CONTROL.loop_dt
     end
 
-    return math.min(dt, MAX_DT)
+    return math.min(dt, CONTROL.max_dt)
 end
 
 local ZERO_INPUT = {
@@ -30,14 +25,14 @@ local ZERO_INPUT = {
 }
 
 local function readInput(shared, now)
-    local ctl = shared.input
+    local input = shared.input
     local inputAge = now - shared.inputTime
 
-    if inputAge > INPUT_STALE_DT then
+    if inputAge > CONTROL.input_stale_dt then
         return ZERO_INPUT, inputAge, true
     end
 
-    return ctl, inputAge, false
+    return input, inputAge, false
 end
 
 local function waitForSensors(shared)
@@ -70,9 +65,9 @@ function control_task.run(shared)
 
     local targets = target_state.new(initial, CONTROL)
     local yawLock = yaw_lock.new(initial.yaw, CONTROL)
-    local ctrl = controller.new(CONTROL)
+    local controller = Controller.new(CONTROL)
 
-    local lastLoopTime = os.clock() - LOOP_DT
+    local lastLoopTime = os.clock() - CONTROL.loop_dt
     local telemetryTimer = 0.0
 
     while shared.running do
@@ -80,10 +75,10 @@ function control_task.run(shared)
         local dt = clampDt(loopStart - lastLoopTime)
         lastLoopTime = loopStart
 
-        local ctl, inputAge, inputStale = readInput(shared, loopStart)
-        targets:update(ctl, dt)
+        local input, inputAge, inputStale = readInput(shared, loopStart)
+        targets:update(input, dt)
 
-        local s = shared.state
+        local state = shared.state
         local stateNow = os.clock()
         local stateTime = shared.stateTime
         local stateAge = stateNow - stateTime
@@ -92,35 +87,35 @@ function control_task.run(shared)
         local yawRateAge = stateNow - shared.yawRateTime
         local velocityAge = stateNow - shared.velocityTime
 
-        local yawResult = yawLock:update(ctl.yaw, s.yaw, yawRate)
+        local yawResult = yawLock:update(input.yaw, state.yaw, yawRate)
 
-        local result = ctrl:update({
+        local result = controller:update({
             targets = targets,
-            state = s,
+            state = state,
             yawRate = yawRate,
             velocity = velocity,
             yaw = yawResult,
             dt = dt,
         })
 
-        local cmd = result.commands
-        local dbg = result.debug
+        local commands = result.commands
+        local terms = result.terms
 
-        mixer:set(cmd.collective, cmd.roll, cmd.yaw, cmd.pitch)
+        mixer:set(commands.collective, commands.roll, commands.yaw, commands.pitch)
         local rotorOutput = mixer:update()
 
         telemetryTimer = telemetryTimer + dt
-        if telemetryTimer >= TELEMETRY_DT then
+        if telemetryTimer >= CONTROL.telemetry_dt then
             telemetryTimer = 0.0
 
             shared.telemetryTime = stateNow
             shared.telemetry = telemetry_builder.running({
                 shared = shared,
-                state = s,
-                input = ctl,
+                state = state,
+                input = input,
                 velocity = velocity,
                 rotorOutput = rotorOutput,
-                controllers = ctrl:pidControllers(),
+                controllers = controller:pidControllers(),
 
                 time = stateNow,
                 dt = dt,
@@ -130,30 +125,30 @@ function control_task.run(shared)
                 inputAge = inputAge,
                 inputStale = inputStale,
 
-                collective = cmd.collective,
-                rollCmd = cmd.roll,
-                pitchCmd = cmd.pitch,
-                yawCmd = cmd.yaw,
+                collective = commands.collective,
+                rollCmd = commands.roll,
+                pitchCmd = commands.pitch,
+                yawCmd = commands.yaw,
 
-                targetHeight = dbg.height.target,
-                targetRoll = dbg.roll.target,
-                targetPitch = dbg.pitch.target,
-                targetYaw = dbg.yaw.target,
-                targetYawRate = dbg.yaw.targetRate,
+                targetHeight = terms.height.target,
+                targetRoll = terms.roll.target,
+                targetPitch = terms.pitch.target,
+                targetYaw = terms.yaw.target,
+                targetYawRate = terms.yaw.targetRate,
 
-                yawRate = dbg.yaw.rate,
-                yawAngleActive = dbg.yaw.angleActive,
+                yawRate = terms.yaw.rate,
+                yawAngleActive = terms.yaw.angleActive,
 
-                heightErr = dbg.height.err,
-                rollErr = dbg.roll.err,
-                pitchErr = dbg.pitch.err,
-                yawErr = dbg.yaw.err,
-                yawRateErr = dbg.yaw.rateErr,
+                heightErr = terms.height.err,
+                rollErr = terms.roll.err,
+                pitchErr = terms.pitch.err,
+                yawErr = terms.yaw.err,
+                yawRateErr = terms.yaw.rateErr,
             })
         end
 
         local elapsed = os.clock() - loopStart
-        local remain = LOOP_DT - elapsed
+        local remain = CONTROL.loop_dt - elapsed
 
         if remain > 0 then
             sleep(remain)

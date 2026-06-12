@@ -376,17 +376,23 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
 
     y = drawCrossBar(mon, x, y, width, limitY, err)
 
-    local summary = ("target %.1f %.1f  velocity %+.1f %+.1f/%+.1f %+.1f"):format(
-        target.x,
-        target.z,
-        targetVelocity.x,
-        targetVelocity.z,
-        currentVelocity.x,
-        currentVelocity.z
-    )
+    if y <= limitY then
+        draw.writeAt(mon, x, y, ("error x %+.1f  z %+.1f"):format(
+            err.x,
+            err.z
+        ), colors.white, colors.black, width)
+        y = y + 1
+    end
 
     if y <= limitY then
-        draw.writeAt(mon, x, y, summary, colors.lightGray, colors.black, width)
+        draw.writeAt(mon, x, y, ("target %.1f %.1f  velocity %+.1f %+.1f/%+.1f %+.1f"):format(
+            target.x,
+            target.z,
+            targetVelocity.x,
+            targetVelocity.z,
+            currentVelocity.x,
+            currentVelocity.z
+        ), colors.lightGray, colors.black, width)
         y = y + 1
     end
 

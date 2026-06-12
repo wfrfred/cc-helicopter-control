@@ -56,68 +56,6 @@ local function drawOutput(mon, x, y, width, label, value, limit)
     draw.writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 7)
 end
 
-local function drawMiniSigned(mon, x, y, width, value, limit, color)
-    local mid = math.floor((width + 1) / 2)
-    local pct = math.abs(clamp(value / limit, -1.0, 1.0))
-
-    draw.fill(mon, x, y, width, colors.gray)
-    draw.fill(mon, x + mid - 1, y, 1, colors.white)
-
-    if value > 0 then
-        local len = math.floor((width - mid) * pct + 0.5)
-        draw.fill(mon, x + mid, y, len, color)
-    elseif value < 0 then
-        local len = math.floor((mid - 1) * pct + 0.5)
-        draw.fill(mon, x + mid - len - 1, y, len, color)
-    end
-end
-
-local function drawPidTerms(mon, x, y, width, terms, limit)
-    if width < 12 then
-        local bg = math.abs(terms.raw) > limit and colors.red or colors.gray
-        draw.writeAt(mon, x, y, "PID", colors.white, bg, width)
-        return
-    end
-
-    local gap = 1
-    local termWidth = math.floor((width - 2 * gap) / 3)
-    local over = math.abs(terms.raw) > limit
-
-    drawMiniSigned(mon, x, y, termWidth, terms.p, limit, colors.blue)
-    drawMiniSigned(mon, x + termWidth + gap, y, termWidth, terms.i, limit, colors.green)
-    drawMiniSigned(mon, x + 2 * (termWidth + gap), y, termWidth, terms.d, limit, colors.orange)
-
-    if over then
-        draw.writeAt(mon, x + width - 1, y, "!", colors.white, colors.red, 1)
-    end
-end
-
-local function drawOutputWithPid(mon, x, y, width, label, value, limit, terms)
-    expectTable(terms, label .. " pid terms")
-
-    if width < 46 then
-        drawOutput(mon, x, y, width, label, value, limit)
-        return
-    end
-
-    draw.writeAt(mon, x, y, label, colors.lightGray, colors.black, 5)
-
-    local pidWidth = width >= 62 and 18 or 12
-    local valueWidth = 7
-    local bx = x + 6
-    local bw = width - 6 - pidWidth - valueWidth - 2
-    local pct = math.abs(clamp(value / limit, -1.0, 1.0))
-    local len = math.floor(bw * pct + 0.5)
-    local bg = value >= 0 and colors.blue or colors.purple
-    local pidX = bx + bw + 1
-    local valueX = pidX + pidWidth + 1
-
-    draw.fill(mon, bx, y, bw, colors.gray)
-    draw.fill(mon, bx, y, len, bg)
-    drawPidTerms(mon, pidX, y, pidWidth, terms, limit)
-    draw.writeAt(mon, valueX, y, ("%+.1f"):format(value), colors.white, colors.black, valueWidth)
-end
-
 local function drawBladeOutput(mon, x, y, width, label, value)
     drawOutput(mon, x, y, width, label, value, 15.0)
 end
@@ -173,18 +111,22 @@ end
 local function drawControllerHeader(mon, x, y, width)
     local text
 
-    if width >= 28 then
-        text = ("%-4s %7s %7s %7s"):format("AXIS", "TARGET", "CURRENT", "ERROR")
-    elseif width >= 22 then
-        text = ("%-3s %5s %5s %5s"):format("AX", "TGT", "CUR", "ERR")
+    if width >= 62 then
+        text = ("%-5s %7s %7s %7s %7s %7s %7s"):format("AXIS", "TARGET", "CURRENT", "ERROR", "P", "I", "D")
+    elseif width >= 48 then
+        text = ("%-5s %6s %6s %6s %6s %6s %6s"):format("AXIS", "TGT", "CUR", "ERR", "P", "I", "D")
+    elseif width >= 36 then
+        text = ("%-4s %5s %5s %5s  %s"):format("AX", "TGT", "CUR", "ERR", "P/I/D")
     else
-        text = "AX TGT CUR ERR"
+        text = "AX TGT CUR ERR P/I/D"
     end
 
     draw.writeAt(mon, x, y, text, colors.lightGray, colors.black, width)
 end
 
-local function drawPair(mon, x, y, width, label, target, current, err, angle)
+local function drawControllerRow(mon, x, y, width, label, target, current, err, angle, terms)
+    expectTable(terms, label .. " pid terms")
+
     if angle then
         target = deg(target)
         current = deg(current)
@@ -193,26 +135,45 @@ local function drawPair(mon, x, y, width, label, target, current, err, angle)
 
     local text
 
-    if width >= 28 then
-        text = ("%-4s %7s %7s %7s"):format(
+    if width >= 62 then
+        text = ("%-5s %7s %7s %7s %7s %7s %7s"):format(
             label,
             cell(target, "%.1f", 7),
             cell(current, "%.1f", 7),
-            cell(err, "%.1f", 7)
+            cell(err, "%.1f", 7),
+            cell(terms.p, "%+.1f", 7),
+            cell(terms.i, "%+.1f", 7),
+            cell(terms.d, "%+.1f", 7)
         )
-    elseif width >= 22 then
-        text = ("%-3s %5s %5s %5s"):format(
+    elseif width >= 48 then
+        text = ("%-5s %6s %6s %6s %6s %6s %6s"):format(
+            label,
+            cell(target, "%.0f", 6),
+            cell(current, "%.0f", 6),
+            cell(err, "%.0f", 6),
+            cell(terms.p, "%+.1f", 6),
+            cell(terms.i, "%+.1f", 6),
+            cell(terms.d, "%+.1f", 6)
+        )
+    elseif width >= 36 then
+        text = ("%-4s %5s %5s %5s  %s/%s/%s"):format(
             label,
             cell(target, "%.0f", 5),
             cell(current, "%.0f", 5),
-            cell(err, "%.0f", 5)
+            cell(err, "%.0f", 5),
+            cell(terms.p, "%+.0f", 3),
+            cell(terms.i, "%+.0f", 3),
+            cell(terms.d, "%+.0f", 3)
         )
     else
-        text = ("%s %s/%s/%s"):format(
+        text = ("%s %s/%s/%s %s/%s/%s"):format(
             label,
             fmt(target, "%.0f"),
             fmt(current, "%.0f"),
-            fmt(err, "%.0f")
+            fmt(err, "%.0f"),
+            fmt(terms.p, "%+.0f"),
+            fmt(terms.i, "%+.0f"),
+            fmt(terms.d, "%+.0f")
         )
     end
 
@@ -349,20 +310,20 @@ local function drawRunning(mon, shared, telemetry)
         y = y + 1
     end
     if y <= h then drawControllerHeader(mon, 2, y, w - 2) y = y + 1 end
-    if y <= h then drawPair(mon, 2, y, w - 2, "ALT", target.height, current.height, err.height, false) y = y + 1 end
-    if y <= h then drawPair(mon, 2, y, w - 2, "ROL", target.roll, current.roll, err.roll, true) y = y + 1 end
-    if y <= h then drawPair(mon, 2, y, w - 2, "PIT", target.pitch, current.pitch, err.pitch, true) y = y + 1 end
-    if y <= h then drawPair(mon, 2, y, w - 2, "YAW", target.yaw, current.yaw, err.yaw, true) y = y + 2 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", target.height, current.height, err.height, false, pidData.height) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", target.roll, current.roll, err.roll, true, pidData.roll) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", target.pitch, current.pitch, err.pitch, true, pidData.pitch) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", target.yaw, current.yaw, err.yaw, true, pidData.yawAngle) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", target.yawRate, current.yawRate, err.yawRate, true, pidData.yawRate) y = y + 2 end
 
     if y <= h then
-        section(mon, y, "controller outputs  pid p/i/d", colors.black, colors.yellow)
+        section(mon, y, "controller outputs", colors.black, colors.yellow)
         y = y + 1
     end
-    if y <= h then drawOutputWithPid(mon, 2, y, w - 2, "COL", output.collective, 10.0, pidData.height) y = y + 1 end
-    if y <= h then drawOutputWithPid(mon, 2, y, w - 2, "ROL", output.roll, 8.0, pidData.roll) y = y + 1 end
-    if y <= h then drawOutputWithPid(mon, 2, y, w - 2, "PIT", output.pitch, 12.0, pidData.pitch) y = y + 1 end
-    if y <= h then drawOutputWithPid(mon, 2, y, w - 2, "YAW", output.yaw, 8.0, pidData.yawRate) y = y + 1 end
-    if y <= h then drawOutputWithPid(mon, 2, y, w - 2, "YAW-A", deg(target.yawRate), 60.0, pidData.yawAngle) y = y + 1 end
+    if y <= h then drawOutput(mon, 2, y, w - 2, "COL", output.collective, 10.0) y = y + 1 end
+    if y <= h then drawOutput(mon, 2, y, w - 2, "ROL", output.roll, 8.0) y = y + 1 end
+    if y <= h then drawOutput(mon, 2, y, w - 2, "PIT", output.pitch, 12.0) y = y + 1 end
+    if y <= h then drawOutput(mon, 2, y, w - 2, "YAW", output.yaw, 8.0) y = y + 1 end
 
     if y <= h then
         y = y + 1

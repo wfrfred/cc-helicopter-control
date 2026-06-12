@@ -1,6 +1,7 @@
 local mathx = require("lib.mathx")
 local pid = require("pid")
 local rotor = require("rotor")
+local telemetry_builder = require("telemetry_builder")
 local config = require("config")
 
 local control_task = {}
@@ -63,27 +64,6 @@ local function clampDt(dt)
     end
 
     return math.min(dt, MAX_DT)
-end
-
-local function pidTerms(controller)
-    local t = controller:terms()
-    return {
-        p = t.p,
-        i = t.i,
-        d = t.d,
-        raw = t.raw,
-        output = t.output,
-    }
-end
-
-local function zeroPidTerms()
-    return {
-        p = 0.0,
-        i = 0.0,
-        d = 0.0,
-        raw = 0.0,
-        output = 0.0,
-    }
 end
 
 local ZERO_INPUT = {
@@ -278,84 +258,47 @@ function control_task.run(shared)
             telemetryTimer = 0.0
 
             shared.telemetryTime = stateNow
-            shared.telemetry = {
-                status = "running",
+            shared.telemetry = telemetry_builder.running({
+                shared = shared,
+                state = s,
+                input = ctl,
+                velocity = velocity,
+                rotorOutput = rotorOutput,
+                controllers = {
+                    height = heightPid,
+                    roll = rollPid,
+                    pitch = pitchPid,
+                    yawAngle = yawAnglePid,
+                    yawRate = yawRatePid,
+                },
+
                 time = stateNow,
                 dt = dt,
-
                 stateAge = stateAge,
                 yawRateAge = yawRateAge,
-
                 inputAge = inputAge,
                 inputStale = inputStale,
-                inputSender = shared.inputSender,
-                inputError = shared.inputError,
-                input = {
-                    roll = ctl.roll,
-                    pitch = ctl.pitch,
-                    yaw = ctl.yaw,
-                    climb = ctl.climb,
-                },
 
-                position = {
-                    x = s.pos.x,
-                    y = s.pos.y,
-                    z = s.pos.z,
-                },
+                collective = collective,
+                rollCmd = rollCmd,
+                pitchCmd = pitchCmd,
+                yawCmd = yawCmd,
 
-                output = {
-                    collective = collective,
-                    roll = rollCmd,
-                    pitch = pitchCmd,
-                    yaw = yawCmd,
-                    rotor = {
-                        upper = rotorOutput.upper,
-                        lower = rotorOutput.lower,
-                    },
-                },
+                targetHeight = targetHeight,
+                targetRoll = targetRoll,
+                targetPitch = targetPitch,
+                targetYaw = targetYaw,
+                targetYawRate = targetYawRate,
 
-                pid = {
-                    height = pidTerms(heightPid),
-                    roll = pidTerms(rollPid),
-                    pitch = pidTerms(pitchPid),
-                    yawAngle = yawAngleActive and pidTerms(yawAnglePid) or zeroPidTerms(),
-                    yawRate = pidTerms(yawRatePid),
-                },
+                yawRate = yawRate,
+                yawAngleActive = yawAngleActive,
 
-                target = {
-                    height = targetHeight,
-                    roll = targetRoll,
-                    pitch = targetPitch,
-                    yaw = targetYaw,
-                    yawRate = targetYawRate,
-                },
-
-                current = {
-                    height = s.pos.y,
-                    roll = s.roll,
-                    pitch = s.pitch,
-                    yaw = s.yaw,
-                    yawRate = yawRate,
-                    velocity = {
-                        x = velocity.x,
-                        y = velocity.y,
-                        z = velocity.z,
-                        total = velocity.total,
-                        horizontal = velocity.horizontal,
-                        vertical = velocity.vertical,
-                    },
-                },
-
-                error = {
-                    height = heightErr,
-                    roll = rollErr,
-                    pitch = pitchErr,
-                    yaw = yawErr,
-                    yawRate = yawRateErr,
-                },
-
-                dataError = shared.lastError,
-            }
+                heightErr = heightErr,
+                rollErr = rollErr,
+                pitchErr = pitchErr,
+                yawErr = yawErr,
+                yawRateErr = yawRateErr,
+            })
         end
 
         local elapsed = os.clock() - loopStart

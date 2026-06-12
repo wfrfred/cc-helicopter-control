@@ -18,10 +18,11 @@ local function say(...)
 end
 
 local function usage()
-    say("Usage: sync <source> [<source> ...] [--logic|--config|--all] [--dry-run] [--quiet]")
+    say("Usage: sync [<source> ...] [--logic|--config|--all] [--dry-run] [--quiet]")
     say("       sync --update [--quiet]")
     say("Example: sync flight_controller")
     say("         sync common flight_controller")
+    say("Default source: config.sync.sources when config.lua exists")
     say("Default: --logic")
 end
 
@@ -72,14 +73,32 @@ local function safeSourceName(name)
         and not name:find("%z")
 end
 
+local function defaultSourceNames()
+    if not fs.exists(CONFIG_NAME) then
+        return nil
+    end
+
+    local config = require("config")
+    local sync = config.sync
+    assert(sync and type(sync.sources) == "table", "config sync.sources must be table")
+
+    return sync.sources
+end
+
 if selfUpdate and (#sourceNames > 0 or modeSet or dryRun) then
     usage()
     return
 end
 
 if not selfUpdate and #sourceNames == 0 then
-    usage()
-    return
+    local defaults = defaultSourceNames()
+
+    if not defaults then
+        usage()
+        return
+    end
+
+    sourceNames = defaults
 end
 
 for _, sourceName in ipairs(sourceNames) do

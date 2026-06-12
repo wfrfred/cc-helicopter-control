@@ -1,11 +1,11 @@
 local config = {}
 
-config.runtime = {
-    sync = {
-        enabled = false,
-        sources = { "flight_controller" },
-    },
+config.sync = {
+    enabled = false,
+    sources = { "flight_controller" },
+}
 
+config.runtime = {
     modem = {
         control = "top",
     },

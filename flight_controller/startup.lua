@@ -1,5 +1,5 @@
 local config = require("config")
-local sync = config.runtime.sync
+local sync = config.sync
 
 if sync.enabled == true then
     print("startup sync: " .. table.concat(sync.sources, " -> "))

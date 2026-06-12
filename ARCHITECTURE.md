@@ -82,7 +82,6 @@ flight_controller/telemetry_task.lua -- CONTROL.TELEMETRY --> user_interface/tel
 │   ├── rotor.lua
 │   ├── telemetry_task.lua
 │   ├── telemetry_builder.lua
-│   ├── quat.lua
 │   └── lib/
 │       ├── mathx.lua
 │       ├── pid.lua
@@ -94,8 +93,6 @@ flight_controller/telemetry_task.lua -- CONTROL.TELEMETRY --> user_interface/tel
 └── tools/
     └── scan.lua
 ```
-
-`quat.lua` is kept until CC: Advanced Math replacement is verified in-game.
 
 ## Flight Controller Modules
 
@@ -115,7 +112,6 @@ flight_controller/
 │
 ├── rotor.lua                -- rotor hardware, phase, mixer math, broadcast
 ├── telemetry_builder.lua    -- telemetry table construction
-├── quat.lua                 -- quaternion conversion/vector rotation; pending removal verification
 │
 └── lib/
     ├── mathx.lua            -- math helpers: clamp, wrapPi, atan2
@@ -131,7 +127,7 @@ Data-layer modules write to `shared` and do not depend on each other.
 
 | Module | Responsibility |
 | --- | --- |
-| `data_task.lua` | Read CC:Sable pose, angular velocity, and linear velocity, then convert them into flight-controller-visible state. |
+| `data_task.lua` | Read CC:Sable pose, rotate body axes with the native quaternion API, read angular/linear velocity, then convert them into flight-controller-visible state. |
 | `input_task.lua` | Receive rednet input, normalize it, and write `shared.input`. |
 | `telemetry_task.lua` | Broadcast `shared.telemetry`. |
 

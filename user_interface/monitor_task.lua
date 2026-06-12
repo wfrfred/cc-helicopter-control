@@ -103,35 +103,6 @@ local function section(mon, y, title, fg, bg)
     writeAt(mon, 1, y, string.upper(title), fg or colors.white, bg or colors.gray, w)
 end
 
-local function drawAxis(mon, x, y, width, label, value)
-    value = clamp(value, -1.0, 1.0)
-
-    if width < 14 then
-        writeAt(mon, x, y, ("%s %+.1f"):format(label, value), colors.white, colors.black, width)
-        return
-    end
-
-    writeAt(mon, x, y, label, colors.lightGray, colors.black, 6)
-
-    local bx = x + 7
-    local bw = width - 13
-    local mid = math.floor((bw + 1) / 2)
-    local active = value >= 0 and colors.green or colors.orange
-
-    fill(mon, bx, y, bw, colors.gray)
-    fill(mon, bx + mid - 1, y, 1, colors.white)
-
-    if value > 0 then
-        local len = math.floor((bw - mid) * value + 0.5)
-        fill(mon, bx + mid, y, len, active)
-    elseif value < 0 then
-        local len = math.floor((mid - 1) * -value + 0.5)
-        fill(mon, bx + mid - len - 1, y, len, active)
-    end
-
-    writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 6)
-end
-
 local function drawOutput(mon, x, y, width, label, value, limit)
     value = tonumber(value) or 0.0
     limit = math.max(1.0, tonumber(limit) or 1.0)

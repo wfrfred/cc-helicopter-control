@@ -1,5 +1,4 @@
 local mathx = require("lib.mathx")
-local quat = require("quat")
 local config = require("config")
 
 local data_task = {}
@@ -34,11 +33,11 @@ end
 
 local function getPose()
     local pose = sublevel.getLogicalPose()
-    local q = quat.fromSable(pose.orientation)
+    local q = pose.orientation:normalize()
 
-    local front = quat.rotate(q, BODY_FRONT)
-    local right = quat.rotate(q, BODY_RIGHT)
-    local up = quat.rotate(q, BODY_UP)
+    local front = q:mul(BODY_FRONT)
+    local right = q:mul(BODY_RIGHT)
+    local up = q:mul(BODY_UP)
 
     local horizontal = math.sqrt(front.x * front.x + front.z * front.z)
 

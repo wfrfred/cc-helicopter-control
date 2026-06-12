@@ -14,9 +14,7 @@ Principles:
 
 ## Remaining Work
 
-1. Verify whether CC: Advanced Math can replace `quat.lua`; delete `quat.lua` only if verified.
-2. Clean dead UI helpers.
-3. Defer broader UI drawing split to Phase 2.
+1. Defer broader UI drawing split to Phase 2.
 
 ## Control Split
 
@@ -27,11 +25,6 @@ target_state.lua  -- height/roll/pitch target update
 yaw_lock.lua      -- yaw-lock state machine
 controller.lua    -- PID cascade: targets + pose -> commands + terms
 ```
-
-Next:
-
-- Verify whether CC: Advanced Math can replace `quat.lua`; delete `quat.lua` only if verified.
-- Clean dead UI helpers.
 
 ### `controller.lua` Design
 
@@ -169,39 +162,6 @@ The mixer math and rotor transport are currently strongly connected and already 
 
 A future `rotor_mixer.lua` is allowed only if pure mixer computation needs isolated tests or `rotor.lua` grows enough to obscure the pipeline.
 
-## Verify CC: Advanced Math Before Removing `quat.lua`
-
-`data_task.lua` currently uses custom quaternion helper code for orientation format conversion and vector rotation, then computes roll/pitch/yaw from rotated body axes.
-
-CC:Sable depends on CC: Advanced Math, but it is not yet verified that `pose.orientation` is directly exposed as a native quaternion object that can rotate vectors.
-
-In-game verification script:
-
-```lua
-local pose = sublevel.getLogicalPose()
-local q = pose.orientation
-local v = vector.new(0, 0, 1)
-
-print(type(q))
-print(q)
-
-print("normalize", q.normalize)
-print("mul", q.mul)
-print("rotate", q.rotate)
-
-if q.rotate then
-    print("rotate:", q:rotate(v))
-end
-
-if q.normalize and q.mul then
-    print("mul:", q:normalize():mul(v))
-end
-```
-
-Delete `quat.lua` only if the native API can reproduce the current `quat.rotate(q, v)` behavior without changing signs.
-
-Until then, keep `quat.lua`.
-
 ## Rotor / Actuator Boundary
 
 Actuator controller is allowed to:
@@ -238,13 +198,6 @@ drawing primitives
 main monitor layout
 attitude display internals
 telemetry presentation mapping
-```
-
-Known cleanup candidate:
-
-```text
-user_interface/monitor_task.lua
-    remove drawAxis if it has no caller
 ```
 
 Do not mix broad UI cleanup with control-loop refactoring.

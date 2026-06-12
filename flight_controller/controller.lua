@@ -13,6 +13,7 @@ function controller.new(control)
         collectiveMax = control.collective_max,
 
         height = pid.new(control.pid.height),
+        verticalSpeed = pid.new(control.pid.vertical_speed),
         roll = pid.new(control.pid.roll),
         pitch = pid.new(control.pid.pitch),
         yawAngle = pid.new(control.pid.yaw_angle),
@@ -23,11 +24,13 @@ end
 function Controller:update(input)
     local targets = input.targets
     local pose = input.pose
+    local velocity = input.velocity
     local yawRate = input.yawRate
     local yawResult = input.yaw
     local dt = input.dt
 
-    local heightOut, heightErr = self.height:update(targets.height, pose.pos.y, dt)
+    local targetVerticalSpeed, heightErr = self.height:update(targets.height, pose.pos.y, dt)
+    local verticalSpeedOut, verticalSpeedErr = self.verticalSpeed:update(targetVerticalSpeed, velocity.vertical, dt)
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
     local rollCmd = self.roll:update(rollErr, 0.0, dt)
@@ -46,7 +49,7 @@ function Controller:update(input)
     local yawCmd, yawRateErr = self.yawRate:update(targetYawRate, yawRate, dt)
 
     local collective = mathx.clamp(
-        self.baseCollective + heightOut,
+        self.baseCollective + verticalSpeedOut,
         self.collectiveMin,
         self.collectiveMax
     )
@@ -64,7 +67,14 @@ function Controller:update(input)
                 target = targets.height,
                 current = pose.pos.y,
                 err = heightErr,
-                out = heightOut,
+                out = targetVerticalSpeed,
+            },
+
+            verticalSpeed = {
+                target = targetVerticalSpeed,
+                current = velocity.vertical,
+                err = verticalSpeedErr,
+                out = verticalSpeedOut,
             },
 
             roll = {
@@ -98,6 +108,7 @@ end
 function Controller:pidControllers()
     return {
         height = self.height,
+        verticalSpeed = self.verticalSpeed,
         roll = self.roll,
         pitch = self.pitch,
         yawAngle = self.yawAngle,

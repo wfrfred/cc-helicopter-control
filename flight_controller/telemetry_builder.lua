@@ -63,6 +63,7 @@ function telemetry_builder.running(data)
 
         pid = {
             height = pidTerms(data.controllers.height),
+            verticalSpeed = pidTerms(data.controllers.verticalSpeed),
             roll = pidTerms(data.controllers.roll),
             pitch = pidTerms(data.controllers.pitch),
             yawAngle = terms.yaw.angleActive and pidTerms(data.controllers.yawAngle) or zeroPidTerms(),
@@ -71,6 +72,7 @@ function telemetry_builder.running(data)
 
         target = {
             height = terms.height.target,
+            verticalSpeed = terms.verticalSpeed.target,
             roll = terms.roll.target,
             pitch = terms.pitch.target,
             yaw = terms.yaw.target,
@@ -79,6 +81,7 @@ function telemetry_builder.running(data)
 
         current = {
             height = data.pose.pos.y,
+            verticalSpeed = terms.verticalSpeed.current,
             roll = data.pose.roll,
             pitch = data.pose.pitch,
             yaw = data.pose.yaw,
@@ -95,6 +98,7 @@ function telemetry_builder.running(data)
 
         error = {
             height = terms.height.err,
+            verticalSpeed = terms.verticalSpeed.err,
             roll = terms.roll.err,
             pitch = terms.pitch.err,
             yaw = terms.yaw.err,

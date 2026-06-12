@@ -311,6 +311,7 @@ local function drawRunning(mon, shared, telemetry)
     end
     if y <= h then drawControllerHeader(mon, 2, y, w - 2) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", target.height, current.height, err.height, false, pidData.height) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "VSPD", target.verticalSpeed, current.verticalSpeed, err.verticalSpeed, false, pidData.verticalSpeed) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", target.roll, current.roll, err.roll, true, pidData.roll) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", target.pitch, current.pitch, err.pitch, true, pidData.pitch) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", target.yaw, current.yaw, err.yaw, true, pidData.yawAngle) y = y + 1 end

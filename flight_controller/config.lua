@@ -92,6 +92,17 @@ config.control = {
             kd = 0.0,
             i_min = -3.0,
             i_max = 3.0,
+            out_min = -5.0,
+            out_max = 5.0,
+            deadband = 0.03,
+        },
+
+        vertical_speed = {
+            kp = 1.0,
+            ki = 0.0,
+            kd = 0.0,
+            i_min = -3.0,
+            i_max = 3.0,
             out_min = -6.0,
             out_max = 6.0,
             deadband = 0.03,

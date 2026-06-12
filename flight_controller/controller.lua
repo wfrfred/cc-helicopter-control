@@ -8,7 +8,9 @@ Controller.__index = Controller
 
 function controller.new(control)
     return setmetatable({
-        control = control,
+        baseCollective = control.base_collective,
+        collectiveMin = control.collective_min,
+        collectiveMax = control.collective_max,
 
         heightPid = pid.new(control.pid.height),
         rollPid = pid.new(control.pid.roll),
@@ -44,9 +46,9 @@ function Controller:update(input)
     local yawCmd, yawRateErr = self.yawRatePid:update(targetYawRate, yawRate, dt)
 
     local collective = mathx.clamp(
-        self.control.base_collective + heightOut,
-        self.control.collective_min,
-        self.control.collective_max
+        self.baseCollective + heightOut,
+        self.collectiveMin,
+        self.collectiveMax
     )
 
     return {

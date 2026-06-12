@@ -5,6 +5,20 @@ local REQUEST_TIMEOUT = 15
 local CONFIG_NAME = "config.lua"
 local quiet = false
 
+local TARGET_SOURCES = {
+    ["0"] = { "common", "0" },
+    ["1"] = { "common", "1" },
+    ["2"] = { "common", "2" },
+}
+
+local OPTIONAL_SOURCES = {
+    common = true,
+}
+
+local SOURCE_ONLY_TARGETS = {
+    common = true,
+}
+
 for _, arg in ipairs(args) do
     if arg == "--quiet" then
         quiet = true
@@ -79,6 +93,10 @@ end
 if not selfUpdate and not safeTargetName(targetName) then
     usage()
     return
+end
+
+if SOURCE_ONLY_TARGETS[targetName] then
+    error(targetName .. " is a source layer, not a sync target", 0)
 end
 
 if not http or not http.get then
@@ -497,6 +515,56 @@ local function getRemoteNames(remoteDir, basePath)
     return names
 end
 
+local function missingOptionalSourceError(err)
+    return tostring(err):find("HTTP 404", 1, true)
+        or tostring(err):find("No remote .lua files found", 1, true)
+end
+
+local function sourceNamesForTarget(name)
+    return TARGET_SOURCES[name] or { name }
+end
+
+local function remoteDirForSource(sourceName)
+    return ensureTrailingSlash(BASE_URL .. encodePathSegment(sourceName))
+end
+
+local function loadSource(sourceName)
+    local remoteDir = remoteDirForSource(sourceName)
+    local basePath = urlDecode(pathFromUrl(remoteDir))
+    local ok, names = pcall(getRemoteNames, remoteDir, basePath)
+
+    if ok then
+        return {
+            name = sourceName,
+            remoteDir = remoteDir,
+            names = names,
+            skipped = false,
+        }
+    end
+
+    if OPTIONAL_SOURCES[sourceName] and missingOptionalSourceError(names) then
+        return {
+            name = sourceName,
+            remoteDir = remoteDir,
+            names = {},
+            skipped = true,
+            error = names,
+        }
+    end
+
+    error(names, 0)
+end
+
+local function loadSources(target)
+    local sources = {}
+
+    for _, sourceName in ipairs(sourceNamesForTarget(target)) do
+        sources[#sources + 1] = loadSource(sourceName)
+    end
+
+    return sources
+end
+
 local function downloadFile(remoteDir, name)
     local body, err = httpRead({
         url = remoteDir .. encodeRelativePath(name),
@@ -549,21 +617,37 @@ local function shouldDeleteLocal(name)
     return selectedName(name)
 end
 
-local remoteDir = ensureTrailingSlash(BASE_URL .. encodePathSegment(targetName))
-local basePath = urlDecode(pathFromUrl(remoteDir))
-local remoteNames = getRemoteNames(remoteDir, basePath)
+local sources = loadSources(targetName)
 local selectedNames = {}
 local skippedNames = {}
 local remoteSet = {}
+local selectedSource = {}
+local sourceLabels = {}
+local skippedSources = {}
 
-for _, name in ipairs(remoteNames) do
-    if selectedName(name) then
-        selectedNames[#selectedNames + 1] = name
-        remoteSet[name] = true
+for _, source in ipairs(sources) do
+    if source.skipped then
+        skippedSources[#skippedSources + 1] = source
     else
-        skippedNames[#skippedNames + 1] = name
+        sourceLabels[#sourceLabels + 1] = source.name
+    end
+
+    for _, name in ipairs(source.names) do
+        if selectedName(name) then
+            if not remoteSet[name] then
+                selectedNames[#selectedNames + 1] = name
+            end
+
+            remoteSet[name] = true
+            selectedSource[name] = source
+        else
+            skippedNames[#skippedNames + 1] = source.name .. "/" .. name
+        end
     end
 end
+
+table.sort(selectedNames)
+table.sort(skippedNames)
 
 if #selectedNames == 0 then
     if mode == "config" then
@@ -587,7 +671,11 @@ local function fail(message)
     say("ERROR " .. message)
 end
 
-say("Remote: " .. remoteDir)
+say("Target: " .. targetName)
+say("Sources: " .. table.concat(sourceLabels, " -> "))
+for _, source in ipairs(skippedSources) do
+    say("Skip source " .. source.name .. ": " .. tostring(source.error))
+end
 say("Local: " .. (localDir == "" and "/" or localDir))
 say("Mode: " .. mode)
 if dryRun then
@@ -597,7 +685,8 @@ end
 local remoteData = {}
 
 for _, name in ipairs(selectedNames) do
-    local ok, data = pcall(downloadFile, remoteDir, name)
+    local source = selectedSource[name]
+    local ok, data = pcall(downloadFile, source.remoteDir, name)
 
     if ok then
         remoteData[name] = data

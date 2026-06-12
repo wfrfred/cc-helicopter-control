@@ -66,7 +66,10 @@ flight_controller/telemetry_task.lua -- CONTROL.TELEMETRY --> user_interface/tel
 │   ├── input_task.lua
 │   ├── telemetry_task.lua
 │   ├── monitor_task.lua
+│   ├── monitor_view.lua
 │   ├── attitude_display.lua
+│   ├── attitude_view.lua
+│   ├── draw.lua
 │   ├── display_alloc.lua
 │   └── lib/
 │       └── protocol.lua
@@ -198,8 +201,21 @@ Telemetry age fields use `poseAge` for the pose snapshot. Do not emit a `stateAg
 
 - `input_task.lua`: reads typewriter input and broadcasts it.
 - `telemetry_task.lua`: receives flight-controller telemetry.
-- `monitor_task.lua`: diagnostic display.
-- `attitude_display.lua`: artificial horizon.
+- `monitor_task.lua`: main monitor allocation, draw loop, and draw error handling.
+- `attitude_display.lua`: attitude monitor allocation, draw loop, and draw error handling.
+
+UI rendering is split into view modules:
+
+```text
+draw.lua
+    low-level monitor drawing primitives
+
+monitor_view.lua
+    main diagnostic monitor layout and rendering
+
+attitude_view.lua
+    artificial horizon layout and rendering
+```
 
 Input axes are discrete values in `{-1, 0, 1}`:
 

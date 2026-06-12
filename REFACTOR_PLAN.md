@@ -14,11 +14,13 @@ Principles:
 
 ## Remaining Work
 
-1. Refactor UI drawing code without changing telemetry or input behavior.
+1. Re-evaluate telemetry presentation mapping only if future UI changes create shared presentation logic.
 
 ## Phase 2 Scope
 
 Phase 2 is UI-only. It may reorganize code under `user_interface/` when the extracted module has a clear owner and reduces real duplication or file size.
+
+The UI may be redesigned during this phase. Visual equivalence is not required, as long as the result remains readable and usable.
 
 Allowed work:
 
@@ -74,13 +76,6 @@ telemetry_presenter.lua
 ```
 
 `telemetry_presenter.lua` is optional. Add it only if monitor and attitude views need shared presentation logic or if `monitor_view.lua` becomes mostly field extraction and formatting.
-
-## Suggested Order
-
-1. Extract low-level drawing primitives shared by `monitor_task.lua` and `attitude_display.lua`.
-2. Extract the main monitor drawing body into `monitor_view.lua`; keep monitor allocation and retry/error loops in `monitor_task.lua`.
-3. Extract artificial horizon drawing into `attitude_view.lua`; keep monitor allocation and retry/error loops in `attitude_display.lua`.
-4. Re-evaluate telemetry presentation mapping after the view split. Extract `telemetry_presenter.lua` only if it removes meaningful duplication.
 
 ## Drawing Primitive Rules
 
@@ -148,5 +143,5 @@ attitude_view.draw(mon, shared)
 - The UI still starts from `user_interface/startup.lua` with the same four tasks.
 - `monitor_task.lua` and `attitude_display.lua` still handle monitor allocation and draw-loop failures.
 - Rednet protocols and telemetry table shapes are unchanged.
-- Main monitor and attitude monitor output are visually equivalent before and after each extraction.
+- Main monitor and attitude monitor output remain readable and usable.
 - Lua syntax checks pass for all runtime files.

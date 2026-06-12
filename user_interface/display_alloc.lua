@@ -11,7 +11,17 @@ end
 local function usableMonitor(name)
     local mon = peripheral.wrap(name)
 
-    if mon and mon.getSize and mon.setCursorPos and mon.write then
+    if mon
+        and mon.getSize
+        and mon.setCursorPos
+        and mon.setCursorBlink
+        and mon.setTextScale
+        and mon.setTextColor
+        and mon.setBackgroundColor
+        and mon.clear
+        and mon.write
+        and mon.blit
+    then
         local w, h = mon.getSize()
 
         return {
@@ -25,7 +35,7 @@ local function usableMonitor(name)
 end
 
 local function configured(shared, role)
-    local displays = shared.displays or {}
+    local displays = shared.displays
     local name = normalizeName(displays[role])
 
     if not name then
@@ -34,29 +44,13 @@ local function configured(shared, role)
 
     local info = usableMonitor(name)
 
-    if info then
-        return info.mon, info.name
-    end
+    assert(info, role .. " monitor is not usable: " .. name)
+
+    return info.mon, info.name
 end
 
 local function listMonitors()
     local out = {}
-
-    if not peripheral.getNames then
-        local mon = peripheral.find("monitor")
-        if mon then
-            local w, h = mon.getSize()
-
-            out[1] = {
-                name = "monitor",
-                mon = mon,
-                w = w,
-                h = h,
-                area = w * h,
-            }
-        end
-        return out
-    end
 
     for _, name in ipairs(peripheral.getNames()) do
         local info = usableMonitor(name)
@@ -85,7 +79,7 @@ function display_alloc.find(shared, role)
     end
 
     local monitors = listMonitors()
-    local displays = shared.displays or {}
+    local displays = shared.displays
     local otherName
 
     if #monitors == 0 then
@@ -113,9 +107,6 @@ function display_alloc.find(shared, role)
             return info.mon, info.name
         end
     end
-
-    local fallback = monitors[1]
-    return fallback.mon, fallback.name
 end
 
 return display_alloc

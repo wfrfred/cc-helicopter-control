@@ -60,6 +60,20 @@ local function drawBladeOutput(mon, x, y, width, label, value)
     drawOutput(mon, x, y, width, label, value, 15.0)
 end
 
+local function compactValue(label, value)
+    return ("%s %+.1f"):format(label, value)
+end
+
+local function drawCompactValues(mon, x, y, width, values, fg)
+    local parts = {}
+
+    for _, item in ipairs(values) do
+        parts[#parts + 1] = compactValue(item.label, item.value)
+    end
+
+    draw.writeAt(mon, x, y, table.concat(parts, "  "), fg or colors.white, colors.black, width)
+end
+
 local function drawRotorOutputs(mon, x, y, width, limitY, output)
     local rotor = expectTable(output.rotor, "telemetry.output.rotor")
     local upper = expectTable(rotor.upper, "telemetry.output.rotor.upper")
@@ -82,7 +96,31 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
     section(mon, y, "blade outputs", colors.black, colors.orange)
     y = y + 1
 
-    if width >= 58 then
+    if width >= 64 then
+        local rows = {
+            {
+                { label = "UF", value = upper[1] },
+                { label = "UR", value = upper[2] },
+                { label = "UB", value = upper[3] },
+                { label = "UL", value = upper[4] },
+            },
+            {
+                { label = "LF", value = lower[1] },
+                { label = "LR", value = lower[2] },
+                { label = "LB", value = lower[3] },
+                { label = "LL", value = lower[4] },
+            },
+        }
+
+        for _, row in ipairs(rows) do
+            if y > limitY then
+                return y
+            end
+
+            drawCompactValues(mon, x, y, width, row, colors.white)
+            y = y + 1
+        end
+    elseif width >= 58 then
         local colWidth = math.floor((width - 2) / 2)
 
         for i = 1, #blades, 2 do
@@ -104,6 +142,50 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
             y = y + 1
         end
     end
+
+    return y
+end
+
+local function drawControllerOutputs(mon, x, y, width, limitY, output)
+    if y > limitY then
+        return y
+    end
+
+    section(mon, y, "controller outputs", colors.black, colors.yellow)
+    y = y + 1
+
+    if width >= 56 then
+        local rows = {
+            {
+                { label = "COL", value = output.collective },
+                { label = "CFF", value = output.collectiveFeedforward },
+                { label = "CFB", value = output.collectiveFeedback },
+            },
+            {
+                { label = "ROL", value = output.roll },
+                { label = "PIT", value = output.pitch },
+                { label = "YAW", value = output.yaw },
+            },
+        }
+
+        for _, row in ipairs(rows) do
+            if y > limitY then
+                return y
+            end
+
+            drawCompactValues(mon, x, y, width, row, colors.white)
+            y = y + 1
+        end
+
+        return y
+    end
+
+    if y <= limitY then drawOutput(mon, x, y, width, "COL", output.collective, 10.0) y = y + 1 end
+    if y <= limitY then drawOutput(mon, x, y, width, "CFF", output.collectiveFeedforward, 10.0) y = y + 1 end
+    if y <= limitY then drawOutput(mon, x, y, width, "CFB", output.collectiveFeedback, 6.0) y = y + 1 end
+    if y <= limitY then drawOutput(mon, x, y, width, "ROL", output.roll, 8.0) y = y + 1 end
+    if y <= limitY then drawOutput(mon, x, y, width, "PIT", output.pitch, 12.0) y = y + 1 end
+    if y <= limitY then drawOutput(mon, x, y, width, "YAW", output.yaw, 8.0) y = y + 1 end
 
     return y
 end
@@ -250,6 +332,59 @@ local function drawFlightState(mon, x, y, width, limitY, telemetry)
     return drawMetricGroups(mon, x, y, width, limitY, items, colors.white)
 end
 
+local function scaledOffset(value, limit, radius)
+    local scaled = clamp(value / limit, -1.0, 1.0)
+    return math.floor(scaled * radius + (scaled >= 0 and 0.5 or -0.5))
+end
+
+local function drawAxisBar(mon, x, y, width, label, value, limit)
+    if width < 10 then
+        draw.writeAt(mon, x, y, ("%s %+.1f"):format(label, value), colors.white, colors.black, width)
+        return
+    end
+
+    local barWidth = width - 8
+    local center = x + 5 + math.floor((barWidth - 1) / 2)
+    local mark = center + scaledOffset(value, limit, math.floor((barWidth - 1) / 2))
+
+    draw.writeAt(mon, x, y, label, colors.lightGray, colors.black, 4)
+    draw.fill(mon, x + 5, y, barWidth, colors.gray)
+    draw.writeAt(mon, center, y, "+", colors.black, colors.yellow, 1)
+    draw.writeAt(mon, mark, y, "*", colors.white, colors.red, 1)
+    draw.writeAt(mon, x + width - 3, y, ("%+.1f"):format(value), colors.white, colors.black, 4)
+end
+
+local function drawCrossBar(mon, x, y, width, limitY, err)
+    local height = math.min(7, limitY - y + 1)
+
+    if width < 24 or height < 5 then
+        drawAxisBar(mon, x, y, width, "EX", err.x, 10.0)
+        if y + 1 <= limitY then
+            drawAxisBar(mon, x, y + 1, width, "EZ", err.z, 10.0)
+            return y + 2
+        end
+        return y + 1
+    end
+
+    local centerX = x + math.floor(width / 2)
+    local centerY = y + math.floor(height / 2)
+    local markX = centerX + scaledOffset(err.x, 10.0, math.floor((width - 3) / 2))
+    local markY = centerY - scaledOffset(err.z, 10.0, math.floor((height - 1) / 2))
+
+    for row = 0, height - 1 do
+        local lineY = y + row
+        draw.writeAt(mon, x, lineY, string.rep(" ", width), colors.white, colors.black, width)
+        draw.writeAt(mon, centerX, lineY, "|", colors.gray, colors.black, 1)
+    end
+
+    draw.writeAt(mon, x, centerY, string.rep("-", width), colors.gray, colors.black, width)
+    draw.writeAt(mon, centerX, centerY, "+", colors.black, colors.yellow, 1)
+    draw.writeAt(mon, markX, centerY, "X", colors.white, colors.red, 1)
+    draw.writeAt(mon, centerX, markY, "Z", colors.white, colors.orange, 1)
+
+    return y + height
+end
+
 local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     if y > limitY then
         return y
@@ -273,20 +408,31 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         return y
     end
 
-    local items = {
-        { label = "TGX", value = target.x, pattern = "%.1f" },
-        { label = "TGZ", value = target.z, pattern = "%.1f" },
-        { label = "EX", value = err.x, pattern = "%+.1f" },
-        { label = "EZ", value = err.z, pattern = "%+.1f" },
-        { label = "TVX", value = targetVelocity.x, pattern = "%+.1f" },
-        { label = "TVZ", value = targetVelocity.z, pattern = "%+.1f" },
-        { label = "VX", value = currentVelocity.x, pattern = "%+.1f" },
-        { label = "VZ", value = currentVelocity.z, pattern = "%+.1f" },
-        { label = "ROL", value = deg(output.roll), pattern = "%+.1f" },
-        { label = "PIT", value = deg(output.pitch), pattern = "%+.1f" },
-    }
+    y = drawCrossBar(mon, x, y, width, limitY, err)
 
-    return drawMetricGroups(mon, x, y, width, limitY, items, colors.white)
+    local summary = ("target %.1f %.1f  velocity %+.1f %+.1f/%+.1f %+.1f"):format(
+        target.x,
+        target.z,
+        targetVelocity.x,
+        targetVelocity.z,
+        currentVelocity.x,
+        currentVelocity.z
+    )
+
+    if y <= limitY then
+        draw.writeAt(mon, x, y, summary, colors.lightGray, colors.black, width)
+        y = y + 1
+    end
+
+    if y <= limitY then
+        draw.writeAt(mon, x, y, ("target attitude roll %+.1f pitch %+.1f"):format(
+            deg(output.roll),
+            deg(output.pitch)
+        ), colors.white, colors.black, width)
+        y = y + 1
+    end
+
+    return y
 end
 
 local function drawWaiting(mon, shared)
@@ -356,16 +502,7 @@ local function drawRunning(mon, shared, telemetry)
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", target.yaw, current.yaw, err.yaw, true, pidData.yawAngle) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", target.yawRate, current.yawRate, err.yawRate, true, pidData.yawRate) y = y + 2 end
 
-    if y <= h then
-        section(mon, y, "controller outputs", colors.black, colors.yellow)
-        y = y + 1
-    end
-    if y <= h then drawOutput(mon, 2, y, w - 2, "COL", output.collective, 10.0) y = y + 1 end
-    if y <= h then drawOutput(mon, 2, y, w - 2, "CFF", output.collectiveFeedforward, 10.0) y = y + 1 end
-    if y <= h then drawOutput(mon, 2, y, w - 2, "CFB", output.collectiveFeedback, 6.0) y = y + 1 end
-    if y <= h then drawOutput(mon, 2, y, w - 2, "ROL", output.roll, 8.0) y = y + 1 end
-    if y <= h then drawOutput(mon, 2, y, w - 2, "PIT", output.pitch, 12.0) y = y + 1 end
-    if y <= h then drawOutput(mon, 2, y, w - 2, "YAW", output.yaw, 8.0) y = y + 1 end
+    y = drawControllerOutputs(mon, 2, y, w - 2, h, output)
 
     if y <= h then
         y = y + 1

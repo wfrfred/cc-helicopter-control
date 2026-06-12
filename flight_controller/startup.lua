@@ -28,8 +28,8 @@ local telemetry_task = require("telemetry_task")
 assert(sublevel, "CC:Sable sublevel API not found")
 
 local shared = {
-    state = nil,
-    stateTime = 0.0,
+    pose = nil,
+    poseTime = 0.0,
     yawRate = 0.0,
     yawRateTime = 0.0,
     velocity = nil,

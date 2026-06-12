@@ -20,17 +20,17 @@ end
 
 function Controller:update(input)
     local targets = input.targets
-    local s = input.state
+    local pose = input.pose
     local yawRate = input.yawRate
     local yawResult = input.yaw
     local dt = input.dt
 
-    local heightOut, heightErr = self.heightPid:update(targets.height, s.pos.y, dt)
+    local heightOut, heightErr = self.heightPid:update(targets.height, pose.pos.y, dt)
 
-    local rollErr = mathx.wrapPi(targets.roll - s.roll)
+    local rollErr = mathx.wrapPi(targets.roll - pose.roll)
     local rollCmd = self.rollPid:update(rollErr, 0.0, dt)
 
-    local pitchErr = mathx.wrapPi(targets.pitch - s.pitch)
+    local pitchErr = mathx.wrapPi(targets.pitch - pose.pitch)
     local pitchCmd = self.pitchPid:update(pitchErr, 0.0, dt)
 
     local targetYawRate = yawResult.commanded_rate
@@ -60,28 +60,28 @@ function Controller:update(input)
         terms = {
             height = {
                 target = targets.height,
-                current = s.pos.y,
+                current = pose.pos.y,
                 err = heightErr,
                 out = heightOut,
             },
 
             roll = {
                 target = targets.roll,
-                current = s.roll,
+                current = pose.roll,
                 err = rollErr,
                 out = rollCmd,
             },
 
             pitch = {
                 target = targets.pitch,
-                current = s.pitch,
+                current = pose.pitch,
                 err = pitchErr,
                 out = pitchCmd,
             },
 
             yaw = {
                 target = yawResult.target_yaw,
-                current = s.yaw,
+                current = pose.yaw,
                 err = yawErr,
                 targetRate = targetYawRate,
                 rate = yawRate,

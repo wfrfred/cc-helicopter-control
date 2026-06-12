@@ -32,7 +32,7 @@ local function velocityFromVector(v)
     }
 end
 
-local function getState()
+local function getPose()
     local pose = sublevel.getLogicalPose()
     local q = quat.fromSable(pose.orientation)
 
@@ -59,8 +59,8 @@ local function getState()
     }
 end
 
-local function waitForState(shared)
-    while shared.running and shared.state == nil do
+local function waitForPose(shared)
+    while shared.running and shared.pose == nil do
         sleep(0)
     end
 end
@@ -68,20 +68,19 @@ end
 function data_task.run(shared)
     local function poseTask()
         while shared.running do
-            shared.state = getState()
-            shared.stateTime = os.clock()
+            shared.pose = getPose()
+            shared.poseTime = os.clock()
             sleep(0)
         end
     end
 
     local function angularVelocityTask()
-        waitForState(shared)
+        waitForPose(shared)
 
         while shared.running do
             local angularVelocity = sublevel.getAngularVelocity()
-            local s = shared.state
 
-            shared.yawRate = SENSOR_AXIS.yaw_rate * SENSOR_AXIS.yaw * dot(angularVelocity, s.up)
+            shared.yawRate = SENSOR_AXIS.yaw_rate * SENSOR_AXIS.yaw * dot(angularVelocity, shared.pose.up)
             shared.yawRateTime = os.clock()
             sleep(0)
         end

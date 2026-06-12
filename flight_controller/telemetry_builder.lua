@@ -27,7 +27,7 @@ function telemetry_builder.running(data)
         time = data.time,
         dt = data.dt,
 
-        stateAge = data.stateAge,
+        stateAge = data.poseAge,
         yawRateAge = data.yawRateAge,
         velocityAge = data.velocityAge,
 
@@ -42,9 +42,9 @@ function telemetry_builder.running(data)
         },
 
         position = {
-            x = data.state.pos.x,
-            y = data.state.pos.y,
-            z = data.state.pos.z,
+            x = data.pose.pos.x,
+            y = data.pose.pos.y,
+            z = data.pose.pos.z,
         },
 
         output = {
@@ -75,10 +75,10 @@ function telemetry_builder.running(data)
         },
 
         current = {
-            height = data.state.pos.y,
-            roll = data.state.roll,
-            pitch = data.state.pitch,
-            yaw = data.state.yaw,
+            height = data.pose.pos.y,
+            roll = data.pose.roll,
+            pitch = data.pose.pitch,
+            yaw = data.pose.yaw,
             yawRate = data.yawRate,
             velocity = {
                 x = data.velocity.x,

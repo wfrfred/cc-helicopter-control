@@ -37,7 +37,7 @@ end
 
 local function waitForSensors(shared)
     while shared.running and (
-        shared.state == nil or
+        shared.pose == nil or
         shared.yawRateTime <= 0.0 or
         shared.velocity == nil or
         shared.velocityTime <= 0.0
@@ -47,7 +47,7 @@ local function waitForSensors(shared)
         shared.telemetry = {
             status = "waiting_sensors",
             time = now,
-            haveState = shared.state ~= nil,
+            haveState = shared.pose ~= nil,
             haveYawRate = shared.yawRateTime > 0.0,
             haveVelocity = shared.velocity ~= nil,
         }
@@ -61,7 +61,7 @@ function control_task.run(shared)
 
     waitForSensors(shared)
 
-    local initial = shared.state
+    local initial = shared.pose
 
     local targets = target_state.new(initial, CONTROL)
     local yawLock = yaw_lock.new(initial.yaw, CONTROL)
@@ -78,20 +78,20 @@ function control_task.run(shared)
         local input, inputAge, inputStale = readInput(shared, loopStart)
         targets:update(input, dt)
 
-        local state = shared.state
-        local stateNow = os.clock()
-        local stateTime = shared.stateTime
-        local stateAge = stateNow - stateTime
+        local pose = shared.pose
+        local now = os.clock()
+        local poseTime = shared.poseTime
+        local poseAge = now - poseTime
         local yawRate = shared.yawRate
         local velocity = shared.velocity
-        local yawRateAge = stateNow - shared.yawRateTime
-        local velocityAge = stateNow - shared.velocityTime
+        local yawRateAge = now - shared.yawRateTime
+        local velocityAge = now - shared.velocityTime
 
-        local yawResult = yawLock:update(input.yaw, state.yaw, yawRate)
+        local yawResult = yawLock:update(input.yaw, pose.yaw, yawRate)
 
         local result = controller:update({
             targets = targets,
-            state = state,
+            pose = pose,
             yawRate = yawRate,
             velocity = velocity,
             yaw = yawResult,
@@ -108,18 +108,18 @@ function control_task.run(shared)
         if telemetryTimer >= CONTROL.telemetry_dt then
             telemetryTimer = 0.0
 
-            shared.telemetryTime = stateNow
+            shared.telemetryTime = now
             shared.telemetry = telemetry_builder.running({
                 shared = shared,
-                state = state,
+                pose = pose,
                 input = input,
                 velocity = velocity,
                 rotorOutput = rotorOutput,
                 controllers = controller:pidControllers(),
 
-                time = stateNow,
+                time = now,
                 dt = dt,
-                stateAge = stateAge,
+                poseAge = poseAge,
                 yawRateAge = yawRateAge,
                 velocityAge = velocityAge,
                 inputAge = inputAge,

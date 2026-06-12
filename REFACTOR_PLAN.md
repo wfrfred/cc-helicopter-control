@@ -14,10 +14,9 @@ Principles:
 
 ## Remaining Work
 
-1. Extract `controller.lua`.
-2. Verify whether CC: Advanced Math can replace `quat.lua`; delete `quat.lua` only if verified.
-3. Clean dead UI helpers.
-4. Defer broader UI drawing split to Phase 2.
+1. Verify whether CC: Advanced Math can replace `quat.lua`; delete `quat.lua` only if verified.
+2. Clean dead UI helpers.
+3. Defer broader UI drawing split to Phase 2.
 
 ## Control Split
 
@@ -26,7 +25,7 @@ Completed:
 ```text
 target_state.lua  -- height/roll/pitch target update
 yaw_lock.lua      -- yaw-lock state machine
-controller.lua    -- PID cascade: targets + state -> commands + terms
+controller.lua    -- PID cascade: targets + pose -> commands + terms
 ```
 
 Next:
@@ -59,7 +58,8 @@ local ctrl = controller.new(config.control)
 
 local result = ctrl:update({
     targets = targets,
-    state = state,
+    pose = pose,
+    yawRate = yawRate,
     velocity = velocity,
     yaw = yawResult,
     dt = dt,
@@ -77,7 +77,7 @@ Proposed return shape:
         yaw = 0.0,
     },
 
-    debug = {
+    terms = {
         height = {
             target = 0.0,
             current = 0.0,
@@ -132,13 +132,13 @@ telemetry construction
 PID instances
 PID update order
 control output limits
-control debug terms
+control terms
 ```
 
 **Controller input** should receive all currently observable physical quantities, regardless of whether the current PID cascade uses them:
 
 - `targets` — target state (height, roll, pitch)
-- `state` — current state snapshot (pos, roll, pitch, yaw)
+- `pose` — current pose snapshot (pos, roll, pitch, yaw)
 - `yawRate` — angular velocity around yaw axis
 - `velocity` — linear velocity vector (reserved for height D term and future damping)
 - `yaw` — yaw lock result (yaw_err, commanded_rate, angle_active)

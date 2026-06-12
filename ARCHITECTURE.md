@@ -144,7 +144,7 @@ Control-layer modules read `shared` and compute control commands.
 | `control_task.lua` | Orchestrate loop timing, shared reads, submodule calls, rotor calls, and telemetry writes. | Separates orchestration from control algorithms. |
 | `target_state.lua` | Height integration, roll/pitch slew, and roll/pitch recentering. | Target policy is independent state-transition logic. |
 | `yaw_lock.lua` | Yaw-lock target, release behavior, angle wrapping, and yaw error calculation. | Yaw policy is independent from PID execution. |
-| `controller.lua` | PID cascade; input targets + state snapshot, output four-axis commands and debug errors. | Control algorithm is independent from task orchestration. |
+| `controller.lua` | PID cascade; input targets + state snapshot, output four-axis commands and errors. | Control algorithm is independent from task orchestration. |
 
 ### Rotor / Actuator Layer
 
@@ -163,11 +163,11 @@ shared.input
     -> target_state:update(...)
     -> targets { height, roll, pitch }
 
-shared.state
+shared.pose
     -> yaw_lock:update(...)
     -> yawResult
 
-targets + state snapshot + yawResult
+targets + pose snapshot + yawResult
     -> controller:update(...)
     -> controlResult {
            commands = {
@@ -176,7 +176,7 @@ targets + state snapshot + yawResult
                pitch,
                yaw,
            },
-           debug = {
+           terms = {
                height,
                roll,
                pitch,
@@ -189,7 +189,7 @@ controlResult.commands
     -> rotor:update(...)
     -> rednet upper/lower broadcast
 
-state + targets + yawResult + controlResult + rotor output
+pose + targets + yawResult + controlResult + rotor output
     -> telemetry_builder.running(...)
     -> shared.telemetry
 ```

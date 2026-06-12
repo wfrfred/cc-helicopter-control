@@ -60,6 +60,31 @@ local function drawBladeOutput(mon, x, y, width, label, value)
     drawOutput(mon, x, y, width, label, value, 15.0)
 end
 
+local function drawCompactBar(mon, x, y, width, label, value, limit)
+    if width < 12 then
+        draw.writeAt(mon, x, y, ("%s%+.0f"):format(label, value), colors.white, colors.black, width)
+        return
+    end
+
+    local barWidth = width - 8
+    local length = math.floor(barWidth * math.abs(clamp(value / limit, -1.0, 1.0)) + 0.5)
+    local bg = value >= 0 and colors.blue or colors.purple
+
+    draw.writeAt(mon, x, y, label, colors.lightGray, colors.black, 2)
+    draw.fill(mon, x + 3, y, barWidth, colors.gray)
+    draw.fill(mon, x + 3, y, length, bg)
+    draw.writeAt(mon, x + width - 4, y, ("%+.1f"):format(value), colors.white, colors.black, 5)
+end
+
+local function drawBladeOutputRow(mon, x, y, width, blades)
+    local columnWidth = math.floor((width - 3) / 4)
+
+    for index, blade in ipairs(blades) do
+        local columnX = x + (index - 1) * (columnWidth + 1)
+        drawCompactBar(mon, columnX, y, columnWidth, blade.label, blade.value, 15.0)
+    end
+end
+
 local function compactValue(label, value)
     return ("%s %+.1f"):format(label, value)
 end
@@ -96,7 +121,7 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
     section(mon, y, "blade outputs", colors.black, colors.orange)
     y = y + 1
 
-    if width >= 64 then
+    if width >= 52 then
         local rows = {
             {
                 { label = "UF", value = upper[1] },
@@ -117,7 +142,7 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
                 return y
             end
 
-            drawCompactValues(mon, x, y, width, row, colors.white)
+            drawBladeOutputRow(mon, x, y, width, row)
             y = y + 1
         end
     elseif width >= 58 then

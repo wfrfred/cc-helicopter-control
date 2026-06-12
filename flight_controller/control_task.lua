@@ -1,6 +1,7 @@
 local mathx = require("lib.mathx")
 local pid = require("pid")
 local rotor = require("rotor")
+local target_state = require("target_state")
 local telemetry_builder = require("telemetry_builder")
 local config = require("config")
 
@@ -18,19 +19,7 @@ local BASE_COLLECTIVE = CONTROL.base_collective
 local COLLECTIVE_MIN = CONTROL.collective_min
 local COLLECTIVE_MAX = CONTROL.collective_max
 
-local HOME_ROLL = CONTROL.home_roll
-local HOME_PITCH = CONTROL.home_pitch
-
-local MAX_TARGET_ROLL = CONTROL.max_target_roll
-local MAX_TARGET_PITCH = CONTROL.max_target_pitch
-
-local ROLL_TARGET_RATE = CONTROL.roll_target_rate
-local PITCH_TARGET_RATE = CONTROL.pitch_target_rate
 local YAW_TARGET_RATE = CONTROL.yaw_target_rate
-local HEIGHT_TARGET_RATE = CONTROL.height_target_rate
-
-local ROLL_CENTER_RATE = CONTROL.roll_center_rate
-local PITCH_CENTER_RATE = CONTROL.pitch_center_rate
 
 local YAW_LOCK_RATE_DEADBAND = CONTROL.yaw_lock_rate_deadband
 
@@ -39,21 +28,6 @@ local rollPid = pid.new(CONTROL.pid.roll)
 local pitchPid = pid.new(CONTROL.pid.pitch)
 local yawAnglePid = pid.new(CONTROL.pid.yaw_angle)
 local yawRatePid = pid.new(CONTROL.pid.yaw_rate)
-
-local function moveToward(x, target, rate, dt)
-    local d = target - x
-    local step = rate * dt
-
-    if math.abs(d) <= step then
-        return target
-    end
-
-    if d > 0 then
-        return x + step
-    end
-
-    return x - step
-end
 
 local function clampDt(dt)
     if dt <= 0 then
@@ -109,9 +83,7 @@ function control_task.run(shared)
 
     local initial = shared.state
 
-    local targetHeight = initial.pos.y
-    local targetRoll = HOME_ROLL
-    local targetPitch = HOME_PITCH
+    local targets = target_state.new(initial, CONTROL)
     local targetYaw = initial.yaw
 
     local lastLoopTime = os.clock() - LOOP_DT
@@ -125,28 +97,7 @@ function control_task.run(shared)
         lastLoopTime = loopStart
 
         local ctl, inputAge, inputStale = readInput(shared, loopStart)
-
-        if ctl.roll ~= 0 then
-            targetRoll = mathx.clamp(
-                targetRoll + ctl.roll * ROLL_TARGET_RATE * dt,
-                -MAX_TARGET_ROLL,
-                MAX_TARGET_ROLL
-            )
-        else
-            targetRoll = moveToward(targetRoll, HOME_ROLL, ROLL_CENTER_RATE, dt)
-        end
-
-        if ctl.pitch ~= 0 then
-            targetPitch = mathx.clamp(
-                targetPitch + ctl.pitch * PITCH_TARGET_RATE * dt,
-                -MAX_TARGET_PITCH,
-                MAX_TARGET_PITCH
-            )
-        else
-            targetPitch = moveToward(targetPitch, HOME_PITCH, PITCH_CENTER_RATE, dt)
-        end
-
-        targetHeight = targetHeight + ctl.climb * HEIGHT_TARGET_RATE * dt
+        targets:update(ctl, dt)
 
         local s = shared.state
         local stateNow = os.clock()
@@ -157,10 +108,10 @@ function control_task.run(shared)
         local yawRateAge = stateNow - shared.yawRateTime
         local velocityAge = stateNow - shared.velocityTime
 
-        local heightOut, heightErr = heightPid:update(targetHeight, s.pos.y, dt)
+        local heightOut, heightErr = heightPid:update(targets.height, s.pos.y, dt)
 
-        local rollErr = mathx.wrapPi(targetRoll - s.roll)
-        local pitchErr = mathx.wrapPi(targetPitch - s.pitch)
+        local rollErr = mathx.wrapPi(targets.roll - s.roll)
+        local pitchErr = mathx.wrapPi(targets.pitch - s.pitch)
         local yawManual = ctl.yaw ~= 0
         local targetYawRate
         local yawErr
@@ -238,9 +189,9 @@ function control_task.run(shared)
                 pitchCmd = pitchCmd,
                 yawCmd = yawCmd,
 
-                targetHeight = targetHeight,
-                targetRoll = targetRoll,
-                targetPitch = targetPitch,
+                targetHeight = targets.height,
+                targetRoll = targets.roll,
+                targetPitch = targets.pitch,
                 targetYaw = targetYaw,
                 targetYawRate = targetYawRate,
 

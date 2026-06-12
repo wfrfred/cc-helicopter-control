@@ -22,12 +22,15 @@ local function zeroPidTerms()
 end
 
 function telemetry_builder.running(data)
+    local commands = data.commands
+    local terms = data.terms
+
     return {
         status = "running",
         time = data.time,
         dt = data.dt,
 
-        stateAge = data.poseAge,
+        poseAge = data.poseAge,
         yawRateAge = data.yawRateAge,
         velocityAge = data.velocityAge,
 
@@ -48,10 +51,10 @@ function telemetry_builder.running(data)
         },
 
         output = {
-            collective = data.collective,
-            roll = data.rollCmd,
-            pitch = data.pitchCmd,
-            yaw = data.yawCmd,
+            collective = commands.collective,
+            roll = commands.roll,
+            pitch = commands.pitch,
+            yaw = commands.yaw,
             rotor = {
                 upper = data.rotorOutput.upper,
                 lower = data.rotorOutput.lower,
@@ -62,16 +65,16 @@ function telemetry_builder.running(data)
             height = pidTerms(data.controllers.height),
             roll = pidTerms(data.controllers.roll),
             pitch = pidTerms(data.controllers.pitch),
-            yawAngle = data.yawAngleActive and pidTerms(data.controllers.yawAngle) or zeroPidTerms(),
+            yawAngle = terms.yaw.angleActive and pidTerms(data.controllers.yawAngle) or zeroPidTerms(),
             yawRate = pidTerms(data.controllers.yawRate),
         },
 
         target = {
-            height = data.targetHeight,
-            roll = data.targetRoll,
-            pitch = data.targetPitch,
-            yaw = data.targetYaw,
-            yawRate = data.targetYawRate,
+            height = terms.height.target,
+            roll = terms.roll.target,
+            pitch = terms.pitch.target,
+            yaw = terms.yaw.target,
+            yawRate = terms.yaw.targetRate,
         },
 
         current = {
@@ -79,7 +82,7 @@ function telemetry_builder.running(data)
             roll = data.pose.roll,
             pitch = data.pose.pitch,
             yaw = data.pose.yaw,
-            yawRate = data.yawRate,
+            yawRate = terms.yaw.rate,
             velocity = {
                 x = data.velocity.x,
                 y = data.velocity.y,
@@ -91,11 +94,11 @@ function telemetry_builder.running(data)
         },
 
         error = {
-            height = data.heightErr,
-            roll = data.rollErr,
-            pitch = data.pitchErr,
-            yaw = data.yawErr,
-            yawRate = data.yawRateErr,
+            height = terms.height.err,
+            roll = terms.roll.err,
+            pitch = terms.pitch.err,
+            yaw = terms.yaw.err,
+            yawRate = terms.yaw.rateErr,
         },
     }
 end

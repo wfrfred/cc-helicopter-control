@@ -185,10 +185,12 @@ controlResult.commands
     -> rotor:update(...)
     -> rednet upper/lower broadcast
 
-pose + targets + yawResult + controlResult + rotor output
+pose + input + controlResult.commands + controlResult.terms + rotor output
     -> telemetry_builder.running(...)
     -> shared.telemetry
 ```
+
+Telemetry age fields use `poseAge` for the pose snapshot. Do not emit a `stateAge` alias.
 
 ## User Interface
 

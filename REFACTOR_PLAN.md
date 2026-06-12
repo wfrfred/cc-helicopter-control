@@ -1,6 +1,6 @@
-# Refactor Plan
+# Phase 2 Refactor Plan
 
-This document tracks remaining work and open design direction. Completed architecture decisions live in `ARCHITECTURE.md`.
+This document tracks remaining refactor work. Completed architecture decisions live in `ARCHITECTURE.md`.
 
 The current version is the behavioral baseline. The helicopter is flyable, and the current signs are considered correct. Refactoring must preserve existing behavior.
 
@@ -14,190 +14,139 @@ Principles:
 
 ## Remaining Work
 
-1. Defer broader UI drawing split to Phase 2.
+1. Refactor UI drawing code without changing telemetry or input behavior.
 
-## Control Split
+## Phase 2 Scope
 
-Completed:
+Phase 2 is UI-only. It may reorganize code under `user_interface/` when the extracted module has a clear owner and reduces real duplication or file size.
 
-```text
-target_state.lua  -- height/roll/pitch target update
-yaw_lock.lua      -- yaw-lock state machine
-controller.lua    -- PID cascade: targets + pose -> commands + terms
-```
-
-### `controller.lua` Design
-
-Why split:
-
-`control_task.lua` currently mixes two concerns:
-
-```text
-orchestration
-    timing, reading shared state, calling submodules, writing telemetry
-
-control algorithm
-    PID instances and cascade updates from target/state to control commands
-```
-
-These concerns have different cohesion. `control_task.lua` should say when each step runs. `controller.lua` should say how target and state become control commands.
-
-Proposed API:
-
-```lua
-local controller = require("controller")
-
-local ctrl = controller.new(config.control)
-
-local result = ctrl:update({
-    targets = targets,
-    pose = pose,
-    yawRate = yawRate,
-    velocity = velocity,
-    yaw = yawResult,
-    dt = dt,
-})
-```
-
-Proposed return shape:
-
-```lua
-{
-    commands = {
-        collective = 0.0,
-        roll = 0.0,
-        pitch = 0.0,
-        yaw = 0.0,
-    },
-
-    terms = {
-        height = {
-            target = 0.0,
-            current = 0.0,
-            err = 0.0,
-            out = 0.0,
-        },
-
-        roll = {
-            target = 0.0,
-            current = 0.0,
-            err = 0.0,
-            out = 0.0,
-        },
-
-        pitch = {
-            target = 0.0,
-            current = 0.0,
-            err = 0.0,
-            out = 0.0,
-        },
-
-        yaw = {
-            target = 0.0,
-            current = 0.0,
-            err = 0.0,
-            targetRate = 0.0,
-            rate = 0.0,
-            rateErr = 0.0,
-            out = 0.0,
-        },
-    },
-}
-```
-
-`control_task.lua` should remain the control-loop orchestrator. It should not disappear.
-
-After extraction, `control_task.lua` should own:
-
-```text
-loop timing
-input/state freshness checks
-target_state update
-yaw_lock update
-controller update
-rotor call
-telemetry construction
-```
-
-`controller.lua` should own:
-
-```text
-PID instances
-PID update order
-control output limits
-control terms
-```
-
-**Controller input** should receive all currently observable physical quantities, regardless of whether the current PID cascade uses them:
-
-- `targets` — target state (height, roll, pitch)
-- `pose` — current pose snapshot (pos, roll, pitch, yaw)
-- `yawRate` — angular velocity around yaw axis
-- `velocity` — linear velocity vector (reserved for height D term and future damping)
-- `yaw` — yaw lock result (yaw_err, commanded_rate, angle_active)
-- `dt` — loop delta time
-
-The controller owns which quantities it uses. The orchestrator (`control_task`) owns reading everything from `shared` and passing it through.
-
-**FDR coordinate system** is a hardcoded convention inside `controller.lua`. The controller computes in the flight dynamics reference frame and does not accept axis sign configuration. Axis conversions happen at I/O boundaries: `sensor_axis` in `data_task.lua`, `mixer_axis` in `rotor.lua`. The controller never sees raw sensor or hardware frames.
-
-## Do Not Split `rotor.lua` Yet
-
-`rotor.lua` remains one cohesive pipeline:
-
-```text
-phase read
-    -> mixer signs
-    -> yaw differential
-    -> cyclic pitch
-    -> upper/lower blade tables
-    -> rednet broadcast
-```
-
-Do not extract `rotor_mixer.lua` yet.
-
-Reason:
-
-The mixer math and rotor transport are currently strongly connected and already isolated from PID/control state. Splitting now would add file boundaries without reducing risk.
-
-A future `rotor_mixer.lua` is allowed only if pure mixer computation needs isolated tests or `rotor.lua` grows enough to obscure the pipeline.
-
-## Rotor / Actuator Boundary
-
-Actuator controller is allowed to:
-
-```text
-receive blade output table
-select configured blade index
-apply local polarity
-clamp or convert to PWM/redstone
-display local status
-```
-
-Actuator controller is not allowed to:
-
-```text
-invert collective or yaw semantics
-apply PID limits
-handle rotor torque logic
-make flight dynamics decisions
-fix sensor-axis signs
-fix mixer-axis signs
-```
-
-If negative collective reverses yaw differential authority, compensation belongs in `flight_controller/rotor.lua`, not in `actuator_controller/startup.lua`.
-
-## UI Cleanup
-
-UI cleanup is Phase 2.
-
-Later possible work:
+Allowed work:
 
 ```text
 drawing primitives
-main monitor layout
-attitude display internals
+main monitor view internals
+attitude display view internals
 telemetry presentation mapping
 ```
 
-Do not mix broad UI cleanup with control-loop refactoring.
+Not allowed in Phase 2:
+
+```text
+flight-controller control-loop changes
+telemetry wire-format changes
+input protocol changes
+rotor or actuator behavior changes
+sync.lua behavior changes
+```
+
+## Target UI Boundaries
+
+Keep task modules responsible for runtime orchestration:
+
+```text
+input_task.lua
+    input loop, sequence number, rednet publication, shared.input writes
+
+telemetry_task.lua
+    rednet receive loop, shared.telemetry writes
+
+monitor_task.lua
+    main monitor allocation, draw loop, draw error handling
+
+attitude_display.lua
+    attitude monitor allocation, draw loop, draw error handling
+```
+
+Move view-specific rendering into view modules only when it makes the task modules easier to read:
+
+```text
+draw.lua
+    shared monitor drawing primitives: clipping, colors, write/fill/blit helpers
+
+monitor_view.lua
+    main diagnostic display layout and widget composition
+
+attitude_view.lua
+    artificial horizon rendering
+
+telemetry_presenter.lua
+    optional display-facing telemetry mapping and formatting helpers
+```
+
+`telemetry_presenter.lua` is optional. Add it only if monitor and attitude views need shared presentation logic or if `monitor_view.lua` becomes mostly field extraction and formatting.
+
+## Suggested Order
+
+1. Extract low-level drawing primitives shared by `monitor_task.lua` and `attitude_display.lua`.
+2. Extract the main monitor drawing body into `monitor_view.lua`; keep monitor allocation and retry/error loops in `monitor_task.lua`.
+3. Extract artificial horizon drawing into `attitude_view.lua`; keep monitor allocation and retry/error loops in `attitude_display.lua`.
+4. Re-evaluate telemetry presentation mapping after the view split. Extract `telemetry_presenter.lua` only if it removes meaningful duplication.
+
+## Drawing Primitive Rules
+
+The drawing primitive module may own:
+
+```text
+clip text to width
+write text at monitor coordinates
+fill spans with background color
+clear monitor background
+convert colors to blit characters
+write blit rows safely inside monitor bounds
+```
+
+It must not own:
+
+```text
+flight telemetry semantics
+layout section order
+axis labels
+PID display choices
+attitude horizon math
+monitor discovery or retry loops
+```
+
+## View Rules
+
+`monitor_view.lua` may own:
+
+```text
+main diagnostic layout
+status coloring
+controller rows
+PID output rows
+rotor output rows
+flight-state rows
+footer content
+```
+
+`attitude_view.lua` may own:
+
+```text
+roll/pitch clamping for display
+horizon row generation
+center marker placement
+attitude display colors
+```
+
+Both view modules should expose a small API:
+
+```lua
+local monitor_view = require("monitor_view")
+
+monitor_view.draw(mon, shared)
+```
+
+```lua
+local attitude_view = require("attitude_view")
+
+attitude_view.draw(mon, shared)
+```
+
+## Acceptance Checklist
+
+- The UI still starts from `user_interface/startup.lua` with the same four tasks.
+- `monitor_task.lua` and `attitude_display.lua` still handle monitor allocation and draw-loop failures.
+- Rednet protocols and telemetry table shapes are unchanged.
+- Main monitor and attitude monitor output are visually equivalent before and after each extraction.
+- Lua syntax checks pass for all runtime files.

@@ -99,7 +99,6 @@ function control_task.run(shared)
         })
 
         local commands = result.commands
-        local terms = result.terms
 
         mixer:set(commands.collective, commands.roll, commands.yaw, commands.pitch)
         local rotorOutput = mixer:update()
@@ -116,6 +115,8 @@ function control_task.run(shared)
                 velocity = velocity,
                 rotorOutput = rotorOutput,
                 controllers = controller:pidControllers(),
+                commands = result.commands,
+                terms = result.terms,
 
                 time = now,
                 dt = dt,
@@ -124,26 +125,6 @@ function control_task.run(shared)
                 velocityAge = velocityAge,
                 inputAge = inputAge,
                 inputStale = inputStale,
-
-                collective = commands.collective,
-                rollCmd = commands.roll,
-                pitchCmd = commands.pitch,
-                yawCmd = commands.yaw,
-
-                targetHeight = terms.height.target,
-                targetRoll = terms.roll.target,
-                targetPitch = terms.pitch.target,
-                targetYaw = terms.yaw.target,
-                targetYawRate = terms.yaw.targetRate,
-
-                yawRate = terms.yaw.rate,
-                yawAngleActive = terms.yaw.angleActive,
-
-                heightErr = terms.height.err,
-                rollErr = terms.roll.err,
-                pitchErr = terms.pitch.err,
-                yawErr = terms.yaw.err,
-                yawRateErr = terms.yaw.rateErr,
             })
         end
 

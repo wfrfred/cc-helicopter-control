@@ -32,7 +32,8 @@ function position_hold.new(initial, control)
         targetX = initial.pos.x,
         targetZ = initial.pos.z,
         active = false,
-        velocityFeedforwardGain = control.position_hold_velocity_feedforward_gain,
+        velocityXFeedforwardGain = control.position_hold_velocity_x_feedforward_gain,
+        velocityZFeedforwardGain = control.position_hold_velocity_z_feedforward_gain,
         controllers = controllers,
     }, Hold)
 end
@@ -74,8 +75,8 @@ function Hold:update(input, pose, velocity, dt)
     local targetVelocityX, errorX = self.controllers.positionX:update(self.targetX, pose.pos.x, dt)
     local targetVelocityZ, errorZ = self.controllers.positionZ:update(self.targetZ, pose.pos.z, dt)
 
-    local feedforwardX = self.velocityFeedforwardGain * targetVelocityX
-    local feedforwardZ = self.velocityFeedforwardGain * targetVelocityZ
+    local feedforwardX = self.velocityXFeedforwardGain * targetVelocityX
+    local feedforwardZ = self.velocityZFeedforwardGain * targetVelocityZ
     local feedbackX = self.controllers.velocityX:update(targetVelocityX, velocity.x, dt)
     local feedbackZ = self.controllers.velocityZ:update(targetVelocityZ, velocity.z, dt)
     local outputX = feedforwardX + feedbackX

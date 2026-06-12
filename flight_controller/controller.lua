@@ -12,11 +12,11 @@ function controller.new(control)
         collectiveMin = control.collective_min,
         collectiveMax = control.collective_max,
 
-        heightPid = pid.new(control.pid.height),
-        rollPid = pid.new(control.pid.roll),
-        pitchPid = pid.new(control.pid.pitch),
-        yawAnglePid = pid.new(control.pid.yaw_angle),
-        yawRatePid = pid.new(control.pid.yaw_rate),
+        height = pid.new(control.pid.height),
+        roll = pid.new(control.pid.roll),
+        pitch = pid.new(control.pid.pitch),
+        yawAngle = pid.new(control.pid.yaw_angle),
+        yawRate = pid.new(control.pid.yaw_rate),
     }, Controller)
 end
 
@@ -27,23 +27,23 @@ function Controller:update(input)
     local yawResult = input.yaw
     local dt = input.dt
 
-    local heightOut, heightErr = self.heightPid:update(targets.height, pose.pos.y, dt)
+    local heightOut, heightErr = self.height:update(targets.height, pose.pos.y, dt)
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
-    local rollCmd = self.rollPid:update(rollErr, 0.0, dt)
+    local rollCmd = self.roll:update(rollErr, 0.0, dt)
 
     local pitchErr = mathx.wrapPi(targets.pitch - pose.pitch)
-    local pitchCmd = self.pitchPid:update(pitchErr, 0.0, dt)
+    local pitchCmd = self.pitch:update(pitchErr, 0.0, dt)
 
     local targetYawRate = yawResult.commanded_rate
     local yawErr = yawResult.yaw_err
     local yawAngleActive = yawResult.angle_active
 
     if yawAngleActive then
-        targetYawRate = self.yawAnglePid:update(yawErr, 0.0, dt)
+        targetYawRate = self.yawAngle:update(yawErr, 0.0, dt)
     end
 
-    local yawCmd, yawRateErr = self.yawRatePid:update(targetYawRate, yawRate, dt)
+    local yawCmd, yawRateErr = self.yawRate:update(targetYawRate, yawRate, dt)
 
     local collective = mathx.clamp(
         self.baseCollective + heightOut,
@@ -97,11 +97,11 @@ end
 
 function Controller:pidControllers()
     return {
-        height = self.heightPid,
-        roll = self.rollPid,
-        pitch = self.pitchPid,
-        yawAngle = self.yawAnglePid,
-        yawRate = self.yawRatePid,
+        height = self.height,
+        roll = self.roll,
+        pitch = self.pitch,
+        yawAngle = self.yawAngle,
+        yawRate = self.yawRate,
     }
 end
 

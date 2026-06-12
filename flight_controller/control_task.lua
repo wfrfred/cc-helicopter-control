@@ -1,8 +1,8 @@
 local Controller = require("controller")
+local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
-local height_lock = require("height_lock")
-local yaw_lock = require("yaw_lock")
+local rate_lock = require("rate_lock")
 local telemetry_builder = require("telemetry_builder")
 local config = require("config")
 
@@ -65,8 +65,19 @@ function control_task.run(shared)
     local initial = shared.pose
 
     local targets = target_state.new(initial, CONTROL)
-    local heightLock = height_lock.new(initial.pos.y, CONTROL)
-    local yawLock = yaw_lock.new(initial.yaw, CONTROL)
+    local heightLock = rate_lock.new({
+        initial_target = initial.pos.y,
+        target_rate = CONTROL.height_target_rate,
+        rate_deadband = CONTROL.height_lock_speed_deadband,
+    })
+    local yawLock = rate_lock.new({
+        initial_target = initial.yaw,
+        target_rate = CONTROL.yaw_target_rate,
+        rate_deadband = CONTROL.yaw_lock_rate_deadband,
+        error = function(target, current)
+            return mathx.wrapPi(target - current)
+        end,
+    })
     local controller = Controller.new(CONTROL)
 
     local lastLoopTime = os.clock() - CONTROL.loop_dt

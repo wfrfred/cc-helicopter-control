@@ -30,11 +30,11 @@ function Controller:update(input)
     local yawResult = input.yaw
     local dt = input.dt
 
-    local targetVerticalSpeed = heightResult.commanded_vertical_speed
-    local heightErr = heightResult.height_err
+    local targetVerticalSpeed = heightResult.commandedRate
+    local heightErr = heightResult.error
 
-    if heightResult.lock_active then
-        targetVerticalSpeed, heightErr = self.height:update(heightResult.target_height, pose.pos.y, dt)
+    if heightResult.active then
+        targetVerticalSpeed, heightErr = self.height:update(heightResult.target, pose.pos.y, dt)
     else
         self.height:reset()
     end
@@ -47,9 +47,9 @@ function Controller:update(input)
     local pitchErr = mathx.wrapPi(targets.pitch - pose.pitch)
     local pitchCmd = self.pitch:update(pitchErr, 0.0, dt)
 
-    local targetYawRate = yawResult.commanded_rate
-    local yawErr = yawResult.yaw_err
-    local yawAngleActive = yawResult.angle_active
+    local targetYawRate = yawResult.commandedRate
+    local yawErr = yawResult.error
+    local yawAngleActive = yawResult.active
 
     if yawAngleActive then
         targetYawRate = self.yawAngle:update(yawErr, 0.0, dt)
@@ -73,11 +73,11 @@ function Controller:update(input)
 
         terms = {
             height = {
-                target = heightResult.target_height,
+                target = heightResult.target,
                 current = pose.pos.y,
                 err = heightErr,
                 out = targetVerticalSpeed,
-                lockActive = heightResult.lock_active,
+                lockActive = heightResult.active,
             },
 
             verticalSpeed = {
@@ -102,7 +102,7 @@ function Controller:update(input)
             },
 
             yaw = {
-                target = yawResult.target_yaw,
+                target = yawResult.target,
                 current = pose.yaw,
                 err = yawErr,
                 targetRate = targetYawRate,

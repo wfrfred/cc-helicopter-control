@@ -65,9 +65,10 @@ config.control = {
     max_dt = 0.2,
     input_stale_dt = 0.5,
 
-    base_collective = 0.2,
     collective_min = 0.0,
     collective_max = 10.0,
+    vertical_speed_feedforward_gain = 0.5,
+    vertical_speed_feedforward_bias = 1.0,
 
     home_roll = 0.0,
     home_pitch = 0.0,
@@ -88,8 +89,8 @@ config.control = {
 
     pid = {
         height = {
-            kp = 1.5,
-            ki = 0.0,
+            kp = 1.0,
+            ki = 0.5,
             kd = 0.0,
             i_min = -3.0,
             i_max = 3.0,
@@ -99,7 +100,7 @@ config.control = {
         },
 
         vertical_speed = {
-            kp = 1.0,
+            kp = 0.5,
             ki = 0.0,
             kd = 0.0,
             i_min = -3.0,

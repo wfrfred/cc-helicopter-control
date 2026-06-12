@@ -8,9 +8,10 @@ Controller.__index = Controller
 
 function controller.new(control)
     return setmetatable({
-        baseCollective = control.base_collective,
         collectiveMin = control.collective_min,
         collectiveMax = control.collective_max,
+        verticalSpeedFeedforwardGain = control.vertical_speed_feedforward_gain,
+        verticalSpeedFeedforwardBias = control.vertical_speed_feedforward_bias,
 
         height = pid.new(control.pid.height),
         verticalSpeed = pid.new(control.pid.vertical_speed),
@@ -39,7 +40,10 @@ function Controller:update(input)
         self.height:reset()
     end
 
-    local verticalSpeedOut, verticalSpeedErr = self.verticalSpeed:update(targetVerticalSpeed, velocity.vertical, dt)
+    local verticalSpeedFeedback, verticalSpeedErr = self.verticalSpeed:update(targetVerticalSpeed, velocity.vertical, dt)
+    local verticalSpeedFeedforward = self.verticalSpeedFeedforwardGain * targetVerticalSpeed
+        + self.verticalSpeedFeedforwardBias
+    local verticalSpeedOut = verticalSpeedFeedforward + verticalSpeedFeedback
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
     local rollCmd = self.roll:update(rollErr, 0.0, dt)
@@ -58,7 +62,7 @@ function Controller:update(input)
     local yawCmd, yawRateErr = self.yawRate:update(targetYawRate, yawRate, dt)
 
     local collective = mathx.clamp(
-        self.baseCollective + verticalSpeedOut,
+        verticalSpeedOut,
         self.collectiveMin,
         self.collectiveMax
     )
@@ -84,6 +88,8 @@ function Controller:update(input)
                 target = targetVerticalSpeed,
                 current = velocity.vertical,
                 err = verticalSpeedErr,
+                feedforward = verticalSpeedFeedforward,
+                feedback = verticalSpeedFeedback,
                 out = verticalSpeedOut,
             },
 

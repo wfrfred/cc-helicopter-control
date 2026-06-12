@@ -52,6 +52,8 @@ function telemetry_builder.running(data)
 
         output = {
             collective = commands.collective,
+            collectiveFeedforward = terms.verticalSpeed.feedforward,
+            collectiveFeedback = terms.verticalSpeed.feedback,
             roll = commands.roll,
             pitch = commands.pitch,
             yaw = commands.yaw,

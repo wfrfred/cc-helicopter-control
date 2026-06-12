@@ -322,6 +322,8 @@ local function drawRunning(mon, shared, telemetry)
         y = y + 1
     end
     if y <= h then drawOutput(mon, 2, y, w - 2, "COL", output.collective, 10.0) y = y + 1 end
+    if y <= h then drawOutput(mon, 2, y, w - 2, "CFF", output.collectiveFeedforward, 10.0) y = y + 1 end
+    if y <= h then drawOutput(mon, 2, y, w - 2, "CFB", output.collectiveFeedback, 6.0) y = y + 1 end
     if y <= h then drawOutput(mon, 2, y, w - 2, "ROL", output.roll, 8.0) y = y + 1 end
     if y <= h then drawOutput(mon, 2, y, w - 2, "PIT", output.pitch, 12.0) y = y + 1 end
     if y <= h then drawOutput(mon, 2, y, w - 2, "YAW", output.yaw, 8.0) y = y + 1 end

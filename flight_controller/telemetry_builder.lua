@@ -24,6 +24,7 @@ end
 function telemetry_builder.running(data)
     local commands = data.commands
     local terms = data.terms
+    local position = data.position
 
     return {
         status = "running",
@@ -66,6 +67,10 @@ function telemetry_builder.running(data)
         pid = {
             height = pidTerms(data.controllers.height),
             verticalSpeed = pidTerms(data.controllers.verticalSpeed),
+            positionX = pidTerms(data.positionControllers.positionX),
+            positionZ = pidTerms(data.positionControllers.positionZ),
+            velocityX = pidTerms(data.positionControllers.velocityX),
+            velocityZ = pidTerms(data.positionControllers.velocityZ),
             roll = pidTerms(data.controllers.roll),
             pitch = pidTerms(data.controllers.pitch),
             yawAngle = terms.yaw.angleActive and pidTerms(data.controllers.yawAngle) or zeroPidTerms(),
@@ -105,6 +110,32 @@ function telemetry_builder.running(data)
             pitch = terms.pitch.err,
             yaw = terms.yaw.err,
             yawRate = terms.yaw.rateErr,
+        },
+
+        positionHold = {
+            active = position.active,
+            target = {
+                x = position.targetX,
+                z = position.targetZ,
+            },
+            targetVelocity = {
+                x = position.targetVelocityX,
+                z = position.targetVelocityZ,
+            },
+            currentVelocity = {
+                x = data.velocity.x,
+                z = data.velocity.z,
+            },
+            error = {
+                x = position.errorX,
+                z = position.errorZ,
+            },
+            output = {
+                x = position.outputX,
+                z = position.outputZ,
+                roll = position.roll,
+                pitch = position.pitch,
+            },
         },
     }
 end

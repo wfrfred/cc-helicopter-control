@@ -250,6 +250,45 @@ local function drawFlightState(mon, x, y, width, limitY, telemetry)
     return drawMetricGroups(mon, x, y, width, limitY, items, colors.white)
 end
 
+local function drawPositionHold(mon, x, y, width, limitY, telemetry)
+    if y > limitY then
+        return y
+    end
+
+    local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
+    local target = expectTable(positionHold.target, "telemetry.positionHold.target")
+    local targetVelocity = expectTable(positionHold.targetVelocity, "telemetry.positionHold.targetVelocity")
+    local currentVelocity = expectTable(positionHold.currentVelocity, "telemetry.positionHold.currentVelocity")
+    local err = expectTable(positionHold.error, "telemetry.positionHold.error")
+    local output = expectTable(positionHold.output, "telemetry.positionHold.output")
+
+    section(mon, y, "position hold", colors.black, colors.pink)
+    y = y + 1
+
+    if not positionHold.active then
+        if y <= limitY then
+            draw.writeAt(mon, x, y, "manual roll/pitch", colors.lightGray, colors.black, width)
+            y = y + 1
+        end
+        return y
+    end
+
+    local items = {
+        { label = "TGX", value = target.x, pattern = "%.1f" },
+        { label = "TGZ", value = target.z, pattern = "%.1f" },
+        { label = "EX", value = err.x, pattern = "%+.1f" },
+        { label = "EZ", value = err.z, pattern = "%+.1f" },
+        { label = "TVX", value = targetVelocity.x, pattern = "%+.1f" },
+        { label = "TVZ", value = targetVelocity.z, pattern = "%+.1f" },
+        { label = "VX", value = currentVelocity.x, pattern = "%+.1f" },
+        { label = "VZ", value = currentVelocity.z, pattern = "%+.1f" },
+        { label = "ROL", value = deg(output.roll), pattern = "%+.1f" },
+        { label = "PIT", value = deg(output.pitch), pattern = "%+.1f" },
+    }
+
+    return drawMetricGroups(mon, x, y, width, limitY, items, colors.white)
+end
+
 local function drawWaiting(mon, shared)
     local w, h = mon.getSize()
     draw.clear(mon, colors.black)
@@ -331,6 +370,11 @@ local function drawRunning(mon, shared, telemetry)
     if y <= h then
         y = y + 1
         y = drawRotorOutputs(mon, 2, y, w - 2, h - 2, output)
+    end
+
+    if y <= h - 2 then
+        y = y + 1
+        y = drawPositionHold(mon, 2, y, w - 2, h - 2, telemetry)
     end
 
     if y <= h - 2 then

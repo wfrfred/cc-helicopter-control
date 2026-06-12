@@ -1,6 +1,7 @@
 local Controller = require("controller")
 local rotor = require("rotor")
 local target_state = require("target_state")
+local height_lock = require("height_lock")
 local yaw_lock = require("yaw_lock")
 local telemetry_builder = require("telemetry_builder")
 local config = require("config")
@@ -64,6 +65,7 @@ function control_task.run(shared)
     local initial = shared.pose
 
     local targets = target_state.new(initial, CONTROL)
+    local heightLock = height_lock.new(initial.pos.y, CONTROL)
     local yawLock = yaw_lock.new(initial.yaw, CONTROL)
     local controller = Controller.new(CONTROL)
 
@@ -87,6 +89,7 @@ function control_task.run(shared)
         local yawRateAge = now - shared.yawRateTime
         local velocityAge = now - shared.velocityTime
 
+        local heightResult = heightLock:update(input.climb, pose.pos.y, velocity.vertical)
         local yawResult = yawLock:update(input.yaw, pose.yaw, yawRate)
 
         local result = controller:update({
@@ -94,6 +97,7 @@ function control_task.run(shared)
             pose = pose,
             yawRate = yawRate,
             velocity = velocity,
+            height = heightResult,
             yaw = yawResult,
             dt = dt,
         })

@@ -134,13 +134,14 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
     end
 
     local text
+    local valuePattern = angle and "%.0f" or "%.1f"
 
     if width >= 62 then
         text = ("%-5s %7s %7s %7s %7s %7s %7s"):format(
             label,
-            cell(target, "%.1f", 7),
-            cell(current, "%.1f", 7),
-            cell(err, "%.1f", 7),
+            cell(target, valuePattern, 7),
+            cell(current, valuePattern, 7),
+            cell(err, valuePattern, 7),
             cell(terms.p, "%+.1f", 7),
             cell(terms.i, "%+.1f", 7),
             cell(terms.d, "%+.1f", 7)
@@ -148,9 +149,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
     elseif width >= 48 then
         text = ("%-5s %6s %6s %6s %6s %6s %6s"):format(
             label,
-            cell(target, "%.0f", 6),
-            cell(current, "%.0f", 6),
-            cell(err, "%.0f", 6),
+            cell(target, valuePattern, 6),
+            cell(current, valuePattern, 6),
+            cell(err, valuePattern, 6),
             cell(terms.p, "%+.1f", 6),
             cell(terms.i, "%+.1f", 6),
             cell(terms.d, "%+.1f", 6)
@@ -158,9 +159,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
     elseif width >= 36 then
         text = ("%-4s %5s %5s %5s  %s/%s/%s"):format(
             label,
-            cell(target, "%.0f", 5),
-            cell(current, "%.0f", 5),
-            cell(err, "%.0f", 5),
+            cell(target, valuePattern, 5),
+            cell(current, valuePattern, 5),
+            cell(err, valuePattern, 5),
             cell(terms.p, "%+.0f", 3),
             cell(terms.i, "%+.0f", 3),
             cell(terms.d, "%+.0f", 3)
@@ -168,9 +169,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
     else
         text = ("%s %s/%s/%s %s/%s/%s"):format(
             label,
-            fmt(target, "%.0f"),
-            fmt(current, "%.0f"),
-            fmt(err, "%.0f"),
+            fmt(target, valuePattern),
+            fmt(current, valuePattern),
+            fmt(err, valuePattern),
             fmt(terms.p, "%+.0f"),
             fmt(terms.i, "%+.0f"),
             fmt(terms.d, "%+.0f")

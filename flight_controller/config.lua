@@ -83,6 +83,7 @@ config.control = {
     roll_center_rate = math.rad(60),
     pitch_center_rate = math.rad(60),
 
+    height_lock_speed_deadband = 0.1,
     yaw_lock_rate_deadband = math.rad(2),
 
     pid = {

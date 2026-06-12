@@ -25,11 +25,20 @@ function Controller:update(input)
     local targets = input.targets
     local pose = input.pose
     local velocity = input.velocity
+    local heightResult = input.height
     local yawRate = input.yawRate
     local yawResult = input.yaw
     local dt = input.dt
 
-    local targetVerticalSpeed, heightErr = self.height:update(targets.height, pose.pos.y, dt)
+    local targetVerticalSpeed = heightResult.commanded_vertical_speed
+    local heightErr = heightResult.height_err
+
+    if heightResult.lock_active then
+        targetVerticalSpeed, heightErr = self.height:update(heightResult.target_height, pose.pos.y, dt)
+    else
+        self.height:reset()
+    end
+
     local verticalSpeedOut, verticalSpeedErr = self.verticalSpeed:update(targetVerticalSpeed, velocity.vertical, dt)
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
@@ -64,10 +73,11 @@ function Controller:update(input)
 
         terms = {
             height = {
-                target = targets.height,
+                target = heightResult.target_height,
                 current = pose.pos.y,
                 err = heightErr,
                 out = targetVerticalSpeed,
+                lockActive = heightResult.lock_active,
             },
 
             verticalSpeed = {

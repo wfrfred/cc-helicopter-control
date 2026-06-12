@@ -23,7 +23,6 @@ end
 function target_state.new(initial, control)
     return setmetatable({
         control = control,
-        height = initial.pos.y,
         roll = control.home_roll,
         pitch = control.home_pitch,
     }, State)
@@ -52,7 +51,6 @@ function State:update(input, dt)
         self.pitch = moveToward(self.pitch, control.home_pitch, control.pitch_center_rate, dt)
     end
 
-    self.height = self.height + input.climb * control.height_target_rate * dt
 end
 
 return target_state

@@ -20,7 +20,6 @@ term.clear()
 term.setCursorPos(1, 1)
 print("startup: actuator controller")
 
-local protocol = require("lib.protocol")
 local pwm = require("pwm")
 
 local MODEM_SIDE = config.modem.side
@@ -37,6 +36,12 @@ for _, out in ipairs(OUTPUTS) do
     pwm.set(out.side, 0)
 end
 
+local function clamp(value, lo, hi)
+    if value < lo then return lo end
+    if value > hi then return hi end
+    return value
+end
+
 local function polarizedValue(value, polarity)
     value = tonumber(value) or 0
 
@@ -44,7 +49,7 @@ local function polarizedValue(value, polarity)
         value = -value
     end
 
-    return protocol.clamp(value, 0, 15)
+    return clamp(value, 0, 15)
 end
 
 local function receiverTask()

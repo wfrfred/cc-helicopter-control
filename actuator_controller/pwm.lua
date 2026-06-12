@@ -1,13 +1,17 @@
-local protocol = require("lib.protocol")
-
 local pwm = {}
 
 local levels = {}
 local accumulators = {}
 local outputs = {}
 
+local function clamp(value, lo, hi)
+    if value < lo then return lo end
+    if value > hi then return hi end
+    return value
+end
+
 local function normalize(value)
-    return protocol.clamp(tonumber(value) or 0, 0, 15)
+    return clamp(tonumber(value) or 0, 0, 15)
 end
 
 function pwm.set(side, value)

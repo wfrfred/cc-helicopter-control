@@ -15,8 +15,14 @@ local function defaultInput()
     }
 end
 
+local function clamp(x, lo, hi)
+    if x < lo then return lo end
+    if x > hi then return hi end
+    return x
+end
+
 local function axis(value)
-    return protocol.clamp(value, -1.0, 1.0)
+    return clamp(value, -1.0, 1.0)
 end
 
 local function normalize(msg)

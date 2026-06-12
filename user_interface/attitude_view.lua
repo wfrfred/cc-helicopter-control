@@ -69,7 +69,7 @@ local function drawHorizon(mon, current)
     end
 
     local markerX = centerX - math.floor(#CENTER_MARKER / 2)
-    draw.writeAt(mon, markerX, centerY, CENTER_MARKER, colors.black, colors.yellow)
+    draw.writeAt(mon, markerX, centerY, CENTER_MARKER, colors.black, colors.yellow, #CENTER_MARKER)
 end
 
 local function drawWaiting(mon, text)

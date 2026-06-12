@@ -56,16 +56,7 @@ local function drawOutput(mon, x, y, width, label, value, limit)
     draw.writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 7)
 end
 
-local function drawBladeOutput(mon, x, y, width, label, value)
-    drawOutput(mon, x, y, width, label, value, 15.0)
-end
-
 local function drawCompactBar(mon, x, y, width, label, value, limit)
-    if width < 12 then
-        draw.writeAt(mon, x, y, ("%s%+.0f"):format(label, value), colors.white, colors.black, width)
-        return
-    end
-
     local barWidth = width - 8
     local length = math.floor(barWidth * math.abs(clamp(value / limit, -1.0, 1.0)) + 0.5)
     local bg = value >= 0 and colors.blue or colors.purple
@@ -85,33 +76,23 @@ local function drawBladeOutputRow(mon, x, y, width, blades)
     end
 end
 
-local function compactValue(label, value)
-    return ("%s %+.1f"):format(label, value)
-end
-
-local function drawCompactValues(mon, x, y, width, values, fg)
-    local parts = {}
-
-    for _, item in ipairs(values) do
-        parts[#parts + 1] = compactValue(item.label, item.value)
-    end
-
-    draw.writeAt(mon, x, y, table.concat(parts, "  "), fg or colors.white, colors.black, width)
-end
-
 local function drawRotorOutputs(mon, x, y, width, limitY, output)
     local rotor = expectTable(output.rotor, "telemetry.output.rotor")
     local upper = expectTable(rotor.upper, "telemetry.output.rotor.upper")
     local lower = expectTable(rotor.lower, "telemetry.output.rotor.lower")
-    local blades = {
-        { label = "U-F", value = upper[1] },
-        { label = "U-R", value = upper[2] },
-        { label = "U-B", value = upper[3] },
-        { label = "U-L", value = upper[4] },
-        { label = "L-F", value = lower[1] },
-        { label = "L-R", value = lower[2] },
-        { label = "L-B", value = lower[3] },
-        { label = "L-L", value = lower[4] },
+    local rows = {
+        {
+            { label = "UF", value = upper[1] },
+            { label = "UR", value = upper[2] },
+            { label = "UB", value = upper[3] },
+            { label = "UL", value = upper[4] },
+        },
+        {
+            { label = "LF", value = lower[1] },
+            { label = "LR", value = lower[2] },
+            { label = "LB", value = lower[3] },
+            { label = "LL", value = lower[4] },
+        },
     }
 
     if y > limitY then
@@ -121,51 +102,13 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
     section(mon, y, "blade outputs", colors.black, colors.orange)
     y = y + 1
 
-    if width >= 52 then
-        local rows = {
-            {
-                { label = "UF", value = upper[1] },
-                { label = "UR", value = upper[2] },
-                { label = "UB", value = upper[3] },
-                { label = "UL", value = upper[4] },
-            },
-            {
-                { label = "LF", value = lower[1] },
-                { label = "LR", value = lower[2] },
-                { label = "LB", value = lower[3] },
-                { label = "LL", value = lower[4] },
-            },
-        }
-
-        for _, row in ipairs(rows) do
-            if y > limitY then
-                return y
-            end
-
-            drawBladeOutputRow(mon, x, y, width, row)
-            y = y + 1
+    for _, row in ipairs(rows) do
+        if y > limitY then
+            return y
         end
-    elseif width >= 58 then
-        local colWidth = math.floor((width - 2) / 2)
 
-        for i = 1, #blades, 2 do
-            if y > limitY then
-                return y
-            end
-
-            drawBladeOutput(mon, x, y, colWidth, blades[i].label, blades[i].value)
-            drawBladeOutput(mon, x + colWidth + 2, y, colWidth, blades[i + 1].label, blades[i + 1].value)
-            y = y + 1
-        end
-    else
-        for _, blade in ipairs(blades) do
-            if y > limitY then
-                return y
-            end
-
-            drawBladeOutput(mon, x, y, width, blade.label, blade.value)
-            y = y + 1
-        end
+        drawBladeOutputRow(mon, x, y, width, row)
+        y = y + 1
     end
 
     return y
@@ -179,38 +122,36 @@ local function drawControllerOutputs(mon, x, y, width, limitY, output)
     section(mon, y, "controller outputs", colors.black, colors.yellow)
     y = y + 1
 
-    if width >= 56 then
-        local rows = {
-            {
-                { label = "COL", value = output.collective },
-                { label = "CFF", value = output.collectiveFeedforward },
-                { label = "CFB", value = output.collectiveFeedback },
-            },
-            {
-                { label = "ROL", value = output.roll },
-                { label = "PIT", value = output.pitch },
-                { label = "YAW", value = output.yaw },
-            },
-        }
+    local columnWidth = math.floor((width - 2) / 2)
+    local rows = {
+        {
+            { label = "COL", value = output.collective },
+            { label = "ROL", value = output.roll },
+        },
+        {
+            { label = "CFF", value = output.collectiveFeedforward },
+            { label = "PIT", value = output.pitch },
+        },
+        {
+            { label = "CFB", value = output.collectiveFeedback },
+            { label = "YAW", value = output.yaw },
+        },
+    }
+    local limits = {
+        { 10.0, 8.0 },
+        { 10.0, 12.0 },
+        { 6.0, 8.0 },
+    }
 
-        for _, row in ipairs(rows) do
-            if y > limitY then
-                return y
-            end
-
-            drawCompactValues(mon, x, y, width, row, colors.white)
-            y = y + 1
+    for index, row in ipairs(rows) do
+        if y > limitY then
+            return y
         end
 
-        return y
+        drawOutput(mon, x, y, columnWidth, row[1].label, row[1].value, limits[index][1])
+        drawOutput(mon, x + columnWidth + 2, y, columnWidth, row[2].label, row[2].value, limits[index][2])
+        y = y + 1
     end
-
-    if y <= limitY then drawOutput(mon, x, y, width, "COL", output.collective, 10.0) y = y + 1 end
-    if y <= limitY then drawOutput(mon, x, y, width, "CFF", output.collectiveFeedforward, 10.0) y = y + 1 end
-    if y <= limitY then drawOutput(mon, x, y, width, "CFB", output.collectiveFeedback, 6.0) y = y + 1 end
-    if y <= limitY then drawOutput(mon, x, y, width, "ROL", output.roll, 8.0) y = y + 1 end
-    if y <= limitY then drawOutput(mon, x, y, width, "PIT", output.pitch, 12.0) y = y + 1 end
-    if y <= limitY then drawOutput(mon, x, y, width, "YAW", output.yaw, 8.0) y = y + 1 end
 
     return y
 end

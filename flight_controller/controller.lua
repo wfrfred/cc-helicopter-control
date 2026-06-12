@@ -1,5 +1,5 @@
 local mathx = require("lib.mathx")
-local pid = require("pid")
+local pid = require("lib.pid")
 
 local controller = {}
 

@@ -1,5 +1,4 @@
-local mathx = require("lib.mathx")
-local pid = require("pid")
+local controller = require("controller")
 local rotor = require("rotor")
 local target_state = require("target_state")
 local yaw_lock = require("yaw_lock")
@@ -14,17 +13,6 @@ local LOOP_DT = CONTROL.loop_dt
 local TELEMETRY_DT = CONTROL.telemetry_dt
 local MAX_DT = CONTROL.max_dt
 local INPUT_STALE_DT = CONTROL.input_stale_dt
-
-local BASE_COLLECTIVE = CONTROL.base_collective
-
-local COLLECTIVE_MIN = CONTROL.collective_min
-local COLLECTIVE_MAX = CONTROL.collective_max
-
-local heightPid = pid.new(CONTROL.pid.height)
-local rollPid = pid.new(CONTROL.pid.roll)
-local pitchPid = pid.new(CONTROL.pid.pitch)
-local yawAnglePid = pid.new(CONTROL.pid.yaw_angle)
-local yawRatePid = pid.new(CONTROL.pid.yaw_rate)
 
 local function clampDt(dt)
     if dt <= 0 then
@@ -82,6 +70,7 @@ function control_task.run(shared)
 
     local targets = target_state.new(initial, CONTROL)
     local yawLock = yaw_lock.new(initial.yaw, CONTROL)
+    local ctrl = controller.new(CONTROL)
 
     local lastLoopTime = os.clock() - LOOP_DT
     local telemetryTimer = 0.0
@@ -103,30 +92,21 @@ function control_task.run(shared)
         local yawRateAge = stateNow - shared.yawRateTime
         local velocityAge = stateNow - shared.velocityTime
 
-        local heightOut, heightErr = heightPid:update(targets.height, s.pos.y, dt)
-
-        local rollErr = mathx.wrapPi(targets.roll - s.roll)
-        local pitchErr = mathx.wrapPi(targets.pitch - s.pitch)
-
         local yawResult = yawLock:update(ctl.yaw, s.yaw, yawRate)
-        local targetYawRate = yawResult.commanded_rate
-        local yawErr = yawResult.yaw_err
 
-        if yawResult.angle_active then
-            targetYawRate = yawAnglePid:update(yawErr, 0.0, dt)
-        end
+        local result = ctrl:update({
+            targets = targets,
+            state = s,
+            yawRate = yawRate,
+            velocity = velocity,
+            yaw = yawResult,
+            dt = dt,
+        })
 
-        local rollCmd = rollPid:update(rollErr, 0.0, dt)
-        local pitchCmd = pitchPid:update(pitchErr, 0.0, dt)
-        local yawCmd, yawRateErr = yawRatePid:update(targetYawRate, yawRate, dt)
+        local cmd = result.commands
+        local dbg = result.debug
 
-        local collective = mathx.clamp(
-            BASE_COLLECTIVE + heightOut,
-            COLLECTIVE_MIN,
-            COLLECTIVE_MAX
-        )
-
-        mixer:set(collective, rollCmd, yawCmd, pitchCmd)
+        mixer:set(cmd.collective, cmd.roll, cmd.yaw, cmd.pitch)
         local rotorOutput = mixer:update()
 
         telemetryTimer = telemetryTimer + dt
@@ -140,13 +120,7 @@ function control_task.run(shared)
                 input = ctl,
                 velocity = velocity,
                 rotorOutput = rotorOutput,
-                controllers = {
-                    height = heightPid,
-                    roll = rollPid,
-                    pitch = pitchPid,
-                    yawAngle = yawAnglePid,
-                    yawRate = yawRatePid,
-                },
+                controllers = ctrl:pidControllers(),
 
                 time = stateNow,
                 dt = dt,
@@ -156,25 +130,25 @@ function control_task.run(shared)
                 inputAge = inputAge,
                 inputStale = inputStale,
 
-                collective = collective,
-                rollCmd = rollCmd,
-                pitchCmd = pitchCmd,
-                yawCmd = yawCmd,
+                collective = cmd.collective,
+                rollCmd = cmd.roll,
+                pitchCmd = cmd.pitch,
+                yawCmd = cmd.yaw,
 
-                targetHeight = targets.height,
-                targetRoll = targets.roll,
-                targetPitch = targets.pitch,
-                targetYaw = yawResult.target_yaw,
-                targetYawRate = targetYawRate,
+                targetHeight = dbg.height.target,
+                targetRoll = dbg.roll.target,
+                targetPitch = dbg.pitch.target,
+                targetYaw = dbg.yaw.target,
+                targetYawRate = dbg.yaw.targetRate,
 
-                yawRate = yawRate,
-                yawAngleActive = yawResult.angle_active,
+                yawRate = dbg.yaw.rate,
+                yawAngleActive = dbg.yaw.angleActive,
 
-                heightErr = heightErr,
-                rollErr = rollErr,
-                pitchErr = pitchErr,
-                yawErr = yawErr,
-                yawRateErr = yawRateErr,
+                heightErr = dbg.height.err,
+                rollErr = dbg.roll.err,
+                pitchErr = dbg.pitch.err,
+                yawErr = dbg.yaw.err,
+                yawRateErr = dbg.yaw.rateErr,
             })
         end
 

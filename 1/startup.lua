@@ -1,10 +1,11 @@
 local config = require("config")
+local sync = config.runtime.sync
 
-if config.sync and config.sync.enabled == true and config.sync.target then
-    print("startup sync: " .. config.sync.target)
+if sync.enabled == true then
+    print("startup sync: " .. sync.target)
 
     local ok, err = pcall(function()
-        shell.run("sync", config.sync.target)
+        shell.run("sync", sync.target)
     end)
 
     if not ok then
@@ -31,13 +32,13 @@ local shared = {
     stateTime = 0.0,
     yawRate = 0.0,
     yawRateTime = 0.0,
+    velocity = nil,
+    velocityTime = 0.0,
     input = input_task.defaultInput(),
     inputTime = 0.0,
     inputSender = nil,
-    inputError = nil,
     telemetry = nil,
     telemetryTime = 0.0,
-    lastError = nil,
     running = true,
 }
 

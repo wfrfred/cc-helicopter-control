@@ -1,7 +1,7 @@
 local input = {}
 local config = require("config")
 
-local TYPEWRITER_NAME = config.input.typewriter_name
+local TYPEWRITER_NAME = config.runtime.input.typewriter_name
 
 local KEY_SPACE = 32
 local KEY_A = 65
@@ -32,15 +32,8 @@ local function getPressedSet()
     local codes = tw.getPressedKeyCodes()
     local set = {}
 
-    if type(codes) ~= "table" then
-        return set
-    end
-
     for _, code in pairs(codes) do
-        code = tonumber(code)
-        if code then
-            set[code] = true
-        end
+        set[code] = true
     end
 
     return set

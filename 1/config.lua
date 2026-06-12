@@ -18,6 +18,10 @@ config.runtime = {
     telemetry = {
         broadcast_dt = 0.1,
     },
+
+    data = {
+        linear_velocity_dt = 0.1,
+    },
 }
 
 config.hardware = {
@@ -60,7 +64,7 @@ config.control = {
     base_collective = 0.2,
     height_output_sign = 1.0,
 
-    collective_min = -0.0,
+    collective_min = 0.0,
     collective_max = 10.0,
 
     home_roll = 0.0,
@@ -139,32 +143,6 @@ config.control = {
             deadband = 0.01,
         },
     },
-}
-
--- Legacy aliases keep the current runtime code and logic-only sync path working
--- until readers migrate to the nested tables.
-config.sync = config.runtime.sync
-config.modem = config.runtime.modem
-config.input = config.runtime.input
-config.telemetry = config.runtime.telemetry
-
-config.data = {
-    roll_sign = config.calibration.sensor_axis.roll,
-    pitch_sign = config.calibration.sensor_axis.pitch,
-    yaw_sign = config.calibration.sensor_axis.yaw,
-    yaw_rate_sign = config.calibration.sensor_axis.yaw_rate,
-}
-
-config.rotor = {
-    modem_side = config.hardware.rotor.modem_side,
-    upper_bearing = config.hardware.rotor.upper_bearing,
-    lower_bearing = config.hardware.rotor.lower_bearing,
-    phase_offset_upper = config.calibration.rotor.phase_offset_upper,
-    phase_offset_lower = config.calibration.rotor.phase_offset_lower,
-    roll_sign = config.calibration.rotor.roll_sign,
-    pitch_sign = config.calibration.rotor.pitch_sign,
-    yaw_sign = config.calibration.rotor.yaw_sign,
-    blade_mount = config.hardware.rotor.blade_mount,
 }
 
 return config

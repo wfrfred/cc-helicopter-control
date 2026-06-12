@@ -6,42 +6,44 @@ local config = require("config")
 
 local control_task = {}
 
-local LOOP_DT = config.control.loop_dt
-local TELEMETRY_DT = config.control.telemetry_dt
-local MAX_DT = config.control.max_dt
-local INPUT_STALE_DT = config.control.input_stale_dt
+local CONTROL = config.control
 
-local BASE_COLLECTIVE = config.control.base_collective
-local HEIGHT_OUTPUT_SIGN = config.control.height_output_sign
+local LOOP_DT = CONTROL.loop_dt
+local TELEMETRY_DT = CONTROL.telemetry_dt
+local MAX_DT = CONTROL.max_dt
+local INPUT_STALE_DT = CONTROL.input_stale_dt
 
-local COLLECTIVE_MIN = config.control.collective_min
-local COLLECTIVE_MAX = config.control.collective_max
+local BASE_COLLECTIVE = CONTROL.base_collective
+local HEIGHT_OUTPUT_SIGN = CONTROL.height_output_sign
 
-local HOME_ROLL = config.control.home_roll
-local HOME_PITCH = config.control.home_pitch
+local COLLECTIVE_MIN = CONTROL.collective_min
+local COLLECTIVE_MAX = CONTROL.collective_max
 
-local MAX_TARGET_ROLL = config.control.max_target_roll
-local MAX_TARGET_PITCH = config.control.max_target_pitch
+local HOME_ROLL = CONTROL.home_roll
+local HOME_PITCH = CONTROL.home_pitch
 
-local ROLL_TARGET_RATE = config.control.roll_target_rate
-local PITCH_TARGET_RATE = config.control.pitch_target_rate
-local YAW_TARGET_RATE = config.control.yaw_target_rate
-local HEIGHT_TARGET_RATE = config.control.height_target_rate
+local MAX_TARGET_ROLL = CONTROL.max_target_roll
+local MAX_TARGET_PITCH = CONTROL.max_target_pitch
 
-local ROLL_CENTER_RATE = config.control.roll_center_rate
-local PITCH_CENTER_RATE = config.control.pitch_center_rate
+local ROLL_TARGET_RATE = CONTROL.roll_target_rate
+local PITCH_TARGET_RATE = CONTROL.pitch_target_rate
+local YAW_TARGET_RATE = CONTROL.yaw_target_rate
+local HEIGHT_TARGET_RATE = CONTROL.height_target_rate
 
-local YAW_LOCK_RATE_DEADBAND = config.control.yaw_lock_rate_deadband
+local ROLL_CENTER_RATE = CONTROL.roll_center_rate
+local PITCH_CENTER_RATE = CONTROL.pitch_center_rate
 
-local ROLL_OUTPUT_SIGN = config.control.roll_output_sign
-local PITCH_OUTPUT_SIGN = config.control.pitch_output_sign
-local YAW_OUTPUT_SIGN = config.control.yaw_output_sign
+local YAW_LOCK_RATE_DEADBAND = CONTROL.yaw_lock_rate_deadband
 
-local heightPid = pid.new(config.control.pid.height)
-local rollPid = pid.new(config.control.pid.roll)
-local pitchPid = pid.new(config.control.pid.pitch)
-local yawAnglePid = pid.new(config.control.pid.yaw_angle)
-local yawRatePid = pid.new(config.control.pid.yaw_rate)
+local ROLL_OUTPUT_SIGN = CONTROL.roll_output_sign
+local PITCH_OUTPUT_SIGN = CONTROL.pitch_output_sign
+local YAW_OUTPUT_SIGN = CONTROL.yaw_output_sign
+
+local heightPid = pid.new(CONTROL.pid.height)
+local rollPid = pid.new(CONTROL.pid.roll)
+local pitchPid = pid.new(CONTROL.pid.pitch)
+local yawAnglePid = pid.new(CONTROL.pid.yaw_angle)
+local yawRatePid = pid.new(CONTROL.pid.yaw_rate)
 
 local function moveToward(x, target, rate, dt)
     local d = target - x
@@ -75,13 +77,7 @@ local ZERO_INPUT = {
 
 local function readInput(shared, now)
     local ctl = shared.input
-    local inputTime = shared.inputTime or 0.0
-
-    if type(ctl) ~= "table" or inputTime <= 0.0 then
-        return ZERO_INPUT, nil, true
-    end
-
-    local inputAge = now - inputTime
+    local inputAge = now - shared.inputTime
 
     if inputAge > INPUT_STALE_DT then
         return ZERO_INPUT, inputAge, true
@@ -90,15 +86,21 @@ local function readInput(shared, now)
     return ctl, inputAge, false
 end
 
-local function waitForState(shared)
-    while shared.running and shared.state == nil do
+local function waitForSensors(shared)
+    while shared.running and (
+        shared.state == nil or
+        shared.yawRateTime <= 0.0 or
+        shared.velocity == nil or
+        shared.velocityTime <= 0.0
+    ) do
         local now = os.clock()
         shared.telemetryTime = now
         shared.telemetry = {
-            status = "waiting_state",
+            status = "waiting_sensors",
             time = now,
-            dataError = shared.lastError,
-            inputError = shared.inputError,
+            haveState = shared.state ~= nil,
+            haveYawRate = shared.yawRateTime > 0.0,
+            haveVelocity = shared.velocity ~= nil,
         }
 
         sleep(0.1)
@@ -106,9 +108,9 @@ local function waitForState(shared)
 end
 
 function control_task.run(shared)
-    local mixer = rotor.new(config.rotor)
+    local mixer = rotor.new(config.hardware.rotor, config.calibration.rotor)
 
-    waitForState(shared)
+    waitForSensors(shared)
 
     local initial = shared.state
 
@@ -116,21 +118,6 @@ function control_task.run(shared)
     local targetRoll = HOME_ROLL
     local targetPitch = HOME_PITCH
     local targetYaw = initial.yaw
-
-    local lastStateTime = shared.stateTime
-    local lastPos = {
-        x = initial.pos.x,
-        y = initial.pos.y,
-        z = initial.pos.z,
-    }
-    local velocity = {
-        x = 0.0,
-        y = 0.0,
-        z = 0.0,
-        total = 0.0,
-        horizontal = 0.0,
-        vertical = 0.0,
-    }
 
     local lastLoopTime = os.clock() - LOOP_DT
     local telemetryTimer = 0.0
@@ -168,37 +155,12 @@ function control_task.run(shared)
 
         local s = shared.state
         local stateNow = os.clock()
-        local stateTime = shared.stateTime or stateNow
+        local stateTime = shared.stateTime
         local stateAge = stateNow - stateTime
-        local yawRate = shared.yawRate or 0.0
-        local yawRateAge = 0.0
-        if shared.yawRateTime and shared.yawRateTime > 0 then
-            yawRateAge = stateNow - shared.yawRateTime
-        end
-
-        if stateTime > lastStateTime then
-            local vdt = stateTime - lastStateTime
-
-            if vdt > 0 then
-                velocity.x = (s.pos.x - lastPos.x) / vdt
-                velocity.y = (s.pos.y - lastPos.y) / vdt
-                velocity.z = (s.pos.z - lastPos.z) / vdt
-                velocity.horizontal = math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
-                velocity.vertical = velocity.y
-                velocity.total = math.sqrt(
-                    velocity.x * velocity.x +
-                    velocity.y * velocity.y +
-                    velocity.z * velocity.z
-                )
-            end
-
-            lastPos = {
-                x = s.pos.x,
-                y = s.pos.y,
-                z = s.pos.z,
-            }
-            lastStateTime = stateTime
-        end
+        local yawRate = shared.yawRate
+        local velocity = shared.velocity
+        local yawRateAge = stateNow - shared.yawRateTime
+        local velocityAge = stateNow - shared.velocityTime
 
         local heightOut, heightErr = heightPid:update(targetHeight, s.pos.y, dt)
 
@@ -276,6 +238,7 @@ function control_task.run(shared)
                 dt = dt,
                 stateAge = stateAge,
                 yawRateAge = yawRateAge,
+                velocityAge = velocityAge,
                 inputAge = inputAge,
                 inputStale = inputStale,
 

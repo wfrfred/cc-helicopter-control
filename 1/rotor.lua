@@ -36,24 +36,24 @@ local function makeTuple(bladeMount, rotorPhase, phaseOffset, collective, roll, 
     return out
 end
 
-function rotor.new(config)
-    local upper = peripheral.wrap(config.upper_bearing)
-    local lower = peripheral.wrap(config.lower_bearing)
+function rotor.new(hardware, calibration)
+    local upper = peripheral.wrap(hardware.upper_bearing)
+    local lower = peripheral.wrap(hardware.lower_bearing)
 
-    assert(upper, "upper swivel bearing not found: " .. config.upper_bearing)
-    assert(lower, "lower swivel bearing not found: " .. config.lower_bearing)
+    assert(upper, "upper swivel bearing not found: " .. hardware.upper_bearing)
+    assert(lower, "lower swivel bearing not found: " .. hardware.lower_bearing)
 
-    rednet.open(config.modem_side)
+    rednet.open(hardware.modem_side)
 
     return setmetatable({
         upper = upper,
         lower = lower,
-        phase_offset_upper = config.phase_offset_upper,
-        phase_offset_lower = config.phase_offset_lower,
-        roll_sign = config.roll_sign,
-        pitch_sign = config.pitch_sign,
-        yaw_sign = config.yaw_sign,
-        blade_mount = config.blade_mount,
+        phase_offset_upper = calibration.phase_offset_upper,
+        phase_offset_lower = calibration.phase_offset_lower,
+        roll_sign = calibration.roll_sign,
+        pitch_sign = calibration.pitch_sign,
+        yaw_sign = calibration.yaw_sign,
+        blade_mount = hardware.blade_mount,
         collective_cmd = 0.0,
         roll_cmd = 0.0,
         yaw_cmd = 0.0,
@@ -62,10 +62,10 @@ function rotor.new(config)
 end
 
 function Mixer:set(collective, roll, yaw, pitch)
-    self.collective_cmd = tonumber(collective) or 0.0
-    self.roll_cmd = tonumber(roll) or 0.0
-    self.yaw_cmd = tonumber(yaw) or 0.0
-    self.pitch_cmd = tonumber(pitch) or 0.0
+    self.collective_cmd = collective
+    self.roll_cmd = roll
+    self.yaw_cmd = yaw
+    self.pitch_cmd = pitch
 end
 
 function Mixer:update()

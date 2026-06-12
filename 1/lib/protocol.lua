@@ -32,7 +32,6 @@ protocol.SIGN = {
 }
 
 function protocol.clamp(x, lo, hi)
-    x = tonumber(x) or 0
     if x < lo then return lo end
     if x > hi then return hi end
     return x
@@ -43,8 +42,6 @@ function protocol.analog(x)
 end
 
 function protocol.signedOutput(value, sign)
-    value = tonumber(value) or 0
-
     if sign == protocol.SIGN.POS then
         return protocol.analog(value)
     end

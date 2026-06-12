@@ -3,8 +3,8 @@ local config = require("config")
 
 local input_task = {}
 
-local MODEM_SIDE = config.modem.control
-local RECEIVE_TIMEOUT = config.input.receive_timeout
+local MODEM_SIDE = config.runtime.modem.control
+local RECEIVE_TIMEOUT = config.runtime.input.receive_timeout
 
 local function defaultInput()
     return {
@@ -20,10 +20,6 @@ local function axis(value)
 end
 
 local function normalize(msg)
-    if type(msg) ~= "table" then
-        return nil, "bad input message type: " .. type(msg)
-    end
-
     return {
         roll = axis(msg.roll),
         pitch = axis(msg.pitch),
@@ -39,25 +35,13 @@ end
 function input_task.run(shared)
     rednet.open(MODEM_SIDE)
 
-    shared.input = shared.input or defaultInput()
-    shared.inputTime = shared.inputTime or 0.0
-
     while shared.running do
         local sender, msg = rednet.receive(protocol.CONTROL.INPUT, RECEIVE_TIMEOUT)
 
         if sender then
-            local ctl, err = normalize(msg)
-
-            if ctl then
-                shared.input = ctl
-                shared.inputTime = os.clock()
-                shared.inputSender = sender
-                shared.inputError = nil
-            else
-                shared.inputError = err
-                shared.inputBadSender = sender
-                shared.inputBadTime = os.clock()
-            end
+            shared.input = normalize(msg)
+            shared.inputTime = os.clock()
+            shared.inputSender = sender
         end
     end
 end

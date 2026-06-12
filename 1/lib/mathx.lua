@@ -21,8 +21,6 @@ function mathx.wrapPi(x)
 end
 
 function mathx.clamp(x, lo, hi)
-    x = tonumber(x) or 0
-
     if x < lo then
         return lo
     end

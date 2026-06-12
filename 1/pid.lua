@@ -14,12 +14,10 @@ local function clamp(x, lo, hi)
 end
 
 function pid.new(config)
-    config = config or {}
-
     local self = {
-        kp = config.kp or 0.0,
-        ki = config.ki or 0.0,
-        kd = config.kd or 0.0,
+        kp = config.kp,
+        ki = config.ki,
+        kd = config.kd,
 
         i_min = config.i_min,
         i_max = config.i_max,
@@ -27,7 +25,7 @@ function pid.new(config)
         out_min = config.out_min,
         out_max = config.out_max,
 
-        deadband = config.deadband or 0.0,
+        deadband = config.deadband,
 
         integral = 0.0,
         last_error = nil,
@@ -58,19 +56,13 @@ function Controller:reset()
 end
 
 function Controller:setGains(kp, ki, kd)
-    self.kp = kp or self.kp
-    self.ki = ki or self.ki
-    self.kd = kd or self.kd
+    self.kp = kp
+    self.ki = ki
+    self.kd = kd
 end
 
 function Controller:update(target, feedback, dt)
-    target = tonumber(target) or 0.0
-    feedback = tonumber(feedback) or 0.0
-    dt = tonumber(dt) or 0.05
-
-    if dt <= 0 then
-        dt = 0.05
-    end
+    assert(dt > 0, "pid dt must be positive")
 
     local error = target - feedback
 

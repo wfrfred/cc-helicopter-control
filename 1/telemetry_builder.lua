@@ -36,11 +36,11 @@ function telemetry_builder.running(data)
 
         stateAge = data.stateAge,
         yawRateAge = data.yawRateAge,
+        velocityAge = data.velocityAge,
 
         inputAge = data.inputAge,
         inputStale = data.inputStale,
         inputSender = shared.inputSender,
-        inputError = shared.inputError,
         input = {
             roll = input.roll,
             pitch = input.pitch,
@@ -104,8 +104,6 @@ function telemetry_builder.running(data)
             yaw = data.yawErr,
             yawRate = data.yawRateErr,
         },
-
-        dataError = shared.lastError,
     }
 end
 

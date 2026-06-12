@@ -8,14 +8,28 @@ local BODY_FRONT = vector.new(0, 0, 1)
 local BODY_RIGHT = vector.new(1, 0, 0)
 local BODY_UP = vector.new(0, 1, 0)
 
-local ROLL_SIGN = config.data.roll_sign
-local PITCH_SIGN = config.data.pitch_sign
-local YAW_SIGN = config.data.yaw_sign
+local SENSOR_AXIS = config.calibration.sensor_axis
+local RUNTIME_DATA = config.runtime.data
 
-local YAW_RATE_SIGN = config.data.yaw_rate_sign
+local LINEAR_VELOCITY_DT = RUNTIME_DATA.linear_velocity_dt
 
 local function dot(a, b)
     return a.x * b.x + a.y * b.y + a.z * b.z
+end
+
+local function velocityFromVector(v)
+    local x = v.x
+    local y = v.y
+    local z = v.z
+
+    return {
+        x = x,
+        y = y,
+        z = z,
+        total = math.sqrt(x * x + y * y + z * z),
+        horizontal = math.sqrt(x * x + z * z),
+        vertical = y,
+    }
 end
 
 local function getState()
@@ -39,49 +53,50 @@ local function getState()
         right = right,
         up = up,
 
-        roll = mathx.wrapPi(ROLL_SIGN * roll),
-        pitch = mathx.wrapPi(PITCH_SIGN * pitch),
-        yaw = mathx.wrapPi(YAW_SIGN * yaw),
+        roll = mathx.wrapPi(SENSOR_AXIS.roll * roll),
+        pitch = mathx.wrapPi(SENSOR_AXIS.pitch * pitch),
+        yaw = mathx.wrapPi(SENSOR_AXIS.yaw * yaw),
     }
+end
+
+local function waitForState(shared)
+    while shared.running and shared.state == nil do
+        sleep(0)
+    end
 end
 
 function data_task.run(shared)
     local function poseTask()
         while shared.running do
-            local ok, result = pcall(getState)
-
-            if ok then
-                shared.state = result
-                shared.stateTime = os.clock()
-                shared.lastError = nil
-            else
-                shared.lastError = result
-            end
-
+            shared.state = getState()
+            shared.stateTime = os.clock()
             sleep(0)
         end
     end
 
     local function angularVelocityTask()
+        waitForState(shared)
+
         while shared.running do
-            local ok, result = pcall(sublevel.getAngularVelocity)
+            local angularVelocity = sublevel.getAngularVelocity()
+            local s = shared.state
 
-            if ok then
-                local s = shared.state
-
-                if s then
-                    shared.yawRate = YAW_RATE_SIGN * YAW_SIGN * dot(result, s.up)
-                    shared.yawRateTime = os.clock()
-                end
-            else
-                shared.lastError = result
-            end
-
+            shared.yawRate = SENSOR_AXIS.yaw_rate * SENSOR_AXIS.yaw * dot(angularVelocity, s.up)
+            shared.yawRateTime = os.clock()
             sleep(0)
         end
     end
 
-    parallel.waitForAny(poseTask, angularVelocityTask)
+    local function linearVelocityTask()
+        while shared.running do
+            shared.velocity = velocityFromVector(sublevel.getLinearVelocity())
+            shared.velocityTime = os.clock()
+
+            sleep(LINEAR_VELOCITY_DT)
+        end
+    end
+
+    parallel.waitForAny(poseTask, angularVelocityTask, linearVelocityTask)
 end
 
 return data_task

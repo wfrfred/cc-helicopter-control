@@ -2,6 +2,7 @@ local mathx = require("lib.mathx")
 local pid = require("pid")
 local rotor = require("rotor")
 local target_state = require("target_state")
+local yaw_lock = require("yaw_lock")
 local telemetry_builder = require("telemetry_builder")
 local config = require("config")
 
@@ -18,10 +19,6 @@ local BASE_COLLECTIVE = CONTROL.base_collective
 
 local COLLECTIVE_MIN = CONTROL.collective_min
 local COLLECTIVE_MAX = CONTROL.collective_max
-
-local YAW_TARGET_RATE = CONTROL.yaw_target_rate
-
-local YAW_LOCK_RATE_DEADBAND = CONTROL.yaw_lock_rate_deadband
 
 local heightPid = pid.new(CONTROL.pid.height)
 local rollPid = pid.new(CONTROL.pid.roll)
@@ -84,12 +81,10 @@ function control_task.run(shared)
     local initial = shared.state
 
     local targets = target_state.new(initial, CONTROL)
-    local targetYaw = initial.yaw
+    local yawLock = yaw_lock.new(initial.yaw, CONTROL)
 
     local lastLoopTime = os.clock() - LOOP_DT
     local telemetryTimer = 0.0
-    local yawWasManual = false
-    local yawLockPending = false
 
     while shared.running do
         local loopStart = os.clock()
@@ -112,37 +107,14 @@ function control_task.run(shared)
 
         local rollErr = mathx.wrapPi(targets.roll - s.roll)
         local pitchErr = mathx.wrapPi(targets.pitch - s.pitch)
-        local yawManual = ctl.yaw ~= 0
-        local targetYawRate
-        local yawErr
-        local yawAngleActive = false
 
-        if yawManual then
-            targetYaw = s.yaw
-            yawErr = 0.0
-            targetYawRate = ctl.yaw * YAW_TARGET_RATE
-            yawLockPending = false
-        else
-            if yawWasManual then
-                yawLockPending = true
-            end
+        local yawResult = yawLock:update(ctl.yaw, s.yaw, yawRate)
+        local targetYawRate = yawResult.commanded_rate
+        local yawErr = yawResult.yaw_err
 
-            if yawLockPending then
-                yawErr = 0.0
-                targetYawRate = 0.0
-
-                if math.abs(yawRate) < YAW_LOCK_RATE_DEADBAND then
-                    targetYaw = s.yaw
-                    yawLockPending = false
-                end
-            else
-                yawErr = mathx.wrapPi(targetYaw - s.yaw)
-                targetYawRate = yawAnglePid:update(yawErr, 0.0, dt)
-                yawAngleActive = true
-            end
+        if yawResult.angle_active then
+            targetYawRate = yawAnglePid:update(yawErr, 0.0, dt)
         end
-
-        yawWasManual = yawManual
 
         local rollCmd = rollPid:update(rollErr, 0.0, dt)
         local pitchCmd = pitchPid:update(pitchErr, 0.0, dt)
@@ -192,11 +164,11 @@ function control_task.run(shared)
                 targetHeight = targets.height,
                 targetRoll = targets.roll,
                 targetPitch = targets.pitch,
-                targetYaw = targetYaw,
+                targetYaw = yawResult.target_yaw,
                 targetYawRate = targetYawRate,
 
                 yawRate = yawRate,
-                yawAngleActive = yawAngleActive,
+                yawAngleActive = yawResult.angle_active,
 
                 heightErr = heightErr,
                 rollErr = rollErr,

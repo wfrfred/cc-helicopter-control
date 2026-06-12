@@ -6,9 +6,9 @@ local CONFIG_NAME = "config.lua"
 local quiet = false
 
 local TARGET_SOURCES = {
-    ["0"] = { "common", "0" },
-    ["1"] = { "common", "1" },
-    ["2"] = { "common", "2" },
+    user_interface = { "common", "user_interface" },
+    flight_controller = { "common", "flight_controller" },
+    actuator_controller = { "common", "actuator_controller" },
 }
 
 local OPTIONAL_SOURCES = {
@@ -34,7 +34,7 @@ end
 local function usage()
     say("Usage: sync <target> [--logic|--config|--all] [--dry-run] [--quiet]")
     say("       sync --update [--quiet]")
-    say("Example: sync 0")
+    say("Example: sync flight_controller")
     say("Default: --logic")
 end
 
@@ -97,6 +97,10 @@ end
 
 if SOURCE_ONLY_TARGETS[targetName] then
     error(targetName .. " is a source layer, not a sync target", 0)
+end
+
+if not selfUpdate and not TARGET_SOURCES[targetName] then
+    error("Unknown sync target: " .. tostring(targetName), 0)
 end
 
 if not http or not http.get then
@@ -521,7 +525,7 @@ local function missingOptionalSourceError(err)
 end
 
 local function sourceNamesForTarget(name)
-    return TARGET_SOURCES[name] or { name }
+    return TARGET_SOURCES[name]
 end
 
 local function remoteDirForSource(sourceName)

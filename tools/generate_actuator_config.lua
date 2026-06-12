@@ -1,13 +1,13 @@
 local args = { ... }
 
 local function usage()
-    print("Usage: lua tools/generate_actuator_config.lua <old-startup.lua> [config.lua] [--target 2] [--display-dt 0.5] [--sync-enabled true|false]")
+    print("Usage: lua tools/generate_actuator_config.lua <old-startup.lua> [config.lua] [--target actuator_controller] [--display-dt 0.5] [--sync-enabled true|false]")
 end
 
 local inputPath = nil
 local outputPath = "config.lua"
 local outputSet = false
-local target = "2"
+local target = "actuator_controller"
 local displayDt = nil
 local syncEnabled = true
 

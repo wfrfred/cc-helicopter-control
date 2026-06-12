@@ -5,7 +5,7 @@ config.modem = {
 }
 
 config.sync = {
-    enabled = true,
+    enabled = false,
     sources = { "actuator_controller" },
 }
 

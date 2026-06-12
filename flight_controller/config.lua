@@ -2,7 +2,7 @@ local config = {}
 
 config.runtime = {
     sync = {
-        enabled = true,
+        enabled = false,
         sources = { "flight_controller" },
     },
 

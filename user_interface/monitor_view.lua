@@ -56,6 +56,23 @@ local function drawOutput(mon, x, y, width, label, value, limit)
     draw.writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 7)
 end
 
+local function drawOutputBar(mon, x, y, width, value, limit)
+    if width < 9 then
+        draw.writeAt(mon, x, y, ("%+.1f"):format(value), colors.white, colors.black, width)
+        return
+    end
+
+    local valueWidth = 7
+    local barWidth = width - valueWidth - 1
+    local pct = math.abs(clamp(value / limit, -1.0, 1.0))
+    local len = math.floor(barWidth * pct + 0.5)
+    local bg = value >= 0 and colors.blue or colors.purple
+
+    draw.fill(mon, x, y, barWidth, colors.gray)
+    draw.fill(mon, x, y, len, bg)
+    draw.writeAt(mon, x + barWidth + 1, y, ("%+.1f"):format(value), colors.white, colors.black, valueWidth)
+end
+
 local function drawCompactBar(mon, x, y, width, label, value, limit)
     local barWidth = width - 8
     local length = math.floor(barWidth * math.abs(clamp(value / limit, -1.0, 1.0)) + 0.5)
@@ -320,22 +337,27 @@ local function drawAxisBar(mon, x, y, width, label, value, limit)
     draw.writeAt(mon, x + width - 3, y, ("%+.1f"):format(value), colors.white, colors.black, 4)
 end
 
-local function drawCrossBar(mon, x, y, width, limitY, err)
-    local height = math.min(7, limitY - y + 1)
+local function drawPositionMap(mon, x, y, width, height, target, current)
+    if height < 1 then
+        return
+    end
 
-    if width < 24 or height < 5 then
-        drawAxisBar(mon, x, y, width, "EX", err.x, 10.0)
-        if y + 1 <= limitY then
-            drawAxisBar(mon, x, y + 1, width, "EZ", err.z, 10.0)
-            return y + 2
+    if height > 2 and height % 2 == 0 then
+        height = height - 1
+    end
+
+    if width < 12 or height < 3 then
+        drawAxisBar(mon, x, y, width, "X", current.x - target.x, 10.0)
+        if height >= 2 then
+            drawAxisBar(mon, x, y + 1, width, "Z", current.z - target.z, 10.0)
         end
-        return y + 1
+        return
     end
 
     local centerX = x + math.floor(width / 2)
     local centerY = y + math.floor(height / 2)
-    local markX = centerX + scaledOffset(err.x, 10.0, math.floor((width - 3) / 2))
-    local markY = centerY - scaledOffset(err.z, 10.0, math.floor((height - 1) / 2))
+    local markX = centerX + scaledOffset(current.x - target.x, 10.0, math.floor((width - 3) / 2))
+    local markY = centerY - scaledOffset(current.z - target.z, 10.0, math.floor((height - 1) / 2))
 
     for row = 0, height - 1 do
         local lineY = y + row
@@ -345,10 +367,86 @@ local function drawCrossBar(mon, x, y, width, limitY, err)
 
     draw.writeAt(mon, x, centerY, string.rep("-", width), colors.gray, colors.black, width)
     draw.writeAt(mon, centerX, centerY, "+", colors.black, colors.yellow, 1)
-    draw.writeAt(mon, markX, centerY, "X", colors.white, colors.red, 1)
-    draw.writeAt(mon, centerX, markY, "Z", colors.white, colors.orange, 1)
+    draw.writeAt(mon, markX, markY, "C", colors.white, colors.red, 1)
+end
 
-    return y + height
+local function drawPositionColumn(mon, x, y, width, height, target, current)
+    if height < 1 then
+        return
+    end
+
+    drawPositionMap(mon, x, y, width, height, target, current)
+end
+
+local function drawPositionPidColumn(mon, x, y, width, height, rows)
+    if height < 1 then
+        return
+    end
+
+    local header
+
+    if width >= 32 then
+        header = ("%-5s %7s %7s %7s"):format("AXIS", "TGT", "CUR", "ERR")
+    elseif width >= 24 then
+        header = ("%-4s %6s %6s %6s"):format("AX", "TGT", "CUR", "ERR")
+    else
+        header = "AX TGT/CUR/ERR"
+    end
+
+    draw.writeAt(mon, x, y, header, colors.lightGray, colors.black, width)
+
+    for index, row in ipairs(rows) do
+        local rowY = y + index
+
+        if rowY >= y + height then
+            return
+        end
+
+        local text
+
+        if width >= 32 then
+            text = ("%-5s %7s %7s %7s"):format(
+                row.label,
+                cell(row.target, "%.1f", 7),
+                cell(row.current, "%.1f", 7),
+                cell(row.err, "%+.1f", 7)
+            )
+        elseif width >= 24 then
+            text = ("%-4s %6s %6s %6s"):format(
+                row.label,
+                cell(row.target, "%.1f", 6),
+                cell(row.current, "%.1f", 6),
+                cell(row.err, "%+.1f", 6)
+            )
+        else
+            text = ("%s %s/%s/%s"):format(
+                row.label,
+                cell(row.target, "%.1f", 5),
+                cell(row.current, "%.1f", 5),
+                cell(row.err, "%+.1f", 5)
+            )
+        end
+
+        draw.writeAt(mon, x, rowY, text, colors.white, colors.black, width)
+    end
+end
+
+local function drawPositionPidOutputColumn(mon, x, y, width, height, rows)
+    if height < 1 then
+        return
+    end
+
+    draw.writeAt(mon, x, y, "PID OUTPUT", colors.lightGray, colors.black, width)
+
+    for index, row in ipairs(rows) do
+        local rowY = y + index
+
+        if rowY >= y + height then
+            return
+        end
+
+        drawOutputBar(mon, x, rowY, width, row.value, row.limit)
+    end
 end
 
 local function drawPositionHold(mon, x, y, width, limitY, telemetry)
@@ -357,11 +455,16 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     end
 
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
+    local currentPosition = expectTable(telemetry.position, "telemetry.position")
+    local pidData = expectTable(telemetry.pid, "telemetry.pid")
     local target = expectTable(positionHold.target, "telemetry.positionHold.target")
     local targetVelocity = expectTable(positionHold.targetVelocity, "telemetry.positionHold.targetVelocity")
     local currentVelocity = expectTable(positionHold.currentVelocity, "telemetry.positionHold.currentVelocity")
     local err = expectTable(positionHold.error, "telemetry.positionHold.error")
-    local output = expectTable(positionHold.output, "telemetry.positionHold.output")
+    local positionRightTerms = expectTable(pidData.positionRight, "telemetry.pid.positionRight")
+    local positionForwardTerms = expectTable(pidData.positionForward, "telemetry.pid.positionForward")
+    local velocityRightTerms = expectTable(pidData.velocityRight, "telemetry.pid.velocityRight")
+    local velocityForwardTerms = expectTable(pidData.velocityForward, "telemetry.pid.velocityForward")
 
     section(mon, y, "position hold", colors.black, colors.pink)
     y = y + 1
@@ -374,47 +477,71 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         return y
     end
 
-    y = drawCrossBar(mon, x, y, width, limitY, err)
+    local gap = 2
+    local contentWidth = width - gap * 2
+    local positionWidth = math.floor(contentWidth * 0.30)
+    local outputWidth = math.max(12, math.floor(contentWidth * 0.24))
+    local pidWidth = contentWidth - positionWidth - outputWidth
 
-    if y <= limitY then
-        draw.writeAt(mon, x, y, ("error x %+.1f  z %+.1f"):format(
-            err.x,
-            err.z
-        ), colors.white, colors.black, width)
-        y = y + 1
+    if width < 58 then
+        gap = 1
+        contentWidth = width - gap * 2
+        positionWidth = math.floor(contentWidth * 0.30)
+        outputWidth = math.max(10, math.floor(contentWidth * 0.24))
+        pidWidth = contentWidth - positionWidth - outputWidth
     end
 
-    if y <= limitY then
-        draw.writeAt(mon, x, y, ("target %.1f %.1f  velocity x %+.1f/%+.1f z %+.1f/%+.1f"):format(
-            target.x,
-            target.z,
-            targetVelocity.x,
-            currentVelocity.x,
-            targetVelocity.z,
-            currentVelocity.z
-        ), colors.lightGray, colors.black, width)
-        y = y + 1
+    if positionWidth < 10 or pidWidth < 14 or outputWidth < 8 then
+        drawAxisBar(mon, x, y, width, "R", err.right, 10.0)
+        if y + 1 <= limitY then
+            drawAxisBar(mon, x, y + 1, width, "F", err.forward, 10.0)
+            return y + 2
+        end
+        return y + 1
     end
 
-    if y <= limitY then
-        draw.writeAt(mon, x, y, ("output x %+.2f ff %+.2f fb %+.2f  z %+.2f ff %+.2f fb %+.2f"):format(
-            output.x,
-            output.feedforwardX,
-            output.feedbackX,
-            output.z,
-            output.feedforwardZ,
-            output.feedbackZ
-        ), colors.lightGray, colors.black, width)
-        y = y + 1
-    end
+    local rows = {
+        {
+            label = "RPOS",
+            target = 0.0,
+            current = -err.right,
+            err = err.right,
+        },
+        {
+            label = "FPOS",
+            target = 0.0,
+            current = -err.forward,
+            err = err.forward,
+        },
+        {
+            label = "RVEL",
+            target = targetVelocity.right,
+            current = currentVelocity.right,
+            err = targetVelocity.right - currentVelocity.right,
+        },
+        {
+            label = "FVEL",
+            target = targetVelocity.forward,
+            current = currentVelocity.forward,
+            err = targetVelocity.forward - currentVelocity.forward,
+        },
+    }
+    local outputRows = {
+        { value = positionRightTerms.output, limit = 20.0 },
+        { value = positionForwardTerms.output, limit = 20.0 },
+        { value = deg(velocityRightTerms.output), limit = 20.0 },
+        { value = deg(velocityForwardTerms.output), limit = 30.0 },
+    }
+    local bodyHeight = math.min(5, limitY - y + 1)
+    local positionColumnX = x
+    local pidX = positionColumnX + positionWidth + gap
+    local outputColumnX = pidX + pidWidth + gap
 
-    if y <= limitY then
-        draw.writeAt(mon, x, y, ("target attitude roll %+.1f pitch %+.1f"):format(
-            deg(output.roll),
-            deg(output.pitch)
-        ), colors.white, colors.black, width)
-        y = y + 1
-    end
+    drawPositionColumn(mon, positionColumnX, y, positionWidth, bodyHeight, target, currentPosition)
+    drawPositionPidColumn(mon, pidX, y, pidWidth, bodyHeight, rows)
+    drawPositionPidOutputColumn(mon, outputColumnX, y, outputWidth, bodyHeight, outputRows)
+
+    y = y + bodyHeight
 
     return y
 end
@@ -499,7 +626,6 @@ local function drawRunning(mon, shared, telemetry)
     end
 
     if y <= h - 2 then
-        y = y + 1
         y = drawFlightState(mon, 2, y, w - 2, h - 2, telemetry)
     end
 

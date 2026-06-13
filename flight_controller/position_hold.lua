@@ -21,10 +21,10 @@ end
 
 function position_hold.new(initial, control)
     local controllers = {
-        positionX = pid.new(control.pid.position_x),
-        positionZ = pid.new(control.pid.position_z),
-        velocityX = pid.new(control.pid.velocity_x),
-        velocityZ = pid.new(control.pid.velocity_z),
+        positionRight = pid.new(control.pid.position_right),
+        positionForward = pid.new(control.pid.position_forward),
+        velocityRight = pid.new(control.pid.velocity_right),
+        velocityForward = pid.new(control.pid.velocity_forward),
     }
 
     return setmetatable({
@@ -32,8 +32,8 @@ function position_hold.new(initial, control)
         targetX = initial.pos.x,
         targetZ = initial.pos.z,
         active = false,
-        velocityXFeedforwardGain = control.position_hold_velocity_x_feedforward_gain,
-        velocityZFeedforwardGain = control.position_hold_velocity_z_feedforward_gain,
+        velocityRightFeedforwardGain = control.position_hold_velocity_right_feedforward_gain,
+        velocityForwardFeedforwardGain = control.position_hold_velocity_forward_feedforward_gain,
         controllers = controllers,
     }, Hold)
 end
@@ -51,16 +51,18 @@ function Hold:update(input, pose, velocity, dt)
             active = false,
             targetX = self.targetX,
             targetZ = self.targetZ,
-            errorX = 0.0,
-            errorZ = 0.0,
-            targetVelocityX = 0.0,
-            targetVelocityZ = 0.0,
-            feedforwardX = 0.0,
-            feedforwardZ = 0.0,
-            feedbackX = 0.0,
-            feedbackZ = 0.0,
-            outputX = 0.0,
-            outputZ = 0.0,
+            errorRight = 0.0,
+            errorForward = 0.0,
+            targetVelocityRight = 0.0,
+            targetVelocityForward = 0.0,
+            currentVelocityRight = 0.0,
+            currentVelocityForward = 0.0,
+            feedforwardRight = 0.0,
+            feedforwardForward = 0.0,
+            feedbackRight = 0.0,
+            feedbackForward = 0.0,
+            outputRight = 0.0,
+            outputForward = 0.0,
             roll = nil,
             pitch = nil,
         }
@@ -72,33 +74,41 @@ function Hold:update(input, pose, velocity, dt)
         self.active = true
     end
 
-    local targetVelocityX, errorX = self.controllers.positionX:update(self.targetX, pose.pos.x, dt)
-    local targetVelocityZ, errorZ = self.controllers.positionZ:update(self.targetZ, pose.pos.z, dt)
+    local bodyPositionError = worldToBody(
+        self.targetX - pose.pos.x,
+        self.targetZ - pose.pos.z,
+        pose.yaw
+    )
+    local bodyVelocity = worldToBody(velocity.x, velocity.z, pose.yaw)
 
-    local feedforwardX = self.velocityXFeedforwardGain * targetVelocityX
-    local feedforwardZ = self.velocityZFeedforwardGain * targetVelocityZ
-    local feedbackX = self.controllers.velocityX:update(targetVelocityX, velocity.x, dt)
-    local feedbackZ = self.controllers.velocityZ:update(targetVelocityZ, velocity.z, dt)
-    local outputX = feedforwardX + feedbackX
-    local outputZ = feedforwardZ + feedbackZ
-    local body = worldToBody(outputX, outputZ, pose.yaw)
+    local targetVelocityRight, errorRight = self.controllers.positionRight:update(bodyPositionError.right, 0.0, dt)
+    local targetVelocityForward, errorForward = self.controllers.positionForward:update(bodyPositionError.forward, 0.0, dt)
+
+    local feedforwardRight = self.velocityRightFeedforwardGain * targetVelocityRight
+    local feedforwardForward = self.velocityForwardFeedforwardGain * targetVelocityForward
+    local feedbackRight = self.controllers.velocityRight:update(targetVelocityRight, bodyVelocity.right, dt)
+    local feedbackForward = self.controllers.velocityForward:update(targetVelocityForward, bodyVelocity.forward, dt)
+    local outputRight = feedforwardRight + feedbackRight
+    local outputForward = feedforwardForward + feedbackForward
 
     return {
         active = true,
         targetX = self.targetX,
         targetZ = self.targetZ,
-        errorX = errorX,
-        errorZ = errorZ,
-        targetVelocityX = targetVelocityX,
-        targetVelocityZ = targetVelocityZ,
-        feedforwardX = feedforwardX,
-        feedforwardZ = feedforwardZ,
-        feedbackX = feedbackX,
-        feedbackZ = feedbackZ,
-        outputX = outputX,
-        outputZ = outputZ,
-        roll = mathx.clamp(body.right, -self.control.max_target_roll, self.control.max_target_roll),
-        pitch = mathx.clamp(body.forward, -self.control.max_target_pitch, self.control.max_target_pitch),
+        errorRight = errorRight,
+        errorForward = errorForward,
+        targetVelocityRight = targetVelocityRight,
+        targetVelocityForward = targetVelocityForward,
+        currentVelocityRight = bodyVelocity.right,
+        currentVelocityForward = bodyVelocity.forward,
+        feedforwardRight = feedforwardRight,
+        feedforwardForward = feedforwardForward,
+        feedbackRight = feedbackRight,
+        feedbackForward = feedbackForward,
+        outputRight = outputRight,
+        outputForward = outputForward,
+        roll = mathx.clamp(outputRight, -self.control.max_target_roll, self.control.max_target_roll),
+        pitch = mathx.clamp(outputForward, -self.control.max_target_pitch, self.control.max_target_pitch),
     }
 end
 

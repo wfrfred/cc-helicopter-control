@@ -55,9 +55,14 @@ function telemetry_builder.running(data)
             collective = commands.collective,
             collectiveFeedforward = terms.verticalSpeed.feedforward,
             collectiveFeedback = terms.verticalSpeed.feedback,
+            collectiveTiltCompensation = terms.verticalSpeed.tiltCompensation,
+            collectiveTiltVerticalFactor = terms.verticalSpeed.tiltVerticalFactor,
+            collectiveUncompensated = terms.verticalSpeed.uncompensatedOut,
             roll = commands.roll,
             pitch = commands.pitch,
             yaw = commands.yaw,
+            yawFeedforward = terms.yaw.rateFeedforward,
+            yawFeedback = terms.yaw.rateFeedback,
             rotor = {
                 upper = data.rotorOutput.upper,
                 lower = data.rotorOutput.lower,
@@ -110,6 +115,13 @@ function telemetry_builder.running(data)
             pitch = terms.pitch.err,
             yaw = terms.yaw.err,
             yawRate = terms.yaw.rateErr,
+        },
+
+        lock = {
+            heightActive = terms.height.lockActive,
+            heightPending = terms.height.lockPending,
+            yawActive = terms.yaw.angleActive,
+            yawPending = terms.yaw.anglePending,
         },
 
         positionHold = {

@@ -6,12 +6,20 @@ local controller = {}
 local Controller = {}
 Controller.__index = Controller
 
+local function attitudeVerticalFactor(roll, pitch, minFactor)
+    local factor = math.cos(roll) * math.cos(pitch)
+
+    return mathx.clamp(factor, minFactor, 1.0)
+end
+
 function controller.new(control)
     return setmetatable({
         collectiveMin = control.collective_min,
         collectiveMax = control.collective_max,
         verticalSpeedFeedforwardGain = control.vertical_speed_feedforward_gain,
         verticalSpeedFeedforwardBias = control.vertical_speed_feedforward_bias,
+        tiltCompensationMinFactor = control.tilt_compensation_min_factor or 0.5,
+        yawRateFeedforwardGain = control.yaw_rate_feedforward_gain or 0.0,
 
         height = pid.new(control.pid.height),
         verticalSpeed = pid.new(control.pid.vertical_speed),
@@ -44,6 +52,13 @@ function Controller:update(input)
     local verticalSpeedFeedforward = self.verticalSpeedFeedforwardGain * targetVerticalSpeed
         + self.verticalSpeedFeedforwardBias
     local verticalSpeedOut = verticalSpeedFeedforward + verticalSpeedFeedback
+    local tiltVerticalFactor = attitudeVerticalFactor(
+        pose.roll,
+        pose.pitch,
+        self.tiltCompensationMinFactor
+    )
+    local tiltCompensation = 1.0 / tiltVerticalFactor
+    local tiltCompensatedVerticalSpeedOut = verticalSpeedOut * tiltCompensation
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
     local rollCmd = self.roll:update(rollErr, 0.0, dt)
@@ -57,12 +72,16 @@ function Controller:update(input)
 
     if yawAngleActive then
         targetYawRate = self.yawAngle:update(yawErr, 0.0, dt)
+    else
+        self.yawAngle:reset()
     end
 
-    local yawCmd, yawRateErr = self.yawRate:update(targetYawRate, yawRate, dt)
+    local yawRateFeedback, yawRateErr = self.yawRate:update(targetYawRate, yawRate, dt)
+    local yawRateFeedforward = self.yawRateFeedforwardGain * targetYawRate
+    local yawCmd = yawRateFeedforward + yawRateFeedback
 
     local collective = mathx.clamp(
-        verticalSpeedOut,
+        tiltCompensatedVerticalSpeedOut,
         self.collectiveMin,
         self.collectiveMax
     )
@@ -82,6 +101,7 @@ function Controller:update(input)
                 err = heightErr,
                 out = targetVerticalSpeed,
                 lockActive = heightResult.active,
+                lockPending = heightResult.pending,
             },
 
             verticalSpeed = {
@@ -90,7 +110,10 @@ function Controller:update(input)
                 err = verticalSpeedErr,
                 feedforward = verticalSpeedFeedforward,
                 feedback = verticalSpeedFeedback,
-                out = verticalSpeedOut,
+                tiltCompensation = tiltCompensation,
+                tiltVerticalFactor = tiltVerticalFactor,
+                uncompensatedOut = verticalSpeedOut,
+                out = tiltCompensatedVerticalSpeedOut,
             },
 
             roll = {
@@ -114,8 +137,11 @@ function Controller:update(input)
                 targetRate = targetYawRate,
                 rate = yawRate,
                 rateErr = yawRateErr,
+                rateFeedforward = yawRateFeedforward,
+                rateFeedback = yawRateFeedback,
                 out = yawCmd,
                 angleActive = yawAngleActive,
+                anglePending = yawResult.pending,
             },
         },
     }

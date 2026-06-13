@@ -71,11 +71,13 @@ function control_task.run(shared)
         initial_target = initial.pos.y,
         target_rate = CONTROL.height_target_rate,
         rate_deadband = CONTROL.height_lock_speed_deadband,
+        relock_timeout = CONTROL.height_lock_relock_timeout,
     })
     local yawLock = rate_lock.new({
         initial_target = initial.yaw,
         target_rate = CONTROL.yaw_target_rate,
         rate_deadband = CONTROL.yaw_lock_rate_deadband,
+        relock_timeout = CONTROL.yaw_lock_relock_timeout,
         error = function(target, current)
             return mathx.wrapPi(target - current)
         end,
@@ -108,8 +110,8 @@ function control_task.run(shared)
             targets.pitch = positionResult.pitch
         end
 
-        local heightResult = heightLock:update(input.climb, pose.pos.y, velocity.vertical)
-        local yawResult = yawLock:update(input.yaw, pose.yaw, yawRate)
+        local heightResult = heightLock:update(input.climb, pose.pos.y, velocity.vertical, dt)
+        local yawResult = yawLock:update(input.yaw, pose.yaw, yawRate, dt)
 
         local result = controller:update({
             targets = targets,

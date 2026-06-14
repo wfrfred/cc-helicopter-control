@@ -16,7 +16,7 @@ rotor
 actuator_controller
 ```
 
-`control_task.lua` is allowed to be the flight-control state machine. It should not be reduced to a meaningless thin wrapper. However, it should not contain sensor conversion math, PID implementation details, rotor mixing math, or telemetry formatting details.
+`control_task.lua` is allowed to be the flight-control state machine. It should not be reduced to a meaningless thin wrapper. However, it should not contain sensor conversion math, PID implementation details, rotor mixing math, or UI drawing details.
 
 ---
 
@@ -81,7 +81,7 @@ shared.input = {
 
 ### `shared.state`
 
-Produced by `data_task.lua`. Consumed mainly by `control_task.lua`, then passed down to controller and telemetry builder.
+Produced by `data_task.lua`. Consumed mainly by `control_task.lua`, then passed down to controller and telemetry snapshots.
 
 Keep this structure minimal. Do not cache derived magnitudes such as `total`, `horizontal`, `groundSpeed`, or `lateralSpeed` unless a module has a repeated measured need for them.
 
@@ -96,7 +96,7 @@ shared.state = {
 
     body = {
         pose = {
-            down = 0.0,
+            height = 0.0,
             roll = 0.0,
             pitch = 0.0,
             yaw = 0.0,
@@ -144,19 +144,19 @@ target = {
     attitude = {
         roll = 0.0,
         pitch = 0.0,
-        source = "manual_attitude",
+        source = "manual",
     },
 
     vertical = {
-        down = 0.0,
+        height = 0.0,
         rate = 0.0,
-        source = "height_hold",
+        source = "locked",
     },
 
     yaw = {
         angle = 0.0,
         rate = 0.0,
-        source = "yaw_hold",
+        source = "locked",
     },
 
     position = nil,
@@ -188,6 +188,83 @@ Use:
 
 ```lua
 mixer:setCommands(commands)
+```
+
+### `shared.telemetry`
+
+Produced by `control_task.lua`. Sent by `telemetry_task.lua` and consumed by the UI.
+
+Telemetry is a structured snapshot, not a flattened list of prefixed fields:
+
+```lua
+shared.telemetry = {
+    status = "running",
+    time = ...,
+    dt = ...,
+
+    age = {
+        pose = ...,
+        rates = ...,
+        velocity = ...,
+    },
+
+    input = {
+        controls = { roll = ..., pitch = ..., yaw = ..., climb = ... },
+        age = ...,
+        stale = ...,
+        sender = ...,
+    },
+
+    mode = {
+        lateral = "manual", -- or "cruise", "position_hold", "navigation"
+        vertical = "height",
+        yaw = "yaw",
+    },
+
+    lock = {
+        height = "locked", -- or "manual", "pending"
+        yaw = "locked",    -- or "manual", "pending"
+    },
+
+    state = {
+        raw = ...,
+        body = ...,
+    },
+
+    output = {
+        commands = ...,
+        collective = ...,
+        pitch = ...,
+        yaw = ...,
+        rotor = ...,
+    },
+
+    pid = {
+        vertical = ...,
+        position = ...,
+        velocity = ...,
+        attitude = ...,
+        yaw = ...,
+    },
+
+    target = {
+        vertical = ...,
+        attitude = ...,
+        yaw = ...,
+    },
+
+    current = {
+        vertical = ...,
+        attitude = ...,
+        yaw = ...,
+    },
+
+    error = {
+        vertical = ...,
+        attitude = ...,
+        yaw = ...,
+    },
+}
 ```
 
 ---
@@ -358,7 +435,6 @@ navigation.lua
 position_hold.lua
 controller.lua
 rotor.lua
-telemetry_builder.lua
 ```
 
 ### Provides
@@ -367,13 +443,13 @@ telemetry_builder.lua
 shared.target          -- optional/debug
 shared.controlResult   -- controller result / debug terms
 shared.commands        -- latest body commands
-shared.telemetrySource -- data used by telemetry_builder, if needed
+shared.telemetry       -- structured telemetry snapshot
 ```
 
 It also calls:
 
 ```lua
-controller:update({ target = target, state = shared.state.body, dt = dt })
+controller:update({ target = target, state = controlState, dt = dt })
 rotor:setCommands(commands)
 rotor:update()
 ```
@@ -383,9 +459,14 @@ rotor:update()
 ```lua
 flight = {
     mode = {
-        lateral = "manual_attitude", -- or "position_hold", "navigate"
-        vertical = "height_hold",    -- or "manual_climb", "landing"
-        yaw = "yaw_hold",            -- or "manual_yaw", "auto_yaw"
+        lateral = "manual", -- or "cruise", "position_hold", "navigation"
+        vertical = "height",
+        yaw = "yaw",
+    },
+
+    lock = {
+        height = "locked", -- or "manual", "pending"
+        yaw = "locked",    -- or "manual", "pending"
     },
 
     target = {
@@ -401,29 +482,37 @@ flight = {
 
 ```text
 manual roll/pitch input active:
-    lateral mode becomes manual attitude
+    lateral mode becomes manual
     position hold target is reset or suspended
+
+velocity cruise command active:
+    lateral mode becomes cruise
+    cruise velocity is tracked in yaw-level FRD
 
 roll/pitch released and position hold enabled:
     lateral mode becomes position hold
     current position is captured if needed
 
 climb input active:
-    vertical mode becomes manual climb
+    vertical mode stays height
+    height lock substate becomes manual
 
 climb input released:
-    vertical mode becomes height hold
-    current height/down target is captured if needed
+    vertical mode stays height
+    height lock substate becomes pending, then locked
+    current absolute height target is captured if needed
 
 yaw input active:
-    yaw mode becomes manual yaw
+    yaw mode stays yaw
+    yaw lock substate becomes manual
 
 yaw input released:
-    yaw mode becomes yaw hold
+    yaw mode stays yaw
+    yaw lock substate becomes pending, then locked
     current yaw target is captured if needed
 
 future navigation command active:
-    lateral mode becomes navigate
+    lateral mode becomes navigation
     control_task owns target lifetime
     navigation projects target/current position into FRD error
 
@@ -440,7 +529,6 @@ PID implementation details
 rotor blade mixing math
 redstone/PWM output
 monitor/UI drawing
-telemetry field formatting details
 ```
 
 ### Notes
@@ -544,14 +632,15 @@ call rotor
 
 ### Does
 
-Converts raw position targets into FRD navigation errors.
+Converts raw position and velocity data into yaw-level FRD navigation vectors.
 
-This is a boundary primitive for code that must touch raw world coordinates. It may capture a raw position target and project the target/current horizontal delta into the current body FRD heading.
+This is a boundary primitive for code that must touch raw world coordinates. It may capture a raw position target, project the target/current horizontal delta into the current yaw-level FRD heading, and project raw horizontal velocity into the same frame.
 
 ### Depends on
 
 ```text
 state.raw.position
+state.raw.velocity
 state.body.pose.yaw or equivalent heading information
 navigation target data
 ```
@@ -565,6 +654,11 @@ navigationTarget = {
 }
 
 bodyPositionError = {
+    forward = ...,
+    right = ...,
+}
+
+horizontalVelocity = {
     forward = ...,
     right = ...,
 }
@@ -582,7 +676,7 @@ format telemetry
 
 ### Notes
 
-Raw `x/z` position should stop here. Position-control primitives receive the projected FRD error, not raw coordinates.
+Raw `x/z` position and velocity should stop here. Position-control primitives receive projected FRD horizontal error and velocity in the same yaw-level frame, not raw coordinates.
 
 ---
 
@@ -592,17 +686,17 @@ Raw `x/z` position should stop here. Position-control primitives receive the pro
 
 Primitive for horizontal position hold.
 
-It converts FRD horizontal position error and FRD body velocity into attitude targets or position-control terms when lateral mode is position hold.
+It converts yaw-level FRD horizontal position error and yaw-level FRD horizontal velocity into attitude targets or position-control terms when lateral mode is position hold.
 
-It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions; `navigation.lua` projects raw position targets into FRD error vectors.
+It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions; `navigation.lua` projects raw position targets and raw horizontal velocity into matching FRD vectors.
 
 ### Depends on
 
 ```text
 bodyPositionError.forward
 bodyPositionError.right
-state.body.velocity.forward
-state.body.velocity.right
+horizontalVelocity.forward
+horizontalVelocity.right
 position-hold config
 dt
 ```
@@ -629,6 +723,7 @@ positionHoldResult = {
 own global lateral mode
 capture raw position targets
 read state.raw.position
+read state.raw.velocity
 read state.body.pose.yaw for navigation projection
 run final attitude PID
 run rotor mixing
@@ -637,7 +732,7 @@ interpret raw sensor axes
 
 ### Notes
 
-Yaw-only horizontal projection belongs in `navigation.lua`, not in `data_task.lua` or `position_hold.lua`.
+Yaw-only horizontal projection belongs in `navigation.lua`, not in `data_task.lua` or `position_hold.lua`. Position error and horizontal velocity must be in the same projected frame before entering `position_hold.lua`.
 
 ---
 
@@ -653,9 +748,10 @@ This is the stabilization/control law module. It owns PID instances and control 
 
 ```text
 target
-state.body.pose
-state.body.velocity
-state.body.rates
+state.pose
+state.rates
+state.height
+state.verticalSpeed
 config.control
 lib.pid
 lib.mathx
@@ -689,7 +785,12 @@ result = {
 ```lua
 local result = controller:update({
     target = target,
-    state = shared.state.body,
+    state = {
+        pose = shared.state.body.pose,
+        rates = shared.state.body.rates,
+        height = shared.state.body.pose.height,
+        verticalSpeed = verticalSpeed,
+    },
     dt = dt,
 })
 ```
@@ -768,48 +869,6 @@ Avoid positional command APIs. `collective, roll, yaw, pitch` ordering is too ea
 
 ---
 
-## `telemetry_builder.lua`
-
-### Does
-
-Builds a telemetry table from structured snapshots.
-
-### Depends on
-
-```text
-shared.input
-shared.state
-target
-controller result
-rotor output / commands
-mode state from control_task
-```
-
-### Provides
-
-```lua
-telemetry = {
-    state = ...,
-    input = ...,
-    target = ...,
-    commands = ...,
-    modes = ...,
-    debug = ...,
-}
-```
-
-### Must not do
-
-```text
-control decisions
-PID update
-sensor conversion
-rotor mixing
-rednet receive loop
-```
-
----
-
 ## `telemetry_task.lua`
 
 ### Does
@@ -858,7 +917,6 @@ flight_controller/
 ├── position_hold.lua
 ├── controller.lua
 ├── rotor.lua
-├── telemetry_builder.lua
 │
 └── lib/
     ├── mathx.lua
@@ -885,7 +943,7 @@ The first phase should not change flight behavior. It should only clarify interf
 6. navigation projects raw position targets into FRD errors before position_hold consumes them.
 7. controller:update() receives { target, state, dt }.
 8. rotor command API changes from positional args to setCommands(commands).
-9. telemetry_builder consumes structured input/state/target/result/mode data.
+9. control_task publishes a structured telemetry snapshot directly.
 ```
 
 ### Do not change yet

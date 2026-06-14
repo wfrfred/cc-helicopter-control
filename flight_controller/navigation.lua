@@ -26,4 +26,14 @@ function navigation.projectPositionTargetErrorToBodyFrd(target, state)
     )
 end
 
+function navigation.projectHorizontalVelocityToBodyFrd(state)
+    local velocity = state.raw.velocity
+
+    return projectWorldHorizontalToBodyFrd(
+        velocity.x,
+        velocity.z,
+        state.body.pose.yaw
+    )
+end
+
 return navigation

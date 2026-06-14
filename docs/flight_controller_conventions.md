@@ -49,7 +49,7 @@ shared.state = {
 
     body = {
         pose = {
-            down = ...,
+            height = ...,
             roll = ...,
             pitch = ...,
             yaw = ...,
@@ -84,3 +84,7 @@ position hold consumes them.
 Keep `body.velocity` limited to FRD components. Derived display fields such as
 total speed, horizontal speed, and vertical speed are computed where they are
 used.
+
+Height is an absolute world scalar, not body-frame down. Use `pose.height` for
+height hold targets and errors; keep body down velocity for body-frame motion
+only.

@@ -59,149 +59,195 @@ config.calibration = {
 }
 
 config.control = {
-    loop_dt = 0.05,
-    telemetry_dt = 0.1,
-    max_dt = 0.2,
-    input_stale_dt = 0.5,
+    loop = {
+        dt = 0.05,
+        max_dt = 0.2,
+        telemetry_dt = 0.1,
+    },
 
-    collective_min = 0.0,
-    collective_max = 10.0,
-    vertical_speed_feedforward_gain = 0.5,
-    vertical_speed_feedforward_bias = 1.0,
-    tilt_compensation_min_factor = 0.5,
-    yaw_rate_feedforward_gain = 1.3 / math.rad(45),
-    pitch_feedforward_bias = 0.3,
+    input = {
+        stale_dt = 0.5,
+    },
 
-    home_roll = 0.0,
-    home_pitch = 0.0,
+    collective = {
+        min = 0.0,
+        max = 10.0,
+        feedforward_bias = 1.0,
+        tilt_compensation = {
+            min_factor = 0.5,
+        },
+    },
 
-    max_target_roll = math.rad(30),
-    max_target_pitch = math.rad(25),
+    vertical = {
+        target_rate = 5.0,
+        speed_feedforward_gain = 0.5,
+        lock = {
+            speed_deadband = 0.1,
+            relock_timeout = 0.6,
+        },
+    },
 
-    roll_target_rate = math.rad(45),
-    pitch_target_rate = math.rad(45),
-    yaw_target_rate = math.rad(60),
-    height_target_rate = 5.0,
-
-    roll_center_rate = math.rad(60),
-    pitch_center_rate = math.rad(60),
-
-    height_lock_speed_deadband = 0.1,
-    height_lock_relock_timeout = 0.6,
-    yaw_lock_rate_deadband = math.rad(2),
-    yaw_lock_relock_timeout = 0.6,
-    position_hold_velocity_right_feedforward_gain = 0.016,
-    position_hold_velocity_forward_feedforward_gain = 0.018,
-
-    pid = {
-        height = {
-            kp = 1.0,
-            ki = 0.5,
-            kd = 0.0,
-            i_min = -3.0,
-            i_max = 3.0,
-            out_min = -5.0,
-            out_max = 5.0,
-            deadband = 0.03,
+    attitude = {
+        home = {
+            roll = 0.0,
+            pitch = 0.0,
         },
 
-        vertical_speed = {
-            kp = 0.5,
-            ki = 0.0,
-            kd = 0.0,
-            i_min = -3.0,
-            i_max = 3.0,
-            out_min = -6.0,
-            out_max = 6.0,
-            deadband = 0.03,
+        limit = {
+            roll = math.rad(30),
+            pitch = math.rad(25),
         },
 
-        position_right = {
-            kp = 0.15,
-            ki = 0.005,
-            kd = 0.0,
-            i_min = -10.0,
-            i_max = 10.0,
-            out_min = -20.0,
-            out_max = 20.0,
-            deadband = 0.05,
+        target_rate = {
+            roll = math.rad(45),
+            pitch = math.rad(45),
         },
 
-        position_forward = {
-            kp = 0.15,
-            ki = 0.01,
-            kd = 0.0,
-            i_min = -10.0,
-            i_max = 10.0,
-            out_min = -20.0,
-            out_max = 20.0,
-            deadband = 0.05,
-        },
-
-        velocity_right = {
-            kp = 0.030,
-            ki = 0.01,
-            kd = 0.005,
-            i_min = -0.35,
-            i_max = 0.35,
-            out_min = -math.rad(20),
-            out_max = math.rad(20),
-            deadband = 0.05,
-        },
-
-        velocity_forward = {
-            kp = 0.032,
-            ki = 0.01,
-            kd = 0.006,
-            i_min = -0.35,
-            i_max = 0.35,
-            out_min = -math.rad(30),
-            out_max = math.rad(30),
-            deadband = 0.05,
-        },
-
-        roll = {
-            kp = 6.0,
-            ki = 0.0,
-            kd = 0.5,
-            i_min = -2.0,
-            i_max = 2.0,
-            out_min = -8.0,
-            out_max = 8.0,
-            deadband = math.rad(0.05),
+        center_rate = {
+            roll = math.rad(60),
+            pitch = math.rad(60),
         },
 
         pitch = {
-            kp = 6.0,
-            ki = 0.0,
-            kd = 0.5,
-            i_min = -1.5,
-            i_max = 1.5,
-            out_min = -12.0,
-            out_max = 12.0,
-            deadband = math.rad(0.15),
+            feedforward_bias = 0.3,
+        },
+    },
+
+    yaw = {
+        target_rate = math.rad(60),
+        rate_feedforward_gain = 1.3 / math.rad(45),
+        lock = {
+            rate_deadband = math.rad(2),
+            relock_timeout = 0.6,
+        },
+    },
+
+    position_hold = {
+        velocity_feedforward = {
+            right = 0.016,
+            forward = 0.018,
+        },
+    },
+
+    pid = {
+        vertical = {
+            height = {
+                kp = 1.0,
+                ki = 0.5,
+                kd = 0.0,
+                i_min = -3.0,
+                i_max = 3.0,
+                out_min = -5.0,
+                out_max = 5.0,
+                deadband = 0.03,
+            },
+
+            speed = {
+                kp = 0.5,
+                ki = 0.0,
+                kd = 0.0,
+                i_min = -3.0,
+                i_max = 3.0,
+                out_min = -6.0,
+                out_max = 6.0,
+                deadband = 0.03,
+            },
         },
 
-        yaw_angle = {
-            kp = 1.0,
-            ki = 0.0,
-            kd = 0.0,
-            i_min = -0.5,
-            i_max = 0.5,
-            out_min = -math.rad(60),
-            out_max = math.rad(60),
-            deadband = math.rad(0.05),
+        position = {
+            right = {
+                kp = 0.15,
+                ki = 0.005,
+                kd = 0.0,
+                i_min = -10.0,
+                i_max = 10.0,
+                out_min = -20.0,
+                out_max = 20.0,
+                deadband = 0.05,
+            },
+
+            forward = {
+                kp = 0.15,
+                ki = 0.01,
+                kd = 0.0,
+                i_min = -10.0,
+                i_max = 10.0,
+                out_min = -20.0,
+                out_max = 20.0,
+                deadband = 0.05,
+            },
         },
 
-        yaw_rate = {
-            kp = 5.0,
-            ki = 0.0,
-            kd = 0.0,
-            i_min = -2.0,
-            i_max = 2.0,
-            out_min = -8.0,
-            out_max = 8.0,
-            deadband = 0.01,
+        velocity = {
+            right = {
+                kp = 0.030,
+                ki = 0.01,
+                kd = 0.005,
+                i_min = -0.35,
+                i_max = 0.35,
+                out_min = -math.rad(20),
+                out_max = math.rad(20),
+                deadband = 0.05,
+            },
+
+            forward = {
+                kp = 0.032,
+                ki = 0.01,
+                kd = 0.006,
+                i_min = -0.35,
+                i_max = 0.35,
+                out_min = -math.rad(30),
+                out_max = math.rad(30),
+                deadband = 0.05,
+            },
+        },
+
+        attitude = {
+            roll = {
+                kp = 6.0,
+                ki = 0.0,
+                kd = 0.5,
+                i_min = -2.0,
+                i_max = 2.0,
+                out_min = -8.0,
+                out_max = 8.0,
+                deadband = math.rad(0.05),
+            },
+
+            pitch = {
+                kp = 6.0,
+                ki = 0.0,
+                kd = 0.5,
+                i_min = -1.5,
+                i_max = 1.5,
+                out_min = -12.0,
+                out_max = 12.0,
+                deadband = math.rad(0.15),
+            },
+        },
+
+        yaw = {
+            angle = {
+                kp = 1.0,
+                ki = 0.0,
+                kd = 0.0,
+                i_min = -0.5,
+                i_max = 0.5,
+                out_min = -math.rad(60),
+                out_max = math.rad(60),
+                deadband = math.rad(0.05),
+            },
+
+            rate = {
+                kp = 5.0,
+                ki = 0.0,
+                kd = 0.0,
+                i_min = -2.0,
+                i_max = 2.0,
+                out_min = -8.0,
+                out_max = 8.0,
+                deadband = 0.01,
+            },
         },
     },
 }

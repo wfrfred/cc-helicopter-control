@@ -34,6 +34,7 @@ function Lock:update(input, current, rate, dt)
             commandedRate = input * self.targetRate,
             active = false,
             pending = false,
+            state = "manual",
         }
     end
 
@@ -60,6 +61,7 @@ function Lock:update(input, current, rate, dt)
                 commandedRate = 0.0,
                 active = false,
                 pending = true,
+                state = "pending",
             }
         end
     end
@@ -70,6 +72,7 @@ function Lock:update(input, current, rate, dt)
         commandedRate = 0.0,
         active = true,
         pending = false,
+        state = "locked",
     }
 end
 

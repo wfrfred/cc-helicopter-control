@@ -14,20 +14,17 @@ end
 
 function controller.new(control)
     return setmetatable({
-        collectiveMin = control.collective_min,
-        collectiveMax = control.collective_max,
-        verticalSpeedFeedforwardGain = control.vertical_speed_feedforward_gain,
-        verticalSpeedFeedforwardBias = control.vertical_speed_feedforward_bias,
-        tiltCompensationMinFactor = control.tilt_compensation_min_factor,
-        yawRateFeedforwardGain = control.yaw_rate_feedforward_gain,
-        pitchFeedforwardBias = control.pitch_feedforward_bias,
+        collective = control.collective,
+        vertical = control.vertical,
+        attitude = control.attitude,
+        yaw = control.yaw,
 
-        height = pid.new(control.pid.height),
-        verticalSpeed = pid.new(control.pid.vertical_speed),
-        roll = pid.new(control.pid.roll),
-        pitch = pid.new(control.pid.pitch),
-        yawAngle = pid.new(control.pid.yaw_angle),
-        yawRate = pid.new(control.pid.yaw_rate),
+        height = pid.new(control.pid.vertical.height),
+        verticalSpeed = pid.new(control.pid.vertical.speed),
+        roll = pid.new(control.pid.attitude.roll),
+        pitch = pid.new(control.pid.attitude.pitch),
+        yawAngle = pid.new(control.pid.yaw.angle),
+        yawRate = pid.new(control.pid.yaw.rate),
     }, Controller)
 end
 
@@ -35,35 +32,44 @@ function Controller:update(input)
     local target = input.target
     local state = input.state
     local pose = state.pose
-    local velocity = state.velocity
     local rates = state.rates
     local attitudeTarget = target.attitude
     local verticalTarget = target.vertical
     local yawTarget = target.yaw
-    local downSpeed = velocity.down
+    local height = state.height
+    local verticalSpeed = state.verticalSpeed
     local rollRate = rates.roll
     local pitchRate = rates.pitch
     local yawRate = rates.yaw
     local dt = input.dt
 
-    local targetDownSpeed = verticalTarget.rate
+    local targetVerticalSpeed = verticalTarget.rate
     local heightErr = verticalTarget.error
 
     if verticalTarget.active then
-        targetDownSpeed, heightErr = self.height:update(verticalTarget.down, pose.down, dt, -downSpeed)
+        targetVerticalSpeed, heightErr = self.height:update(
+            verticalTarget.height,
+            height,
+            dt,
+            -verticalSpeed
+        )
     else
         self.height:reset()
     end
 
-    local downSpeedFeedback, downSpeedErr = self.verticalSpeed:update(targetDownSpeed, downSpeed, dt)
-    local downSpeedFeedforward = self.verticalSpeedFeedforwardGain * targetDownSpeed
-    local collectiveFeedforward = self.verticalSpeedFeedforwardBias - downSpeedFeedforward
-    local collectiveFeedback = -downSpeedFeedback
+    local verticalSpeedFeedback, verticalSpeedErr = self.verticalSpeed:update(
+        targetVerticalSpeed,
+        verticalSpeed,
+        dt
+    )
+    local verticalSpeedFeedforward = self.vertical.speed_feedforward_gain * targetVerticalSpeed
+    local collectiveFeedforward = self.collective.feedforward_bias + verticalSpeedFeedforward
+    local collectiveFeedback = verticalSpeedFeedback
     local collectiveOut = collectiveFeedforward + collectiveFeedback
     local tiltVerticalFactor = attitudeVerticalFactor(
         pose.roll,
         pose.pitch,
-        self.tiltCompensationMinFactor
+        self.collective.tilt_compensation.min_factor
     )
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
@@ -73,7 +79,7 @@ function Controller:update(input)
 
     local pitchErr = mathx.wrapPi(attitudeTarget.pitch - pose.pitch)
     local pitchFeedback = self.pitch:update(pitchErr, 0.0, dt, -pitchRate)
-    local pitchFeedforward = self.pitchFeedforwardBias
+    local pitchFeedforward = self.attitude.pitch.feedforward_bias
     local pitchCmd = pitchFeedforward + pitchFeedback
 
     local targetYawRate = yawTarget.rate
@@ -87,13 +93,13 @@ function Controller:update(input)
     end
 
     local yawRateFeedback, yawRateErr = self.yawRate:update(targetYawRate, yawRate, dt)
-    local yawRateFeedforward = self.yawRateFeedforwardGain * targetYawRate
+    local yawRateFeedforward = self.yaw.rate_feedforward_gain * targetYawRate
     local yawCmd = yawRateFeedforward + yawRateFeedback
 
     local collective = mathx.clamp(
         tiltCompensatedCollectiveOut,
-        self.collectiveMin,
-        self.collectiveMax
+        self.collective.min,
+        self.collective.max
     )
 
     return {
@@ -106,22 +112,22 @@ function Controller:update(input)
 
         terms = {
             height = {
-                target = verticalTarget.down,
-                current = pose.down,
+                target = verticalTarget.height,
+                current = height,
                 err = heightErr,
-                out = targetDownSpeed,
+                out = targetVerticalSpeed,
                 lockActive = verticalTarget.active,
                 lockPending = verticalTarget.pending,
             },
 
             verticalSpeed = {
-                target = targetDownSpeed,
-                current = downSpeed,
-                err = downSpeedErr,
+                target = targetVerticalSpeed,
+                current = verticalSpeed,
+                err = verticalSpeedErr,
                 feedforward = collectiveFeedforward,
                 feedback = collectiveFeedback,
-                controlFeedforward = downSpeedFeedforward,
-                controlFeedback = downSpeedFeedback,
+                controlFeedforward = verticalSpeedFeedforward,
+                controlFeedback = verticalSpeedFeedback,
                 tiltCompensation = tiltCompensation,
                 tiltVerticalFactor = tiltVerticalFactor,
                 uncompensatedOut = collectiveOut,

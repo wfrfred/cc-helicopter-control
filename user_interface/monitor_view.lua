@@ -14,6 +14,18 @@ local function deg(x)
     return math.deg(x)
 end
 
+local function velocityTotal(velocity)
+    return math.sqrt(
+        velocity.x * velocity.x
+            + velocity.y * velocity.y
+            + velocity.z * velocity.z
+    )
+end
+
+local function velocityHorizontal(velocity)
+    return math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
+end
+
 local function fmt(value, pattern)
     return (pattern or "%.2f"):format(value)
 end
@@ -140,18 +152,20 @@ local function drawControllerOutputs(mon, x, y, width, limitY, output)
     y = y + 1
 
     local columnWidth = math.floor((width - 2) / 2)
+    local commands = expectTable(output.commands, "telemetry.output.commands")
+    local collective = expectTable(output.collective, "telemetry.output.collective")
     local rows = {
         {
-            { label = "COL", value = output.collective },
-            { label = "ROL", value = output.roll },
+            { label = "COL", value = commands.collective },
+            { label = "ROL", value = commands.roll },
         },
         {
-            { label = "CFF", value = output.collectiveFeedforward },
-            { label = "PIT", value = output.pitch },
+            { label = "CFF", value = collective.feedforward },
+            { label = "PIT", value = commands.pitch },
         },
         {
-            { label = "CFB", value = output.collectiveFeedback },
-            { label = "YAW", value = output.yaw },
+            { label = "CFB", value = collective.feedback },
+            { label = "YAW", value = commands.yaw },
         },
     }
     local limits = {
@@ -287,18 +301,25 @@ local function drawFlightState(mon, x, y, width, limitY, telemetry)
     end
 
     local current = expectTable(telemetry.current, "telemetry.current")
-    local position = expectTable(telemetry.position, "telemetry.position")
-    local velocity = expectTable(current.velocity, "telemetry.current.velocity")
+    local state = expectTable(telemetry.state, "telemetry.state")
+    local raw = expectTable(state.raw, "telemetry.state.raw")
+    local body = expectTable(state.body, "telemetry.state.body")
+    local position = expectTable(raw.position, "telemetry.state.raw.position")
+    local velocity = expectTable(raw.velocity, "telemetry.state.raw.velocity")
+    local attitude = expectTable(current.attitude, "telemetry.current.attitude")
+    local yaw = expectTable(current.yaw, "telemetry.current.yaw")
+    local vertical = expectTable(current.vertical, "telemetry.current.vertical")
+    local bodyVelocity = expectTable(body.velocity, "telemetry.state.body.velocity")
     local items = {
-        { label = "ALT", value = current.height, pattern = "%.1f" },
-        { label = "HSPD", value = velocity.horizontal, pattern = "%.1f" },
-        { label = "VSPD", value = velocity.vertical, pattern = "%+.1f" },
-        { label = "TSPD", value = velocity.total, pattern = "%.1f" },
+        { label = "ALT", value = vertical.height, pattern = "%.1f" },
+        { label = "HSPD", value = velocityHorizontal(velocity), pattern = "%.1f" },
+        { label = "VSPD", value = vertical.speed, pattern = "%+.1f" },
+        { label = "TSPD", value = velocityTotal(velocity), pattern = "%.1f" },
 
-        { label = "ROLL", value = deg(current.roll), pattern = "%+.1f" },
-        { label = "PITCH", value = deg(current.pitch), pattern = "%+.1f" },
-        { label = "YAW", value = deg(current.yaw), pattern = "%.1f" },
-        { label = "YRATE", value = deg(current.yawRate), pattern = "%+.1f" },
+        { label = "ROLL", value = deg(attitude.roll), pattern = "%+.1f" },
+        { label = "PITCH", value = deg(attitude.pitch), pattern = "%+.1f" },
+        { label = "YAW", value = deg(yaw.angle), pattern = "%.1f" },
+        { label = "YRATE", value = deg(yaw.rate), pattern = "%+.1f" },
 
         { label = "POSX", value = position.x, pattern = "%.1f" },
         { label = "POSY", value = position.y, pattern = "%.1f" },
@@ -307,6 +328,9 @@ local function drawFlightState(mon, x, y, width, limitY, telemetry)
         { label = "VELX", value = velocity.x, pattern = "%+.1f" },
         { label = "VELY", value = velocity.y, pattern = "%+.1f" },
         { label = "VELZ", value = velocity.z, pattern = "%+.1f" },
+        { label = "BFWD", value = bodyVelocity.forward, pattern = "%+.1f" },
+        { label = "BRGT", value = bodyVelocity.right, pattern = "%+.1f" },
+        { label = "BDWN", value = bodyVelocity.down, pattern = "%+.1f" },
     }
 
     section(mon, y, "flight state", colors.black, colors.green)
@@ -456,15 +480,20 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
 
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
     local pidData = expectTable(telemetry.pid, "telemetry.pid")
-    local target = expectTable(positionHold.target, "telemetry.positionHold.target")
-    local currentPosition = expectTable(positionHold.current, "telemetry.positionHold.current")
-    local targetVelocity = expectTable(positionHold.targetVelocity, "telemetry.positionHold.targetVelocity")
-    local currentVelocity = expectTable(positionHold.currentVelocity, "telemetry.positionHold.currentVelocity")
-    local err = expectTable(positionHold.error, "telemetry.positionHold.error")
-    local positionRightTerms = expectTable(pidData.positionRight, "telemetry.pid.positionRight")
-    local positionForwardTerms = expectTable(pidData.positionForward, "telemetry.pid.positionForward")
-    local velocityRightTerms = expectTable(pidData.velocityRight, "telemetry.pid.velocityRight")
-    local velocityForwardTerms = expectTable(pidData.velocityForward, "telemetry.pid.velocityForward")
+    local position = expectTable(positionHold.position, "telemetry.positionHold.position")
+    local velocity = expectTable(positionHold.velocity, "telemetry.positionHold.velocity")
+    local output = expectTable(positionHold.output, "telemetry.positionHold.output")
+    local target = expectTable(position.target, "telemetry.positionHold.position.target")
+    local currentPosition = expectTable(position.current, "telemetry.positionHold.position.current")
+    local targetVelocity = expectTable(velocity.target, "telemetry.positionHold.velocity.target")
+    local currentVelocity = expectTable(velocity.current, "telemetry.positionHold.velocity.current")
+    local err = expectTable(position.error, "telemetry.positionHold.position.error")
+    local positionPid = expectTable(pidData.position, "telemetry.pid.position")
+    local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
+    local positionRightTerms = expectTable(positionPid.right, "telemetry.pid.position.right")
+    local positionForwardTerms = expectTable(positionPid.forward, "telemetry.pid.position.forward")
+    local velocityRightTerms = expectTable(velocityPid.right, "telemetry.pid.velocity.right")
+    local velocityForwardTerms = expectTable(velocityPid.forward, "telemetry.pid.velocity.forward")
 
     section(mon, y, "position hold", colors.black, colors.pink)
     y = y + 1
@@ -527,8 +556,8 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         },
     }
     local outputRows = {
-        { value = positionRightTerms.output, limit = 20.0 },
-        { value = positionForwardTerms.output, limit = 20.0 },
+        { value = output.right.value, limit = 20.0 },
+        { value = output.forward.value, limit = 20.0 },
         { value = deg(velocityRightTerms.output), limit = 20.0 },
         { value = deg(velocityForwardTerms.output), limit = 30.0 },
     }
@@ -576,12 +605,25 @@ local function drawRunning(mon, shared, telemetry)
     local err = expectTable(telemetry.error, "telemetry.error")
     local output = expectTable(telemetry.output, "telemetry.output")
     local pidData = expectTable(telemetry.pid, "telemetry.pid")
+    local verticalPid = expectTable(pidData.vertical, "telemetry.pid.vertical")
+    local attitudePid = expectTable(pidData.attitude, "telemetry.pid.attitude")
+    local yawPid = expectTable(pidData.yaw, "telemetry.pid.yaw")
+    local targetVertical = expectTable(target.vertical, "telemetry.target.vertical")
+    local targetAttitude = expectTable(target.attitude, "telemetry.target.attitude")
+    local targetYaw = expectTable(target.yaw, "telemetry.target.yaw")
+    local currentVertical = expectTable(current.vertical, "telemetry.current.vertical")
+    local currentAttitude = expectTable(current.attitude, "telemetry.current.attitude")
+    local currentYaw = expectTable(current.yaw, "telemetry.current.yaw")
+    local errorVertical = expectTable(err.vertical, "telemetry.error.vertical")
+    local errorAttitude = expectTable(err.attitude, "telemetry.error.attitude")
+    local errorYaw = expectTable(err.yaw, "telemetry.error.yaw")
+    local inputTelemetry = expectTable(telemetry.input, "telemetry.input")
     local now = os.clock()
 
     assert(shared.telemetryTime > 0, "shared.telemetryTime must be set")
 
     local telemetryAge = now - shared.telemetryTime
-    local inputAge = now - shared.inputTime
+    local inputAge = inputTelemetry.age
     local staleTelemetry = telemetryAge > STALE_TELEMETRY_DT
 
     draw.clear(mon, colors.black)
@@ -589,7 +631,7 @@ local function drawRunning(mon, shared, telemetry)
     draw.writeAt(mon, 1, 1, " HELI INPUT / DISPLAY", colors.black, colors.lime, w)
 
     local stateColor = colors.green
-    if staleTelemetry or telemetry.inputStale then
+    if staleTelemetry or inputTelemetry.stale then
         stateColor = colors.orange
     end
 
@@ -606,12 +648,12 @@ local function drawRunning(mon, shared, telemetry)
         y = y + 1
     end
     if y <= h then drawControllerHeader(mon, 2, y, w - 2) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", target.height, current.height, err.height, false, pidData.height) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "VSPD", target.verticalSpeed, current.verticalSpeed, err.verticalSpeed, false, pidData.verticalSpeed) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", target.roll, current.roll, err.roll, true, pidData.roll) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", target.pitch, current.pitch, err.pitch, true, pidData.pitch) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", target.yaw, current.yaw, err.yaw, true, pidData.yawAngle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", target.yawRate, current.yawRate, err.yawRate, true, pidData.yawRate) y = y + 2 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", targetVertical.height, currentVertical.height, errorVertical.height, false, verticalPid.height) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "VSPD", targetVertical.speed, currentVertical.speed, errorVertical.speed, false, verticalPid.speed) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", targetAttitude.roll, currentAttitude.roll, errorAttitude.roll, true, attitudePid.roll) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", targetAttitude.pitch, currentAttitude.pitch, errorAttitude.pitch, true, attitudePid.pitch) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, yawPid.angle) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, yawPid.rate) y = y + 2 end
 
     y = drawControllerOutputs(mon, 2, y, w - 2, h, output)
 

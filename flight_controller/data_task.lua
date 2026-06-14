@@ -41,7 +41,7 @@ local function buildPose(rawPosition, frame)
     local yaw = mathx.atan2(frame.forward.x, -frame.forward.z)
 
     return {
-        down = -rawPosition.y,
+        height = rawPosition.y,
         roll = mathx.wrapPi(roll),
         pitch = mathx.wrapPi(pitch),
         yaw = mathx.wrapPi(yaw),

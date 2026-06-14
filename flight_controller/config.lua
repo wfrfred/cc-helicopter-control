@@ -40,15 +40,9 @@ config.hardware = {
 
 config.calibration = {
     body_axis = {
-        forward = { x = 0, y = 0, z = 1 },
-        right = { x = 1, y = 0, z = 0 },
-        down = { x = 0, y = -1, z = 0 },
-    },
-
-    sensor_axis = {
-        roll = -1,
-        pitch = 1,
-        yaw = 1,
+        forward = vector.new(0, 0, 1),
+        right = vector.new(1, 0, 0),
+        down = vector.new(0, -1, 0),
     },
 
     rotor = {

@@ -12,7 +12,35 @@ local function resetAll(controllers)
     end
 end
 
-function position_hold.new(initial, control)
+local function makeInactiveResult()
+    return {
+        active = false,
+        targetRight = 0.0,
+        targetForward = 0.0,
+        currentPositionRight = 0.0,
+        currentPositionForward = 0.0,
+        errorRight = 0.0,
+        errorForward = 0.0,
+        targetVelocityRight = 0.0,
+        targetVelocityForward = 0.0,
+        currentVelocityRight = 0.0,
+        currentVelocityForward = 0.0,
+        feedforwardRight = 0.0,
+        feedforwardForward = 0.0,
+        feedbackRight = 0.0,
+        feedbackForward = 0.0,
+        outputRight = 0.0,
+        outputForward = 0.0,
+        roll = nil,
+        pitch = nil,
+    }
+end
+
+function position_hold.inactive()
+    return makeInactiveResult()
+end
+
+function position_hold.new(control)
     local controllers = {
         positionRight = pid.new(control.pid.position_right),
         positionForward = pid.new(control.pid.position_forward),
@@ -22,52 +50,17 @@ function position_hold.new(initial, control)
 
     return setmetatable({
         control = control,
-        target = initial:captureNavigationPoint(),
-        active = false,
         velocityRightFeedforwardGain = control.position_hold_velocity_right_feedforward_gain,
         velocityForwardFeedforwardGain = control.position_hold_velocity_forward_feedforward_gain,
         controllers = controllers,
     }, Hold)
 end
 
-function Hold:update(input, pose, velocity, dt)
-    local manual = input.roll ~= 0 or input.pitch ~= 0
+function Hold:reset()
+    resetAll(self.controllers)
+end
 
-    if manual then
-        self.target = pose:captureNavigationPoint()
-        self.active = false
-        resetAll(self.controllers)
-
-        return {
-            active = false,
-            targetRight = 0.0,
-            targetForward = 0.0,
-            currentPositionRight = 0.0,
-            currentPositionForward = 0.0,
-            errorRight = 0.0,
-            errorForward = 0.0,
-            targetVelocityRight = 0.0,
-            targetVelocityForward = 0.0,
-            currentVelocityRight = 0.0,
-            currentVelocityForward = 0.0,
-            feedforwardRight = 0.0,
-            feedforwardForward = 0.0,
-            feedbackRight = 0.0,
-            feedbackForward = 0.0,
-            outputRight = 0.0,
-            outputForward = 0.0,
-            roll = nil,
-            pitch = nil,
-        }
-    end
-
-    if not self.active then
-        self.target = pose:captureNavigationPoint()
-        self.active = true
-    end
-
-    local bodyPositionError = pose:frdErrorToNavigationPoint(self.target)
-
+function Hold:update(bodyPositionError, velocity, dt)
     local targetVelocityRight, errorRight = self.controllers.positionRight:update(
         bodyPositionError.right,
         0.0,

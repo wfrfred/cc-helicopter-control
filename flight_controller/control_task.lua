@@ -2,6 +2,7 @@ local Controller = require("controller")
 local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
+local navigation = require("navigation")
 local position_hold = require("position_hold")
 local rate_lock = require("rate_lock")
 local telemetry_builder = require("telemetry_builder")
@@ -37,20 +38,26 @@ local function readInput(shared, now)
     return input, inputAge, false
 end
 
+local function stateReady(state)
+    return state ~= nil and
+        state.body.pose ~= nil and
+        state.body.rates ~= nil and
+        state.body.velocity ~= nil
+end
+
 local function waitForSensors(shared)
-    while shared.running and (
-        shared.poseSnapshot == nil or
-        shared.ratesSnapshot == nil or
-        shared.velocitySnapshot == nil
-    ) do
+    while shared.running and not stateReady(shared.state) do
+        local state = shared.state
+        local haveState = state ~= nil
         local now = os.clock()
+
         shared.telemetryTime = now
         shared.telemetry = {
             status = "waiting_sensors",
             time = now,
-            havePose = shared.poseSnapshot ~= nil,
-            haveRates = shared.ratesSnapshot ~= nil,
-            haveVelocity = shared.velocitySnapshot ~= nil,
+            havePose = haveState and state.body.pose ~= nil,
+            haveRates = haveState and state.body.rates ~= nil,
+            haveVelocity = haveState and state.body.velocity ~= nil,
         }
 
         sleep(0.1)
@@ -62,10 +69,13 @@ function control_task.run(shared)
 
     waitForSensors(shared)
 
-    local initial = shared.poseSnapshot.body.pose
+    local initialState = shared.state
+    local initial = initialState.body.pose
 
     local targets = target_state.new(initial, CONTROL)
-    local positionHold = position_hold.new(initial, CONTROL)
+    local positionHold = position_hold.new(CONTROL)
+    local positionTarget = navigation.makePositionTarget(initialState)
+    local positionHoldActive = false
     local downLock = rate_lock.new({
         initial_target = initial.down,
         target_rate = CONTROL.height_target_rate,
@@ -95,18 +105,34 @@ function control_task.run(shared)
         targets:update(input, dt)
 
         local now = os.clock()
-        local poseSnapshot = shared.poseSnapshot
-        local ratesSnapshot = shared.ratesSnapshot
-        local velocitySnapshot = shared.velocitySnapshot
-        local pose = poseSnapshot.body.pose
-        local rates = ratesSnapshot.body.rates
-        local velocity = velocitySnapshot.body.velocity
-        local poseAge = now - poseSnapshot.time
-        local ratesAge = now - ratesSnapshot.time
-        local velocityAge = now - velocitySnapshot.time
+        local state = shared.state
+        local pose = state.body.pose
+        local rates = state.body.rates
+        local velocity = state.body.velocity
+        local poseAge = now - state.time.pose
+        local ratesAge = now - state.time.rates
+        local velocityAge = now - state.time.velocity
 
-        local positionResult = positionHold:update(input, pose, velocity, dt)
-        if positionResult.active then
+        local positionResult
+        local positionManual = input.roll ~= 0 or input.pitch ~= 0
+        if positionManual then
+            positionTarget = navigation.makePositionTarget(state)
+            if positionHoldActive then
+                positionHold:reset()
+            end
+            positionHoldActive = false
+            positionResult = position_hold.inactive()
+        else
+            if not positionHoldActive then
+                positionTarget = navigation.makePositionTarget(state)
+                positionHoldActive = true
+            end
+
+            positionResult = positionHold:update(
+                navigation.projectPositionTargetErrorToBodyFrd(positionTarget, state),
+                velocity,
+                dt
+            )
             targets.roll = positionResult.roll
             targets.pitch = positionResult.pitch
         end
@@ -141,9 +167,8 @@ function control_task.run(shared)
             shared.telemetryTime = now
             shared.telemetry = telemetry_builder.running({
                 shared = shared,
-                poseSnapshot = poseSnapshot,
+                state = state,
                 input = input,
-                velocitySnapshot = velocitySnapshot,
                 rotorOutput = rotorOutput,
                 controllers = controller:pidControllers(),
                 positionControllers = positionHold:pidControllers(),

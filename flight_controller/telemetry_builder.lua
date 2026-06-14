@@ -32,14 +32,27 @@ local function zeroPidTerms()
     }
 end
 
+local function rawVelocityTotal(rawVelocity)
+    return math.sqrt(
+        rawVelocity.x * rawVelocity.x
+            + rawVelocity.y * rawVelocity.y
+            + rawVelocity.z * rawVelocity.z
+    )
+end
+
+local function rawVelocityHorizontal(rawVelocity)
+    return math.sqrt(rawVelocity.x * rawVelocity.x + rawVelocity.z * rawVelocity.z)
+end
+
 function telemetry_builder.running(data)
     local commands = data.commands
     local terms = data.terms
     local position = data.position
-    local pose = data.poseSnapshot.body.pose
-    local rawPosition = data.poseSnapshot.raw.position
-    local velocity = data.velocitySnapshot.body.velocity
-    local rawVelocity = data.velocitySnapshot.raw.velocity
+    local state = data.state
+    local pose = state.body.pose
+    local rawPosition = state.raw.position
+    local velocity = state.body.velocity
+    local rawVelocity = state.raw.velocity
     local yawAngleTerms
 
     if terms.yaw.angleActive then
@@ -117,7 +130,7 @@ function telemetry_builder.running(data)
 
         current = {
             height = rawPosition.y,
-            verticalSpeed = rawVelocity.vertical,
+            verticalSpeed = rawVelocity.y,
             roll = pose.roll,
             pitch = pose.pitch,
             yaw = pose.yaw,
@@ -128,9 +141,9 @@ function telemetry_builder.running(data)
                 x = rawVelocity.x,
                 y = rawVelocity.y,
                 z = rawVelocity.z,
-                total = velocity.total,
-                horizontal = velocity.horizontal,
-                vertical = rawVelocity.vertical,
+                total = rawVelocityTotal(rawVelocity),
+                horizontal = rawVelocityHorizontal(rawVelocity),
+                vertical = rawVelocity.y,
                 forward = velocity.forward,
                 right = velocity.right,
                 down = velocity.down,

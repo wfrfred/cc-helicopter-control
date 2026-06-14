@@ -22,8 +22,6 @@ local function projectVelocityToBodyFrd(rawVelocity, yaw)
         forward = horizontal.forward,
         right = horizontal.right,
         down = -rawVelocity.y,
-        total = rawVelocity.total,
-        horizontal = rawVelocity.horizontal,
     }
 end
 
@@ -45,18 +43,6 @@ local function buildFrame(rawPose)
     }
 end
 
-local function makeNavigationPoint(rawPosition)
-    return {
-        projectErrorToBodyFrd = function(currentPosition, yaw)
-            return projectWorldHorizontalToBodyFrd(
-                rawPosition.x - currentPosition.x,
-                rawPosition.z - currentPosition.z,
-                yaw
-            )
-        end,
-    }
-end
-
 local function buildPose(rawPosition, frame)
     local horizontal = math.sqrt(
         frame.forward.x * frame.forward.x
@@ -66,32 +52,19 @@ local function buildPose(rawPosition, frame)
     local pitch = mathx.atan2(-frame.forward.y, horizontal)
     local yaw = mathx.atan2(frame.forward.x, -frame.forward.z)
 
-    local pose = {
+    return {
         down = -rawPosition.y,
         roll = mathx.wrapPi(roll),
         pitch = mathx.wrapPi(pitch),
         yaw = mathx.wrapPi(yaw),
     }
-
-    function pose:captureNavigationPoint()
-        return makeNavigationPoint(rawPosition)
-    end
-
-    function pose:frdErrorToNavigationPoint(target)
-        return target.projectErrorToBodyFrd(rawPosition, self.yaw)
-    end
-
-    return pose
 end
 
-local function makeRawVelocity(v)
+local function makeState()
     return {
-        x = v.x,
-        y = v.y,
-        z = v.z,
-        total = v:length(),
-        horizontal = math.sqrt(v.x * v.x + v.z * v.z),
-        vertical = v.y,
+        raw = {},
+        body = {},
+        time = {},
     }
 end
 
@@ -101,8 +74,8 @@ local function readPose()
 
     return {
         raw = {
-            pose = rawPose,
             position = rawPose.position,
+            orientation = rawPose.orientation,
         },
         body = {
             frame = frame,
@@ -113,7 +86,7 @@ local function readPose()
 end
 
 local function readVelocity(yaw)
-    local rawVelocity = makeRawVelocity(sublevel.getLinearVelocity())
+    local rawVelocity = sublevel.getLinearVelocity()
 
     return {
         raw = {
@@ -141,18 +114,29 @@ local function readRates(frame)
 end
 
 local function waitForPose(shared)
-    while shared.running and shared.poseSnapshot == nil do
+    while shared.running and (
+        shared.state == nil or
+        shared.state.body.pose == nil
+    ) do
         sleep(0)
     end
 end
 
 function data_task.run(shared)
-    local latestPoseSnapshot = nil
+    shared.state = makeState()
+
+    local latestFrame = nil
 
     local function poseTask()
         while shared.running do
-            latestPoseSnapshot = readPose()
-            shared.poseSnapshot = latestPoseSnapshot
+            local pose = readPose()
+            latestFrame = pose.body.frame
+
+            shared.state.raw.position = pose.raw.position
+            shared.state.raw.orientation = pose.raw.orientation
+            shared.state.body.pose = pose.body.pose
+            shared.state.time.pose = pose.time
+
             sleep(0)
         end
     end
@@ -160,12 +144,17 @@ function data_task.run(shared)
     local function angularVelocityTask()
         waitForPose(shared)
 
-        while shared.running and latestPoseSnapshot == nil do
+        while shared.running and latestFrame == nil do
             sleep(0)
         end
 
         while shared.running do
-            shared.ratesSnapshot = readRates(latestPoseSnapshot.body.frame)
+            local rates = readRates(latestFrame)
+
+            shared.state.raw.angularVelocity = rates.raw.angularVelocity
+            shared.state.body.rates = rates.body.rates
+            shared.state.time.rates = rates.time
+
             sleep(0)
         end
     end
@@ -174,7 +163,12 @@ function data_task.run(shared)
         waitForPose(shared)
 
         while shared.running do
-            shared.velocitySnapshot = readVelocity(shared.poseSnapshot.body.pose.yaw)
+            local velocity = readVelocity(shared.state.body.pose.yaw)
+
+            shared.state.raw.velocity = velocity.raw.velocity
+            shared.state.body.velocity = velocity.body.velocity
+            shared.state.time.velocity = velocity.time
+
             sleep(LINEAR_VELOCITY_DT)
         end
     end

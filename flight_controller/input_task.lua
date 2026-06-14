@@ -3,9 +3,6 @@ local config = require("config")
 
 local input_task = {}
 
-local MODEM_SIDE = config.runtime.modem.control
-local RECEIVE_TIMEOUT = config.runtime.input.receive_timeout
-
 local function defaultInput()
     return {
         roll = 0.0,
@@ -39,10 +36,10 @@ function input_task.defaultInput()
 end
 
 function input_task.run(shared)
-    rednet.open(MODEM_SIDE)
+    rednet.open(config.runtime.modem.control)
 
     while shared.running do
-        local sender, msg = rednet.receive(protocol.CONTROL.INPUT, RECEIVE_TIMEOUT)
+        local sender, msg = rednet.receive(protocol.CONTROL.INPUT, config.runtime.input.receive_timeout)
 
         if sender then
             shared.input = normalize(msg)

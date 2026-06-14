@@ -32,22 +32,25 @@ function controller.new(control)
 end
 
 function Controller:update(input)
-    local targets = input.targets
-    local pose = input.pose
-    local velocity = input.velocity
-    local heightResult = input.height
+    local target = input.target
+    local state = input.state
+    local pose = state.pose
+    local velocity = state.velocity
+    local rates = state.rates
+    local attitudeTarget = target.attitude
+    local verticalTarget = target.vertical
+    local yawTarget = target.yaw
     local downSpeed = velocity.down
-    local rollRate = input.rollRate
-    local pitchRate = input.pitchRate
-    local yawRate = input.yawRate
-    local yawResult = input.yaw
+    local rollRate = rates.roll
+    local pitchRate = rates.pitch
+    local yawRate = rates.yaw
     local dt = input.dt
 
-    local targetDownSpeed = heightResult.commandedRate
-    local heightErr = heightResult.error
+    local targetDownSpeed = verticalTarget.rate
+    local heightErr = verticalTarget.error
 
-    if heightResult.active then
-        targetDownSpeed, heightErr = self.height:update(heightResult.target, pose.down, dt, -downSpeed)
+    if verticalTarget.active then
+        targetDownSpeed, heightErr = self.height:update(verticalTarget.down, pose.down, dt, -downSpeed)
     else
         self.height:reset()
     end
@@ -65,17 +68,17 @@ function Controller:update(input)
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
 
-    local rollErr = mathx.wrapPi(targets.roll - pose.roll)
+    local rollErr = mathx.wrapPi(attitudeTarget.roll - pose.roll)
     local rollCmd = self.roll:update(rollErr, 0.0, dt, -rollRate)
 
-    local pitchErr = mathx.wrapPi(targets.pitch - pose.pitch)
+    local pitchErr = mathx.wrapPi(attitudeTarget.pitch - pose.pitch)
     local pitchFeedback = self.pitch:update(pitchErr, 0.0, dt, -pitchRate)
     local pitchFeedforward = self.pitchFeedforwardBias
     local pitchCmd = pitchFeedforward + pitchFeedback
 
-    local targetYawRate = yawResult.commandedRate
-    local yawErr = yawResult.error
-    local yawAngleActive = yawResult.active
+    local targetYawRate = yawTarget.rate
+    local yawErr = yawTarget.error
+    local yawAngleActive = yawTarget.active
 
     if yawAngleActive then
         targetYawRate = self.yawAngle:update(yawErr, 0.0, dt, -yawRate)
@@ -103,12 +106,12 @@ function Controller:update(input)
 
         terms = {
             height = {
-                target = heightResult.target,
+                target = verticalTarget.down,
                 current = pose.down,
                 err = heightErr,
                 out = targetDownSpeed,
-                lockActive = heightResult.active,
-                lockPending = heightResult.pending,
+                lockActive = verticalTarget.active,
+                lockPending = verticalTarget.pending,
             },
 
             verticalSpeed = {
@@ -126,7 +129,7 @@ function Controller:update(input)
             },
 
             roll = {
-                target = targets.roll,
+                target = attitudeTarget.roll,
                 current = pose.roll,
                 err = rollErr,
                 rate = rollRate,
@@ -134,7 +137,7 @@ function Controller:update(input)
             },
 
             pitch = {
-                target = targets.pitch,
+                target = attitudeTarget.pitch,
                 current = pose.pitch,
                 err = pitchErr,
                 rate = pitchRate,
@@ -144,7 +147,7 @@ function Controller:update(input)
             },
 
             yaw = {
-                target = yawResult.target,
+                target = yawTarget.angle,
                 current = pose.yaw,
                 err = yawErr,
                 targetRate = targetYawRate,
@@ -154,7 +157,7 @@ function Controller:update(input)
                 rateFeedback = yawRateFeedback,
                 out = yawCmd,
                 angleActive = yawAngleActive,
-                anglePending = yawResult.pending,
+                anglePending = yawTarget.pending,
             },
         },
     }

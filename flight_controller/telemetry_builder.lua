@@ -45,9 +45,11 @@ local function rawVelocityHorizontal(rawVelocity)
 end
 
 function telemetry_builder.running(data)
-    local commands = data.commands
-    local terms = data.terms
+    local result = data.result
+    local commands = result.commands
+    local terms = result.terms
     local position = data.position
+    local flight = data.flight
     local state = data.state
     local pose = state.body.pose
     local rawPosition = state.raw.position
@@ -78,6 +80,12 @@ function telemetry_builder.running(data)
             pitch = data.input.pitch,
             yaw = data.input.yaw,
             climb = data.input.climb,
+        },
+
+        modes = {
+            lateral = flight.mode.lateral,
+            vertical = flight.mode.vertical,
+            yaw = flight.mode.yaw,
         },
 
         position = {
@@ -130,7 +138,7 @@ function telemetry_builder.running(data)
 
         current = {
             height = rawPosition.y,
-            verticalSpeed = rawVelocity.y,
+            verticalSpeed = -terms.verticalSpeed.current,
             roll = pose.roll,
             pitch = pose.pitch,
             yaw = pose.yaw,

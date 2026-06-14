@@ -3,25 +3,13 @@ local config = require("config")
 
 local data_task = {}
 
-local BODY_AXIS = config.calibration.body_axis
-local RUNTIME_DATA = config.runtime.data
+local bodyAxis = config.calibration.body_axis
 
-local LINEAR_VELOCITY_DT = RUNTIME_DATA.linear_velocity_dt
-
-local function projectWorldHorizontalToBodyFrd(x, z, yaw)
+local function projectVelocityToBodyFrd(rawVelocity, frame)
     return {
-        right = math.cos(yaw) * x + math.sin(yaw) * z,
-        forward = math.sin(yaw) * x - math.cos(yaw) * z,
-    }
-end
-
-local function projectVelocityToBodyFrd(rawVelocity, yaw)
-    local horizontal = projectWorldHorizontalToBodyFrd(rawVelocity.x, rawVelocity.z, yaw)
-
-    return {
-        forward = horizontal.forward,
-        right = horizontal.right,
-        down = -rawVelocity.y,
+        forward = rawVelocity:dot(frame.forward),
+        right = rawVelocity:dot(frame.right),
+        down = rawVelocity:dot(frame.down),
     }
 end
 
@@ -37,9 +25,9 @@ local function buildFrame(rawPose)
     local q = rawPose.orientation:normalize()
 
     return {
-        forward = q:mul(BODY_AXIS.forward),
-        right = q:mul(BODY_AXIS.right),
-        down = q:mul(BODY_AXIS.down),
+        forward = q:mul(bodyAxis.forward),
+        right = q:mul(bodyAxis.right),
+        down = q:mul(bodyAxis.down),
     }
 end
 
@@ -85,7 +73,7 @@ local function readPose()
     }
 end
 
-local function readVelocity(yaw)
+local function readVelocity(frame)
     local rawVelocity = sublevel.getLinearVelocity()
 
     return {
@@ -93,7 +81,7 @@ local function readVelocity(yaw)
             velocity = rawVelocity,
         },
         body = {
-            velocity = projectVelocityToBodyFrd(rawVelocity, yaw),
+            velocity = projectVelocityToBodyFrd(rawVelocity, frame),
         },
         time = os.clock(),
     }
@@ -162,14 +150,18 @@ function data_task.run(shared)
     local function linearVelocityTask()
         waitForPose(shared)
 
+        while shared.running and latestFrame == nil do
+            sleep(0)
+        end
+
         while shared.running do
-            local velocity = readVelocity(shared.state.body.pose.yaw)
+            local velocity = readVelocity(latestFrame)
 
             shared.state.raw.velocity = velocity.raw.velocity
             shared.state.body.velocity = velocity.body.velocity
             shared.state.time.velocity = velocity.time
 
-            sleep(LINEAR_VELOCITY_DT)
+            sleep(config.runtime.data.linear_velocity_dt)
         end
     end
 

@@ -16,6 +16,23 @@ Required frame data should not use fallback defaults. If a required field is
 missing, let the code fail instead of silently substituting zero or an empty
 object.
 
+## Lua Naming
+
+Avoid local aliases for short config paths. Prefer reading `config.control`
+directly over introducing aliases such as:
+
+```lua
+local CONTROL = config.control
+```
+
+If a repeated expression is genuinely long enough to deserve a local name, use a
+normal runtime-value name such as `controlConfig`, not an all-caps name. All-caps
+names imply constants, and config tables or runtime references are not constants.
+
+Prefer structured objects over repeated name prefixes. If a value is already a
+coherent table such as `commands`, keep and pass that table instead of splitting
+it into fields such as `collective_cmd`, `roll_cmd`, `pitch_cmd`, and `yaw_cmd`.
+
 ## State Shape
 
 `data_task.lua` publishes one shared sensor state. The state separates raw

@@ -52,27 +52,26 @@ function rotor.new(hardware, calibration, mixerAxis)
         phase_offset_lower = calibration.phase_offset_lower,
         mixer_axis = mixerAxis,
         blade_mount = hardware.blade_mount,
-        collective_cmd = 0.0,
-        roll_cmd = 0.0,
-        yaw_cmd = 0.0,
-        pitch_cmd = 0.0,
+        commands = {
+            collective = 0.0,
+            roll = 0.0,
+            pitch = 0.0,
+            yaw = 0.0,
+        },
     }, Mixer)
 end
 
-function Mixer:set(collective, roll, yaw, pitch)
-    self.collective_cmd = collective
-    self.roll_cmd = roll
-    self.yaw_cmd = yaw
-    self.pitch_cmd = pitch
+function Mixer:setCommands(commands)
+    self.commands = commands
 end
 
 function Mixer:update()
     local upperPhase = getPhaseRad(self.upper)
     local lowerPhase = getPhaseRad(self.lower)
-    local collectiveCmd = self.mixer_axis.collective * self.collective_cmd
-    local rollCmd = self.mixer_axis.roll * self.roll_cmd
-    local pitchCmd = self.mixer_axis.pitch * self.pitch_cmd
-    local yawCmd = self.mixer_axis.yaw * self.yaw_cmd
+    local collectiveCmd = self.mixer_axis.collective * self.commands.collective
+    local rollCmd = self.mixer_axis.roll * self.commands.roll
+    local pitchCmd = self.mixer_axis.pitch * self.commands.pitch
+    local yawCmd = self.mixer_axis.yaw * self.commands.yaw
 
     local upperCollective = collectiveCmd + yawCmd
     local lowerCollective = collectiveCmd - yawCmd

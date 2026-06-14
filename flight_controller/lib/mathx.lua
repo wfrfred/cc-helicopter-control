@@ -1,11 +1,7 @@
 local mathx = {}
 
 function mathx.atan2(y, x)
-    if math.atan2 then
-        return math.atan2(y, x)
-    end
-
-    return math.atan(y, x)
+    return math.atan2(y, x)
 end
 
 function mathx.wrapPi(x)

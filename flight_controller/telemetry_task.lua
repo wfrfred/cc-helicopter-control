@@ -3,18 +3,15 @@ local config = require("config")
 
 local telemetry_task = {}
 
-local MODEM_SIDE = config.runtime.modem.control
-local BROADCAST_DT = config.runtime.telemetry.broadcast_dt
-
 function telemetry_task.run(shared)
-    rednet.open(MODEM_SIDE)
+    rednet.open(config.runtime.modem.control)
 
     while shared.running do
         if shared.telemetry then
             rednet.broadcast(shared.telemetry, protocol.CONTROL.TELEMETRY)
         end
 
-        sleep(BROADCAST_DT)
+        sleep(config.runtime.telemetry.broadcast_dt)
     end
 end
 

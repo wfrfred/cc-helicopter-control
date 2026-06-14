@@ -36,8 +36,10 @@ function telemetry_builder.running(data)
     local commands = data.commands
     local terms = data.terms
     local position = data.position
-    local rawPosition = data.rawPosition
-    local rawVelocity = data.rawVelocity
+    local pose = data.poseSnapshot.body.pose
+    local rawPosition = data.poseSnapshot.raw.position
+    local velocity = data.velocitySnapshot.body.velocity
+    local rawVelocity = data.velocitySnapshot.raw.velocity
     local yawAngleTerms
 
     if terms.yaw.angleActive then
@@ -52,7 +54,7 @@ function telemetry_builder.running(data)
         dt = data.dt,
 
         poseAge = data.poseAge,
-        yawRateAge = data.yawRateAge,
+        ratesAge = data.ratesAge,
         velocityAge = data.velocityAge,
 
         inputAge = data.inputAge,
@@ -116,9 +118,9 @@ function telemetry_builder.running(data)
         current = {
             height = rawPosition.y,
             verticalSpeed = rawVelocity.vertical,
-            roll = data.pose.roll,
-            pitch = data.pose.pitch,
-            yaw = data.pose.yaw,
+            roll = pose.roll,
+            pitch = pose.pitch,
+            yaw = pose.yaw,
             rollRate = terms.roll.rate,
             pitchRate = terms.pitch.rate,
             yawRate = terms.yaw.rate,
@@ -126,12 +128,12 @@ function telemetry_builder.running(data)
                 x = rawVelocity.x,
                 y = rawVelocity.y,
                 z = rawVelocity.z,
-                total = data.velocity.total,
-                horizontal = data.velocity.horizontal,
+                total = velocity.total,
+                horizontal = velocity.horizontal,
                 vertical = rawVelocity.vertical,
-                forward = data.velocity.forward,
-                right = data.velocity.right,
-                down = data.velocity.down,
+                forward = velocity.forward,
+                right = velocity.right,
+                down = velocity.down,
             },
         },
 

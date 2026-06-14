@@ -39,23 +39,18 @@ end
 
 local function waitForSensors(shared)
     while shared.running and (
-        shared.pose == nil or
-        shared.rollRateTime <= 0.0 or
-        shared.pitchRateTime <= 0.0 or
-        shared.yawRateTime <= 0.0 or
-        shared.velocity == nil or
-        shared.velocityTime <= 0.0
+        shared.poseSnapshot == nil or
+        shared.ratesSnapshot == nil or
+        shared.velocitySnapshot == nil
     ) do
         local now = os.clock()
         shared.telemetryTime = now
         shared.telemetry = {
             status = "waiting_sensors",
             time = now,
-            haveState = shared.pose ~= nil,
-            haveRollRate = shared.rollRateTime > 0.0,
-            havePitchRate = shared.pitchRateTime > 0.0,
-            haveYawRate = shared.yawRateTime > 0.0,
-            haveVelocity = shared.velocity ~= nil,
+            havePose = shared.poseSnapshot ~= nil,
+            haveRates = shared.ratesSnapshot ~= nil,
+            haveVelocity = shared.velocitySnapshot ~= nil,
         }
 
         sleep(0.1)
@@ -67,7 +62,7 @@ function control_task.run(shared)
 
     waitForSensors(shared)
 
-    local initial = shared.pose
+    local initial = shared.poseSnapshot.body.pose
 
     local targets = target_state.new(initial, CONTROL)
     local positionHold = position_hold.new(initial, CONTROL)
@@ -99,16 +94,16 @@ function control_task.run(shared)
         local input, inputAge, inputStale = readInput(shared, loopStart)
         targets:update(input, dt)
 
-        local pose = shared.pose
         local now = os.clock()
-        local poseTime = shared.poseTime
-        local poseAge = now - poseTime
-        local rollRate = shared.rollRate
-        local pitchRate = shared.pitchRate
-        local yawRate = shared.yawRate
-        local velocity = shared.velocity
-        local yawRateAge = now - shared.yawRateTime
-        local velocityAge = now - shared.velocityTime
+        local poseSnapshot = shared.poseSnapshot
+        local ratesSnapshot = shared.ratesSnapshot
+        local velocitySnapshot = shared.velocitySnapshot
+        local pose = poseSnapshot.body.pose
+        local rates = ratesSnapshot.body.rates
+        local velocity = velocitySnapshot.body.velocity
+        local poseAge = now - poseSnapshot.time
+        local ratesAge = now - ratesSnapshot.time
+        local velocityAge = now - velocitySnapshot.time
 
         local positionResult = positionHold:update(input, pose, velocity, dt)
         if positionResult.active then
@@ -117,14 +112,14 @@ function control_task.run(shared)
         end
 
         local heightResult = downLock:update(-input.climb, pose.down, velocity.down, dt)
-        local yawResult = yawLock:update(input.yaw, pose.yaw, yawRate, dt)
+        local yawResult = yawLock:update(input.yaw, pose.yaw, rates.yaw, dt)
 
         local result = controller:update({
             targets = targets,
             pose = pose,
-            rollRate = rollRate,
-            pitchRate = pitchRate,
-            yawRate = yawRate,
+            rollRate = rates.roll,
+            pitchRate = rates.pitch,
+            yawRate = rates.yaw,
             velocity = velocity,
             height = heightResult,
             yaw = yawResult,
@@ -146,11 +141,9 @@ function control_task.run(shared)
             shared.telemetryTime = now
             shared.telemetry = telemetry_builder.running({
                 shared = shared,
-                pose = pose,
-                rawPosition = shared.rawPosition,
+                poseSnapshot = poseSnapshot,
                 input = input,
-                velocity = velocity,
-                rawVelocity = shared.rawVelocity,
+                velocitySnapshot = velocitySnapshot,
                 rotorOutput = rotorOutput,
                 controllers = controller:pidControllers(),
                 positionControllers = positionHold:pidControllers(),
@@ -161,7 +154,7 @@ function control_task.run(shared)
                 time = now,
                 dt = dt,
                 poseAge = poseAge,
-                yawRateAge = yawRateAge,
+                ratesAge = ratesAge,
                 velocityAge = velocityAge,
                 inputAge = inputAge,
                 inputStale = inputStale,

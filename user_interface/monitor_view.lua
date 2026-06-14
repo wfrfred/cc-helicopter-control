@@ -561,8 +561,8 @@ local function drawNonRunning(mon, shared, telemetry)
     draw.writeAt(mon, 1, 3, "status " .. telemetry.status, colors.black, colors.orange, w)
 
     if telemetry.status == "waiting_sensors" then
-        draw.writeAt(mon, 1, 5, "pose      " .. tostring(telemetry.haveState), colors.white, colors.black, w)
-        draw.writeAt(mon, 1, 6, "yaw rate  " .. tostring(telemetry.haveYawRate), colors.white, colors.black, w)
+        draw.writeAt(mon, 1, 5, "pose      " .. tostring(telemetry.havePose), colors.white, colors.black, w)
+        draw.writeAt(mon, 1, 6, "rates     " .. tostring(telemetry.haveRates), colors.white, colors.black, w)
         draw.writeAt(mon, 1, 7, "velocity  " .. tostring(telemetry.haveVelocity), colors.white, colors.black, w)
     end
 

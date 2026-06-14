@@ -498,7 +498,8 @@ velocity cruise command active:
 
 caps lock pressed:
     current horizontal velocity is captured in yaw-level FRD
-    lateral mode becomes cruise unless manual roll/pitch input is active
+    lateral mode becomes cruise
+    if roll/pitch is already active, that held input is ignored until it returns to center
 
 manual roll/pitch input while cruising:
     cruise velocity target is cleared

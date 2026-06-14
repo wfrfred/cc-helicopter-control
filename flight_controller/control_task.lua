@@ -85,6 +85,7 @@ local function makeLateralMachine(initialState)
         mode = lateralMode.positionHold,
         positionTarget = navigation.makePositionTarget(initialState),
         cruiseVelocity = nil,
+        cruiseManualReleasePending = false,
         navigationTarget = nil,
     }
 end
@@ -107,28 +108,41 @@ local function selectLateralMode(machine, input)
         return lateralMode.navigation
     end
 
-    if manualLateralInput(input) then
-        return lateralMode.manual
-    end
-
     if machine.cruiseVelocity ~= nil then
         return lateralMode.cruise
+    end
+
+    if manualLateralInput(input) then
+        return lateralMode.manual
     end
 
     return lateralMode.positionHold
 end
 
 local function updateCruiseTarget(machine, context)
-    if manualLateralInput(context.input) then
-        machine.cruiseVelocity = nil
+    local manualInput = manualLateralInput(context.input)
+
+    if context.input.event.cruiseLock then
+        machine.cruiseVelocity = navigation.projectHorizontalVelocityToBodyFrd(context.state)
+        machine.cruiseManualReleasePending = manualInput
+        context.positionHold:reset()
         context.input.event.cruiseLock = false
         return
     end
 
-    if context.input.event.cruiseLock then
-        machine.cruiseVelocity = navigation.projectHorizontalVelocityToBodyFrd(context.state)
-        context.positionHold:reset()
-        context.input.event.cruiseLock = false
+    if machine.cruiseVelocity == nil then
+        return
+    end
+
+    if machine.cruiseManualReleasePending then
+        if not manualInput then
+            machine.cruiseManualReleasePending = false
+        end
+        return
+    end
+
+    if manualInput then
+        machine.cruiseVelocity = nil
     end
 end
 

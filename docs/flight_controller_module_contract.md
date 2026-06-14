@@ -72,6 +72,9 @@ shared.input = {
     pitch = 0.0,  -- pilot pitch input, normalized
     yaw = 0.0,    -- pilot yaw input, normalized
     climb = 0.0,  -- pilot vertical input, normalized
+    event = {
+        cruiseLock = false, -- latched request to lock current horizontal velocity
+    },
     seq = nil,
     time = 0.0,
 }
@@ -210,6 +213,7 @@ shared.telemetry = {
 
     input = {
         controls = { roll = ..., pitch = ..., yaw = ..., climb = ... },
+        event = { cruiseLock = ... },
         age = ...,
         stale = ...,
         sender = ...,
@@ -395,6 +399,9 @@ shared.input = {
     pitch,
     yaw,
     climb,
+    event = {
+        cruiseLock,
+    },
     seq,
     time,
 }
@@ -488,6 +495,14 @@ manual roll/pitch input active:
 velocity cruise command active:
     lateral mode becomes cruise
     cruise velocity is tracked in yaw-level FRD
+
+caps lock pressed:
+    current horizontal velocity is captured in yaw-level FRD
+    lateral mode becomes cruise unless manual roll/pitch input is active
+
+manual roll/pitch input while cruising:
+    cruise velocity target is cleared
+    lateral mode becomes manual
 
 roll/pitch released and position hold enabled:
     lateral mode becomes position hold

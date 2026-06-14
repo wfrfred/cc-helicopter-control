@@ -22,6 +22,9 @@ local zeroInput = {
     pitch = 0.0,
     yaw = 0.0,
     climb = 0.0,
+    event = {
+        cruiseLock = false,
+    },
 }
 
 local function readInput(shared, now)
@@ -115,6 +118,20 @@ local function selectLateralMode(machine, input)
     return lateralMode.positionHold
 end
 
+local function updateCruiseTarget(machine, context)
+    if manualLateralInput(context.input) then
+        machine.cruiseVelocity = nil
+        context.input.event.cruiseLock = false
+        return
+    end
+
+    if context.input.event.cruiseLock then
+        machine.cruiseVelocity = navigation.projectHorizontalVelocityToBodyFrd(context.state)
+        context.positionHold:reset()
+        context.input.event.cruiseLock = false
+    end
+end
+
 local function manualLateral(machine, context)
     return position_hold.inactive(), {
         roll = context.manualAttitude.roll,
@@ -185,6 +202,8 @@ local lateralHandlers = {
 }
 
 local function updateLateral(machine, context)
+    updateCruiseTarget(machine, context)
+
     enterLateralMode(
         machine,
         selectLateralMode(machine, context.input),
@@ -239,6 +258,10 @@ function control_task.run(shared)
         lastLoopTime = loopStart
 
         local input, inputAge, inputStale = readInput(shared, loopStart)
+        local inputEvent = {
+            cruiseLock = input.event.cruiseLock,
+        }
+
         manualAttitude:update(input, dt)
 
         local now = os.clock()
@@ -330,6 +353,9 @@ function control_task.run(shared)
                         pitch = input.pitch,
                         yaw = input.yaw,
                         climb = input.climb,
+                    },
+                    event = {
+                        cruiseLock = inputEvent.cruiseLock,
                     },
                     age = inputAge,
                     stale = inputStale,

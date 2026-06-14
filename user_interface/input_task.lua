@@ -13,6 +13,9 @@ local function defaultInput()
         pitch = 0.0,
         yaw = 0.0,
         climb = 0.0,
+        event = {
+            cruiseLock = false,
+        },
     }
 end
 
@@ -40,6 +43,7 @@ function input_task.run(shared)
             pitch = ctl.pitch,
             yaw = ctl.yaw,
             climb = ctl.climb,
+            event = ctl.event,
             seq = shared.inputSeq,
             time = now,
         }, protocol.CONTROL.INPUT)

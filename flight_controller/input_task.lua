@@ -9,6 +9,9 @@ local function defaultInput()
         pitch = 0.0,
         yaw = 0.0,
         climb = 0.0,
+        event = {
+            cruiseLock = false,
+        },
     }
 end
 
@@ -28,6 +31,11 @@ local function normalize(msg)
         pitch = axis(msg.pitch),
         yaw = axis(msg.yaw),
         climb = axis(msg.climb),
+        event = {
+            cruiseLock = msg.event.cruiseLock == true,
+        },
+        seq = msg.seq,
+        time = msg.time,
     }
 end
 
@@ -42,7 +50,13 @@ function input_task.run(shared)
         local sender, msg = rednet.receive(protocol.CONTROL.INPUT, config.runtime.input.receive_timeout)
 
         if sender then
-            shared.input = normalize(msg)
+            local input = normalize(msg)
+
+            if shared.input.event.cruiseLock then
+                input.event.cruiseLock = true
+            end
+
+            shared.input = input
             shared.inputTime = os.clock()
             shared.inputSender = sender
         end

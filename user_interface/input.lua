@@ -10,11 +10,14 @@ local KEY_E = 69
 local KEY_Q = 81
 local KEY_S = 83
 local KEY_W = 87
+local KEY_CAPS_LOCK = 280
 local KEY_LEFT_SHIFT = 340
 local KEY_RIGHT_SHIFT = 344
 
 local tw = peripheral.find(TYPEWRITER_NAME)
 assert(tw, TYPEWRITER_NAME .. " not found")
+
+local previousCapsLock = false
 
 local function boolToAxis(pos, neg)
     if pos and not neg then
@@ -57,12 +60,19 @@ function input.read()
     local e = key[KEY_E]
     local space = key[KEY_SPACE]
     local shift = key[KEY_LEFT_SHIFT] or key[KEY_RIGHT_SHIFT]
+    local capsLock = key[KEY_CAPS_LOCK] == true
+    local cruiseLock = capsLock and not previousCapsLock
+
+    previousCapsLock = capsLock
 
     return {
         pitch = boolToAxis(w, s),
         yaw = boolToAxis(d, a),
         roll = boolToAxis(e, q),
         climb = boolToAxis(space, shift),
+        event = {
+            cruiseLock = cruiseLock,
+        },
     }
 end
 

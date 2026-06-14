@@ -60,6 +60,8 @@ function telemetry_builder.running(data)
             collectiveUncompensated = terms.verticalSpeed.uncompensatedOut,
             roll = commands.roll,
             pitch = commands.pitch,
+            pitchFeedforward = terms.pitch.feedforward,
+            pitchFeedback = terms.pitch.feedback,
             yaw = commands.yaw,
             yawFeedforward = terms.yaw.rateFeedforward,
             yawFeedback = terms.yaw.rateFeedback,

@@ -20,6 +20,7 @@ function controller.new(control)
         verticalSpeedFeedforwardBias = control.vertical_speed_feedforward_bias,
         tiltCompensationMinFactor = control.tilt_compensation_min_factor or 0.5,
         yawRateFeedforwardGain = control.yaw_rate_feedforward_gain or 0.0,
+        pitchFeedforwardBias = control.pitch_feedforward_bias or 0.0,
 
         height = pid.new(control.pid.height),
         verticalSpeed = pid.new(control.pid.vertical_speed),
@@ -66,7 +67,9 @@ function Controller:update(input)
     local rollCmd = self.roll:update(rollErr, 0.0, dt, -rollRate)
 
     local pitchErr = mathx.wrapPi(targets.pitch - pose.pitch)
-    local pitchCmd = self.pitch:update(pitchErr, 0.0, dt, -pitchRate)
+    local pitchFeedback = self.pitch:update(pitchErr, 0.0, dt, -pitchRate)
+    local pitchFeedforward = self.pitchFeedforwardBias
+    local pitchCmd = pitchFeedforward + pitchFeedback
 
     local targetYawRate = yawResult.commandedRate
     local yawErr = yawResult.error
@@ -131,6 +134,8 @@ function Controller:update(input)
                 current = pose.pitch,
                 err = pitchErr,
                 rate = pitchRate,
+                feedforward = pitchFeedforward,
+                feedback = pitchFeedback,
                 out = pitchCmd,
             },
 

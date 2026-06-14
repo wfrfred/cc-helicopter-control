@@ -70,6 +70,7 @@ config.control = {
     vertical_speed_feedforward_bias = 1.0,
     tilt_compensation_min_factor = 0.5,
     yaw_rate_feedforward_gain = 1.3 / math.rad(45),
+    pitch_feedforward_bias = 0.3,
 
     home_roll = 0.0,
     home_pitch = 0.0,

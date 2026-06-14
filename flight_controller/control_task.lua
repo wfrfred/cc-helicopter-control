@@ -67,8 +67,8 @@ function control_task.run(shared)
 
     local targets = target_state.new(initial, CONTROL)
     local positionHold = position_hold.new(initial, CONTROL)
-    local heightLock = rate_lock.new({
-        initial_target = initial.pos.y,
+    local downLock = rate_lock.new({
+        initial_target = initial.down,
         target_rate = CONTROL.height_target_rate,
         rate_deadband = CONTROL.height_lock_speed_deadband,
         relock_timeout = CONTROL.height_lock_relock_timeout,
@@ -112,7 +112,7 @@ function control_task.run(shared)
             targets.pitch = positionResult.pitch
         end
 
-        local heightResult = heightLock:update(input.climb, pose.pos.y, velocity.vertical, dt)
+        local heightResult = downLock:update(-input.climb, pose.down, velocity.down, dt)
         local yawResult = yawLock:update(input.yaw, pose.yaw, yawRate, dt)
 
         local result = controller:update({
@@ -140,8 +140,10 @@ function control_task.run(shared)
             shared.telemetry = telemetry_builder.running({
                 shared = shared,
                 pose = pose,
+                rawPosition = shared.rawPosition,
                 input = input,
                 velocity = velocity,
+                rawVelocity = shared.rawVelocity,
                 rotorOutput = rotorOutput,
                 controllers = controller:pidControllers(),
                 positionControllers = positionHold:pidControllers(),

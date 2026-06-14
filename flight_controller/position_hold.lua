@@ -12,13 +12,6 @@ local function resetAll(controllers)
     end
 end
 
-local function worldToBody(x, z, yaw)
-    return {
-        right = math.cos(yaw) * x + math.sin(yaw) * z,
-        forward = math.sin(yaw) * x - math.cos(yaw) * z,
-    }
-end
-
 function position_hold.new(initial, control)
     local controllers = {
         positionRight = pid.new(control.pid.position_right),
@@ -29,8 +22,7 @@ function position_hold.new(initial, control)
 
     return setmetatable({
         control = control,
-        targetX = initial.pos.x,
-        targetZ = initial.pos.z,
+        target = initial:captureNavigationPoint(),
         active = false,
         velocityRightFeedforwardGain = control.position_hold_velocity_right_feedforward_gain,
         velocityForwardFeedforwardGain = control.position_hold_velocity_forward_feedforward_gain,
@@ -42,15 +34,16 @@ function Hold:update(input, pose, velocity, dt)
     local manual = input.roll ~= 0 or input.pitch ~= 0
 
     if manual then
-        self.targetX = pose.pos.x
-        self.targetZ = pose.pos.z
+        self.target = pose:captureNavigationPoint()
         self.active = false
         resetAll(self.controllers)
 
         return {
             active = false,
-            targetX = self.targetX,
-            targetZ = self.targetZ,
+            targetRight = 0.0,
+            targetForward = 0.0,
+            currentPositionRight = 0.0,
+            currentPositionForward = 0.0,
             errorRight = 0.0,
             errorForward = 0.0,
             targetVelocityRight = 0.0,
@@ -69,17 +62,15 @@ function Hold:update(input, pose, velocity, dt)
     end
 
     if not self.active then
-        self.targetX = pose.pos.x
-        self.targetZ = pose.pos.z
+        self.target = pose:captureNavigationPoint()
         self.active = true
     end
 
-    local bodyPositionError = worldToBody(
-        self.targetX - pose.pos.x,
-        self.targetZ - pose.pos.z,
-        pose.yaw
-    )
-    local bodyVelocity = worldToBody(velocity.x, velocity.z, pose.yaw)
+    local bodyPositionError = pose:frdErrorToNavigationPoint(self.target)
+    local bodyVelocity = {
+        right = velocity.right or 0.0,
+        forward = velocity.forward or 0.0,
+    }
 
     local targetVelocityRight, errorRight = self.controllers.positionRight:update(
         bodyPositionError.right,
@@ -103,8 +94,10 @@ function Hold:update(input, pose, velocity, dt)
 
     return {
         active = true,
-        targetX = self.targetX,
-        targetZ = self.targetZ,
+        targetRight = 0.0,
+        targetForward = 0.0,
+        currentPositionRight = -bodyPositionError.right,
+        currentPositionForward = -bodyPositionError.forward,
         errorRight = errorRight,
         errorForward = errorForward,
         targetVelocityRight = targetVelocityRight,

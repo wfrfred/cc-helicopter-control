@@ -347,17 +347,17 @@ local function drawPositionMap(mon, x, y, width, height, target, current)
     end
 
     if width < 12 or height < 3 then
-        drawAxisBar(mon, x, y, width, "X", current.x - target.x, 10.0)
+        drawAxisBar(mon, x, y, width, "R", current.right - target.right, 10.0)
         if height >= 2 then
-            drawAxisBar(mon, x, y + 1, width, "Z", current.z - target.z, 10.0)
+            drawAxisBar(mon, x, y + 1, width, "F", current.forward - target.forward, 10.0)
         end
         return
     end
 
     local centerX = x + math.floor(width / 2)
     local centerY = y + math.floor(height / 2)
-    local markX = centerX + scaledOffset(current.x - target.x, 10.0, math.floor((width - 3) / 2))
-    local markY = centerY - scaledOffset(current.z - target.z, 10.0, math.floor((height - 1) / 2))
+    local markX = centerX + scaledOffset(current.right - target.right, 10.0, math.floor((width - 3) / 2))
+    local markY = centerY - scaledOffset(current.forward - target.forward, 10.0, math.floor((height - 1) / 2))
 
     for row = 0, height - 1 do
         local lineY = y + row
@@ -455,9 +455,9 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     end
 
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
-    local currentPosition = expectTable(telemetry.position, "telemetry.position")
     local pidData = expectTable(telemetry.pid, "telemetry.pid")
     local target = expectTable(positionHold.target, "telemetry.positionHold.target")
+    local currentPosition = expectTable(positionHold.current, "telemetry.positionHold.current")
     local targetVelocity = expectTable(positionHold.targetVelocity, "telemetry.positionHold.targetVelocity")
     local currentVelocity = expectTable(positionHold.currentVelocity, "telemetry.positionHold.currentVelocity")
     local err = expectTable(positionHold.error, "telemetry.positionHold.error")

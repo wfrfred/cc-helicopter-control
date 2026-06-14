@@ -36,32 +36,35 @@ function Controller:update(input)
     local pose = input.pose
     local velocity = input.velocity
     local heightResult = input.height
+    local down = pose.down
+    local downSpeed = velocity.down or 0.0
     local rollRate = input.rollRate or 0.0
     local pitchRate = input.pitchRate or 0.0
     local yawRate = input.yawRate or 0.0
     local yawResult = input.yaw
     local dt = input.dt
 
-    local targetVerticalSpeed = heightResult.commandedRate
+    local targetDownSpeed = heightResult.commandedRate
     local heightErr = heightResult.error
 
     if heightResult.active then
-        targetVerticalSpeed, heightErr = self.height:update(heightResult.target, pose.pos.y, dt, -velocity.vertical)
+        targetDownSpeed, heightErr = self.height:update(heightResult.target, down, dt, -downSpeed)
     else
         self.height:reset()
     end
 
-    local verticalSpeedFeedback, verticalSpeedErr = self.verticalSpeed:update(targetVerticalSpeed, velocity.vertical, dt)
-    local verticalSpeedFeedforward = self.verticalSpeedFeedforwardGain * targetVerticalSpeed
-        + self.verticalSpeedFeedforwardBias
-    local verticalSpeedOut = verticalSpeedFeedforward + verticalSpeedFeedback
+    local downSpeedFeedback, downSpeedErr = self.verticalSpeed:update(targetDownSpeed, downSpeed, dt)
+    local downSpeedFeedforward = self.verticalSpeedFeedforwardGain * targetDownSpeed
+    local collectiveFeedforward = self.verticalSpeedFeedforwardBias - downSpeedFeedforward
+    local collectiveFeedback = -downSpeedFeedback
+    local collectiveOut = collectiveFeedforward + collectiveFeedback
     local tiltVerticalFactor = attitudeVerticalFactor(
         pose.roll,
         pose.pitch,
         self.tiltCompensationMinFactor
     )
     local tiltCompensation = 1.0 / tiltVerticalFactor
-    local tiltCompensatedVerticalSpeedOut = verticalSpeedOut * tiltCompensation
+    local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
     local rollCmd = self.roll:update(rollErr, 0.0, dt, -rollRate)
@@ -86,7 +89,7 @@ function Controller:update(input)
     local yawCmd = yawRateFeedforward + yawRateFeedback
 
     local collective = mathx.clamp(
-        tiltCompensatedVerticalSpeedOut,
+        tiltCompensatedCollectiveOut,
         self.collectiveMin,
         self.collectiveMax
     )
@@ -102,23 +105,25 @@ function Controller:update(input)
         terms = {
             height = {
                 target = heightResult.target,
-                current = pose.pos.y,
+                current = down,
                 err = heightErr,
-                out = targetVerticalSpeed,
+                out = targetDownSpeed,
                 lockActive = heightResult.active,
                 lockPending = heightResult.pending,
             },
 
             verticalSpeed = {
-                target = targetVerticalSpeed,
-                current = velocity.vertical,
-                err = verticalSpeedErr,
-                feedforward = verticalSpeedFeedforward,
-                feedback = verticalSpeedFeedback,
+                target = targetDownSpeed,
+                current = downSpeed,
+                err = downSpeedErr,
+                feedforward = collectiveFeedforward,
+                feedback = collectiveFeedback,
+                controlFeedforward = downSpeedFeedforward,
+                controlFeedback = downSpeedFeedback,
                 tiltCompensation = tiltCompensation,
                 tiltVerticalFactor = tiltVerticalFactor,
-                uncompensatedOut = verticalSpeedOut,
-                out = tiltCompensatedVerticalSpeedOut,
+                uncompensatedOut = collectiveOut,
+                out = tiltCompensatedCollectiveOut,
             },
 
             roll = {

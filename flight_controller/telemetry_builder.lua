@@ -11,6 +11,17 @@ local function pidTerms(controller)
     }
 end
 
+local function negatedPidTerms(controller)
+    local t = controller:terms()
+    return {
+        p = -t.p,
+        i = -t.i,
+        d = -t.d,
+        raw = -t.raw,
+        output = -t.output,
+    }
+end
+
 local function zeroPidTerms()
     return {
         p = 0.0,
@@ -25,6 +36,8 @@ function telemetry_builder.running(data)
     local commands = data.commands
     local terms = data.terms
     local position = data.position
+    local rawPosition = data.rawPosition or {}
+    local rawVelocity = data.rawVelocity or {}
 
     return {
         status = "running",
@@ -46,9 +59,9 @@ function telemetry_builder.running(data)
         },
 
         position = {
-            x = data.pose.pos.x,
-            y = data.pose.pos.y,
-            z = data.pose.pos.z,
+            x = rawPosition.x or 0.0,
+            y = rawPosition.y or 0.0,
+            z = rawPosition.z or 0.0,
         },
 
         output = {
@@ -72,8 +85,8 @@ function telemetry_builder.running(data)
         },
 
         pid = {
-            height = pidTerms(data.controllers.height),
-            verticalSpeed = pidTerms(data.controllers.verticalSpeed),
+            height = negatedPidTerms(data.controllers.height),
+            verticalSpeed = negatedPidTerms(data.controllers.verticalSpeed),
             positionRight = pidTerms(data.positionControllers.positionRight),
             positionForward = pidTerms(data.positionControllers.positionForward),
             velocityRight = pidTerms(data.positionControllers.velocityRight),
@@ -85,8 +98,8 @@ function telemetry_builder.running(data)
         },
 
         target = {
-            height = terms.height.target,
-            verticalSpeed = terms.verticalSpeed.target,
+            height = -terms.height.target,
+            verticalSpeed = -terms.verticalSpeed.target,
             roll = terms.roll.target,
             pitch = terms.pitch.target,
             yaw = terms.yaw.target,
@@ -94,8 +107,8 @@ function telemetry_builder.running(data)
         },
 
         current = {
-            height = data.pose.pos.y,
-            verticalSpeed = terms.verticalSpeed.current,
+            height = rawPosition.y or -terms.height.current,
+            verticalSpeed = rawVelocity.vertical or -terms.verticalSpeed.current,
             roll = data.pose.roll,
             pitch = data.pose.pitch,
             yaw = data.pose.yaw,
@@ -103,18 +116,21 @@ function telemetry_builder.running(data)
             pitchRate = terms.pitch.rate,
             yawRate = terms.yaw.rate,
             velocity = {
-                x = data.velocity.x,
-                y = data.velocity.y,
-                z = data.velocity.z,
+                x = rawVelocity.x or 0.0,
+                y = rawVelocity.y or 0.0,
+                z = rawVelocity.z or 0.0,
                 total = data.velocity.total,
                 horizontal = data.velocity.horizontal,
-                vertical = data.velocity.vertical,
+                vertical = rawVelocity.vertical or -data.velocity.down,
+                forward = data.velocity.forward,
+                right = data.velocity.right,
+                down = data.velocity.down,
             },
         },
 
         error = {
-            height = terms.height.err,
-            verticalSpeed = terms.verticalSpeed.err,
+            height = -terms.height.err,
+            verticalSpeed = -terms.verticalSpeed.err,
             roll = terms.roll.err,
             pitch = terms.pitch.err,
             yaw = terms.yaw.err,
@@ -131,8 +147,12 @@ function telemetry_builder.running(data)
         positionHold = {
             active = position.active,
             target = {
-                x = position.targetX,
-                z = position.targetZ,
+                right = position.targetRight,
+                forward = position.targetForward,
+            },
+            current = {
+                right = position.currentPositionRight,
+                forward = position.currentPositionForward,
             },
             targetVelocity = {
                 right = position.targetVelocityRight,

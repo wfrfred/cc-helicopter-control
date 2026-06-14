@@ -39,6 +39,12 @@ config.hardware = {
 }
 
 config.calibration = {
+    body_axis = {
+        forward = { x = 0, y = 0, z = 1 },
+        right = { x = 1, y = 0, z = 0 },
+        down = { x = 0, y = -1, z = 0 },
+    },
+
     sensor_axis = {
         roll = -1,
         pitch = 1,
@@ -161,9 +167,9 @@ config.control = {
         },
 
         roll = {
-            kp = 8.0,
-            ki = 4.0,
-            kd = 1.0,
+            kp = 6.0,
+            ki = 0.0,
+            kd = 0.5,
             i_min = -2.0,
             i_max = 2.0,
             out_min = -8.0,
@@ -172,9 +178,9 @@ config.control = {
         },
 
         pitch = {
-            kp = 10.0,
-            ki = 2.0,
-            kd = 2.5,
+            kp = 6.0,
+            ki = 0.0,
+            kd = 0.5,
             i_min = -1.5,
             i_max = 1.5,
             out_min = -12.0,

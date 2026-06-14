@@ -36,8 +36,15 @@ function telemetry_builder.running(data)
     local commands = data.commands
     local terms = data.terms
     local position = data.position
-    local rawPosition = data.rawPosition or {}
-    local rawVelocity = data.rawVelocity or {}
+    local rawPosition = data.rawPosition
+    local rawVelocity = data.rawVelocity
+    local yawAngleTerms
+
+    if terms.yaw.angleActive then
+        yawAngleTerms = pidTerms(data.controllers.yawAngle)
+    else
+        yawAngleTerms = zeroPidTerms()
+    end
 
     return {
         status = "running",
@@ -59,9 +66,9 @@ function telemetry_builder.running(data)
         },
 
         position = {
-            x = rawPosition.x or 0.0,
-            y = rawPosition.y or 0.0,
-            z = rawPosition.z or 0.0,
+            x = rawPosition.x,
+            y = rawPosition.y,
+            z = rawPosition.z,
         },
 
         output = {
@@ -93,7 +100,7 @@ function telemetry_builder.running(data)
             velocityForward = pidTerms(data.positionControllers.velocityForward),
             roll = pidTerms(data.controllers.roll),
             pitch = pidTerms(data.controllers.pitch),
-            yawAngle = terms.yaw.angleActive and pidTerms(data.controllers.yawAngle) or zeroPidTerms(),
+            yawAngle = yawAngleTerms,
             yawRate = pidTerms(data.controllers.yawRate),
         },
 
@@ -107,8 +114,8 @@ function telemetry_builder.running(data)
         },
 
         current = {
-            height = rawPosition.y or -terms.height.current,
-            verticalSpeed = rawVelocity.vertical or -terms.verticalSpeed.current,
+            height = rawPosition.y,
+            verticalSpeed = rawVelocity.vertical,
             roll = data.pose.roll,
             pitch = data.pose.pitch,
             yaw = data.pose.yaw,
@@ -116,12 +123,12 @@ function telemetry_builder.running(data)
             pitchRate = terms.pitch.rate,
             yawRate = terms.yaw.rate,
             velocity = {
-                x = rawVelocity.x or 0.0,
-                y = rawVelocity.y or 0.0,
-                z = rawVelocity.z or 0.0,
+                x = rawVelocity.x,
+                y = rawVelocity.y,
+                z = rawVelocity.z,
                 total = data.velocity.total,
                 horizontal = data.velocity.horizontal,
-                vertical = rawVelocity.vertical or -data.velocity.down,
+                vertical = rawVelocity.vertical,
                 forward = data.velocity.forward,
                 right = data.velocity.right,
                 down = data.velocity.down,

@@ -67,28 +67,24 @@ function Hold:update(input, pose, velocity, dt)
     end
 
     local bodyPositionError = pose:frdErrorToNavigationPoint(self.target)
-    local bodyVelocity = {
-        right = velocity.right or 0.0,
-        forward = velocity.forward or 0.0,
-    }
 
     local targetVelocityRight, errorRight = self.controllers.positionRight:update(
         bodyPositionError.right,
         0.0,
         dt,
-        -bodyVelocity.right
+        -velocity.right
     )
     local targetVelocityForward, errorForward = self.controllers.positionForward:update(
         bodyPositionError.forward,
         0.0,
         dt,
-        -bodyVelocity.forward
+        -velocity.forward
     )
 
     local feedforwardRight = self.velocityRightFeedforwardGain * targetVelocityRight
     local feedforwardForward = self.velocityForwardFeedforwardGain * targetVelocityForward
-    local feedbackRight = self.controllers.velocityRight:update(targetVelocityRight, bodyVelocity.right, dt)
-    local feedbackForward = self.controllers.velocityForward:update(targetVelocityForward, bodyVelocity.forward, dt)
+    local feedbackRight = self.controllers.velocityRight:update(targetVelocityRight, velocity.right, dt)
+    local feedbackForward = self.controllers.velocityForward:update(targetVelocityForward, velocity.forward, dt)
     local outputRight = feedforwardRight + feedbackRight
     local outputForward = feedforwardForward + feedbackForward
 
@@ -102,8 +98,8 @@ function Hold:update(input, pose, velocity, dt)
         errorForward = errorForward,
         targetVelocityRight = targetVelocityRight,
         targetVelocityForward = targetVelocityForward,
-        currentVelocityRight = bodyVelocity.right,
-        currentVelocityForward = bodyVelocity.forward,
+        currentVelocityRight = velocity.right,
+        currentVelocityForward = velocity.forward,
         feedforwardRight = feedforwardRight,
         feedforwardForward = feedforwardForward,
         feedbackRight = feedbackRight,

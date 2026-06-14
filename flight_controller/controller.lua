@@ -18,9 +18,9 @@ function controller.new(control)
         collectiveMax = control.collective_max,
         verticalSpeedFeedforwardGain = control.vertical_speed_feedforward_gain,
         verticalSpeedFeedforwardBias = control.vertical_speed_feedforward_bias,
-        tiltCompensationMinFactor = control.tilt_compensation_min_factor or 0.5,
-        yawRateFeedforwardGain = control.yaw_rate_feedforward_gain or 0.0,
-        pitchFeedforwardBias = control.pitch_feedforward_bias or 0.0,
+        tiltCompensationMinFactor = control.tilt_compensation_min_factor,
+        yawRateFeedforwardGain = control.yaw_rate_feedforward_gain,
+        pitchFeedforwardBias = control.pitch_feedforward_bias,
 
         height = pid.new(control.pid.height),
         verticalSpeed = pid.new(control.pid.vertical_speed),
@@ -36,11 +36,10 @@ function Controller:update(input)
     local pose = input.pose
     local velocity = input.velocity
     local heightResult = input.height
-    local down = pose.down
-    local downSpeed = velocity.down or 0.0
-    local rollRate = input.rollRate or 0.0
-    local pitchRate = input.pitchRate or 0.0
-    local yawRate = input.yawRate or 0.0
+    local downSpeed = velocity.down
+    local rollRate = input.rollRate
+    local pitchRate = input.pitchRate
+    local yawRate = input.yawRate
     local yawResult = input.yaw
     local dt = input.dt
 
@@ -48,7 +47,7 @@ function Controller:update(input)
     local heightErr = heightResult.error
 
     if heightResult.active then
-        targetDownSpeed, heightErr = self.height:update(heightResult.target, down, dt, -downSpeed)
+        targetDownSpeed, heightErr = self.height:update(heightResult.target, pose.down, dt, -downSpeed)
     else
         self.height:reset()
     end
@@ -105,7 +104,7 @@ function Controller:update(input)
         terms = {
             height = {
                 target = heightResult.target,
-                current = down,
+                current = pose.down,
                 err = heightErr,
                 out = targetDownSpeed,
                 lockActive = heightResult.active,

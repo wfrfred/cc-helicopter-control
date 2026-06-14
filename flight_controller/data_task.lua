@@ -3,18 +3,14 @@ local config = require("config")
 
 local data_task = {}
 
-local BODY_AXIS = config.calibration.body_axis or {
-    forward = { x = 0, y = 0, z = 1 },
-    right = { x = 1, y = 0, z = 0 },
-    down = { x = 0, y = -1, z = 0 },
-}
+local BODY_AXIS = config.calibration.body_axis
 local SENSOR_AXIS = config.calibration.sensor_axis
 local RUNTIME_DATA = config.runtime.data
 
 local LINEAR_VELOCITY_DT = RUNTIME_DATA.linear_velocity_dt
 
 local function axisVector(axis)
-    return vector.new(axis.x or 0.0, axis.y or 0.0, axis.z or 0.0)
+    return vector.new(axis.x, axis.y, axis.z)
 end
 
 local BODY_FORWARD = axisVector(BODY_AXIS.forward)
@@ -148,21 +144,21 @@ function data_task.run(shared)
     local function angularVelocityTask()
         waitForPose(shared)
 
+        while shared.running and latestBasis == nil do
+            sleep(0)
+        end
+
         while shared.running do
-            local basis = latestBasis
+            local angularVelocity = sublevel.getAngularVelocity()
+            local rates = angularRatesFromVector(angularVelocity, latestBasis)
+            local now = os.clock()
 
-            if basis ~= nil then
-                local angularVelocity = sublevel.getAngularVelocity()
-                local rates = angularRatesFromVector(angularVelocity, basis)
-                local now = os.clock()
-
-                shared.rollRate = rates.roll
-                shared.pitchRate = rates.pitch
-                shared.yawRate = rates.yaw
-                shared.rollRateTime = now
-                shared.pitchRateTime = now
-                shared.yawRateTime = now
-            end
+            shared.rollRate = rates.roll
+            shared.pitchRate = rates.pitch
+            shared.yawRate = rates.yaw
+            shared.rollRateTime = now
+            shared.pitchRateTime = now
+            shared.yawRateTime = now
 
             sleep(0)
         end

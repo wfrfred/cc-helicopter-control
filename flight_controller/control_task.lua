@@ -40,6 +40,8 @@ end
 local function waitForSensors(shared)
     while shared.running and (
         shared.pose == nil or
+        shared.rollRateTime <= 0.0 or
+        shared.pitchRateTime <= 0.0 or
         shared.yawRateTime <= 0.0 or
         shared.velocity == nil or
         shared.velocityTime <= 0.0
@@ -50,6 +52,8 @@ local function waitForSensors(shared)
             status = "waiting_sensors",
             time = now,
             haveState = shared.pose ~= nil,
+            haveRollRate = shared.rollRateTime > 0.0,
+            havePitchRate = shared.pitchRateTime > 0.0,
             haveYawRate = shared.yawRateTime > 0.0,
             haveVelocity = shared.velocity ~= nil,
         }
@@ -99,8 +103,8 @@ function control_task.run(shared)
         local now = os.clock()
         local poseTime = shared.poseTime
         local poseAge = now - poseTime
-        local rollRate = shared.rollRate or 0.0
-        local pitchRate = shared.pitchRate or 0.0
+        local rollRate = shared.rollRate
+        local pitchRate = shared.pitchRate
         local yawRate = shared.yawRate
         local velocity = shared.velocity
         local yawRateAge = now - shared.yawRateTime
@@ -127,9 +131,12 @@ function control_task.run(shared)
             dt = dt,
         })
 
-        local commands = result.commands
-
-        mixer:set(commands.collective, commands.roll, commands.yaw, commands.pitch)
+        mixer:set(
+            result.commands.collective,
+            result.commands.roll,
+            result.commands.yaw,
+            result.commands.pitch
+        )
         local rotorOutput = mixer:update()
 
         telemetryTimer = telemetryTimer + dt

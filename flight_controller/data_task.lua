@@ -33,7 +33,7 @@ end
 
 local function angularRatesFromVector(v, pose)
     return {
-        roll = -SENSOR_AXIS.roll * dot(v, pose.front),
+        roll = SENSOR_AXIS.roll * dot(v, pose.front),
         pitch = -SENSOR_AXIS.pitch * dot(v, pose.right),
         yaw = -SENSOR_AXIS.yaw * dot(v, pose.up),
     }

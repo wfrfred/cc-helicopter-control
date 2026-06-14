@@ -43,7 +43,6 @@ config.calibration = {
         roll = -1,
         pitch = 1,
         yaw = 1,
-        yaw_rate = -1,
     },
 
     rotor = {
@@ -90,8 +89,8 @@ config.control = {
     height_lock_relock_timeout = 0.6,
     yaw_lock_rate_deadband = math.rad(2),
     yaw_lock_relock_timeout = 0.6,
-    position_hold_velocity_right_feedforward_gain = 0.023,
-    position_hold_velocity_forward_feedforward_gain = 0.023,
+    position_hold_velocity_right_feedforward_gain = 0.016,
+    position_hold_velocity_forward_feedforward_gain = 0.018,
 
     pid = {
         height = {
@@ -129,7 +128,7 @@ config.control = {
 
         position_forward = {
             kp = 0.15,
-            ki = 0.005,
+            ki = 0.01,
             kd = 0.0,
             i_min = -10.0,
             i_max = 10.0,
@@ -139,22 +138,22 @@ config.control = {
         },
 
         velocity_right = {
-            kp = 0.015,
-            ki = 0.0,
-            kd = 0.0,
-            i_min = -0.1,
-            i_max = 0.1,
+            kp = 0.030,
+            ki = 0.01,
+            kd = 0.005,
+            i_min = -0.35,
+            i_max = 0.35,
             out_min = -math.rad(20),
             out_max = math.rad(20),
             deadband = 0.05,
         },
 
         velocity_forward = {
-            kp = 0.015,
-            ki = 0.0,
-            kd = 0.0,
-            i_min = -0.1,
-            i_max = 0.1,
+            kp = 0.032,
+            ki = 0.01,
+            kd = 0.006,
+            i_min = -0.35,
+            i_max = 0.35,
             out_min = -math.rad(30),
             out_max = math.rad(30),
             deadband = 0.05,
@@ -172,15 +171,15 @@ config.control = {
         },
 
         pitch = {
-	    kp = 10.0,
-	    ki = 2.0,
-	    kd = 2.5,
-	    i_min = -1.5,
-	    i_max = 1.5,
-	    out_min = -12.0,
-	    out_max = 12.0,
-	    deadband = math.rad(0.15),
-	    },
+            kp = 10.0,
+            ki = 2.0,
+            kd = 2.5,
+            i_min = -1.5,
+            i_max = 1.5,
+            out_min = -12.0,
+            out_max = 12.0,
+            deadband = math.rad(0.15),
+        },
 
         yaw_angle = {
             kp = 1.0,

@@ -99,6 +99,8 @@ function control_task.run(shared)
         local now = os.clock()
         local poseTime = shared.poseTime
         local poseAge = now - poseTime
+        local rollRate = shared.rollRate or 0.0
+        local pitchRate = shared.pitchRate or 0.0
         local yawRate = shared.yawRate
         local velocity = shared.velocity
         local yawRateAge = now - shared.yawRateTime
@@ -116,6 +118,8 @@ function control_task.run(shared)
         local result = controller:update({
             targets = targets,
             pose = pose,
+            rollRate = rollRate,
+            pitchRate = pitchRate,
             yawRate = yawRate,
             velocity = velocity,
             height = heightResult,

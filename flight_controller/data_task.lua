@@ -31,6 +31,14 @@ local function velocityFromVector(v)
     }
 end
 
+local function angularRatesFromVector(v, pose)
+    return {
+        roll = -SENSOR_AXIS.roll * dot(v, pose.front),
+        pitch = -SENSOR_AXIS.pitch * dot(v, pose.right),
+        yaw = -SENSOR_AXIS.yaw * dot(v, pose.up),
+    }
+end
+
 local function getPose()
     local pose = sublevel.getLogicalPose()
     local q = pose.orientation:normalize()
@@ -78,9 +86,15 @@ function data_task.run(shared)
 
         while shared.running do
             local angularVelocity = sublevel.getAngularVelocity()
+            local rates = angularRatesFromVector(angularVelocity, shared.pose)
+            local now = os.clock()
 
-            shared.yawRate = SENSOR_AXIS.yaw_rate * SENSOR_AXIS.yaw * dot(angularVelocity, shared.pose.up)
-            shared.yawRateTime = os.clock()
+            shared.rollRate = rates.roll
+            shared.pitchRate = rates.pitch
+            shared.yawRate = rates.yaw
+            shared.rollRateTime = now
+            shared.pitchRateTime = now
+            shared.yawRateTime = now
             sleep(0)
         end
     end

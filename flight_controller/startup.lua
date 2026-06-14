@@ -30,6 +30,10 @@ assert(sublevel, "CC:Sable sublevel API not found")
 local shared = {
     pose = nil,
     poseTime = 0.0,
+    rollRate = 0.0,
+    rollRateTime = 0.0,
+    pitchRate = 0.0,
+    pitchRateTime = 0.0,
     yawRate = 0.0,
     yawRateTime = 0.0,
     velocity = nil,

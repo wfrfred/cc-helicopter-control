@@ -35,7 +35,9 @@ function Controller:update(input)
     local pose = input.pose
     local velocity = input.velocity
     local heightResult = input.height
-    local yawRate = input.yawRate
+    local rollRate = input.rollRate or 0.0
+    local pitchRate = input.pitchRate or 0.0
+    local yawRate = input.yawRate or 0.0
     local yawResult = input.yaw
     local dt = input.dt
 
@@ -43,7 +45,7 @@ function Controller:update(input)
     local heightErr = heightResult.error
 
     if heightResult.active then
-        targetVerticalSpeed, heightErr = self.height:update(heightResult.target, pose.pos.y, dt)
+        targetVerticalSpeed, heightErr = self.height:update(heightResult.target, pose.pos.y, dt, -velocity.vertical)
     else
         self.height:reset()
     end
@@ -61,17 +63,17 @@ function Controller:update(input)
     local tiltCompensatedVerticalSpeedOut = verticalSpeedOut * tiltCompensation
 
     local rollErr = mathx.wrapPi(targets.roll - pose.roll)
-    local rollCmd = self.roll:update(rollErr, 0.0, dt)
+    local rollCmd = self.roll:update(rollErr, 0.0, dt, -rollRate)
 
     local pitchErr = mathx.wrapPi(targets.pitch - pose.pitch)
-    local pitchCmd = self.pitch:update(pitchErr, 0.0, dt)
+    local pitchCmd = self.pitch:update(pitchErr, 0.0, dt, -pitchRate)
 
     local targetYawRate = yawResult.commandedRate
     local yawErr = yawResult.error
     local yawAngleActive = yawResult.active
 
     if yawAngleActive then
-        targetYawRate = self.yawAngle:update(yawErr, 0.0, dt)
+        targetYawRate = self.yawAngle:update(yawErr, 0.0, dt, -yawRate)
     else
         self.yawAngle:reset()
     end
@@ -120,6 +122,7 @@ function Controller:update(input)
                 target = targets.roll,
                 current = pose.roll,
                 err = rollErr,
+                rate = rollRate,
                 out = rollCmd,
             },
 
@@ -127,6 +130,7 @@ function Controller:update(input)
                 target = targets.pitch,
                 current = pose.pitch,
                 err = pitchErr,
+                rate = pitchRate,
                 out = pitchCmd,
             },
 

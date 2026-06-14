@@ -97,6 +97,8 @@ function telemetry_builder.running(data)
             roll = data.pose.roll,
             pitch = data.pose.pitch,
             yaw = data.pose.yaw,
+            rollRate = terms.roll.rate,
+            pitchRate = terms.pitch.rate,
             yawRate = terms.yaw.rate,
             velocity = {
                 x = data.velocity.x,

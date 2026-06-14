@@ -81,8 +81,18 @@ function Hold:update(input, pose, velocity, dt)
     )
     local bodyVelocity = worldToBody(velocity.x, velocity.z, pose.yaw)
 
-    local targetVelocityRight, errorRight = self.controllers.positionRight:update(bodyPositionError.right, 0.0, dt)
-    local targetVelocityForward, errorForward = self.controllers.positionForward:update(bodyPositionError.forward, 0.0, dt)
+    local targetVelocityRight, errorRight = self.controllers.positionRight:update(
+        bodyPositionError.right,
+        0.0,
+        dt,
+        -bodyVelocity.right
+    )
+    local targetVelocityForward, errorForward = self.controllers.positionForward:update(
+        bodyPositionError.forward,
+        0.0,
+        dt,
+        -bodyVelocity.forward
+    )
 
     local feedforwardRight = self.velocityRightFeedforwardGain * targetVelocityRight
     local feedforwardForward = self.velocityForwardFeedforwardGain * targetVelocityForward

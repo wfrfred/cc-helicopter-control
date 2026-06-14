@@ -61,7 +61,7 @@ function Controller:setGains(kp, ki, kd)
     self.kd = kd
 end
 
-function Controller:update(target, feedback, dt)
+function Controller:update(target, feedback, dt, externalDerivative)
     assert(dt > 0, "pid dt must be positive")
 
     local error = target - feedback
@@ -73,8 +73,8 @@ function Controller:update(target, feedback, dt)
     self.integral = self.integral + error * dt
     self.integral = clamp(self.integral, self.i_min, self.i_max)
 
-    local derivative = 0.0
-    if self.last_error ~= nil then
+    local derivative = externalDerivative or 0.0
+    if externalDerivative == nil and self.last_error ~= nil then
         derivative = (error - self.last_error) / dt
     end
 

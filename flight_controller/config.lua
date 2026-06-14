@@ -41,7 +41,7 @@ config.hardware = {
 config.calibration = {
     body_axis = {
         forward = vector.new(0, 0, 1),
-        right = vector.new(1, 0, 0),
+        right = vector.new(-1, 0, 0),
         down = vector.new(0, -1, 0),
     },
 

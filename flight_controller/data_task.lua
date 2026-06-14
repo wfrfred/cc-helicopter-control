@@ -8,27 +8,47 @@ local RUNTIME_DATA = config.runtime.data
 
 local LINEAR_VELOCITY_DT = RUNTIME_DATA.linear_velocity_dt
 
-local function worldHorizontalToBodyFrd(x, z, yaw)
+local function readRawPose()
+    return sublevel.getLogicalPose()
+end
+
+local function readRawVelocity()
+    return sublevel.getLinearVelocity()
+end
+
+local function readRawAngularVelocity()
+    return sublevel.getAngularVelocity()
+end
+
+local function projectWorldHorizontalToBodyFrd(x, z, yaw)
     return {
         right = math.cos(yaw) * x + math.sin(yaw) * z,
         forward = math.sin(yaw) * x - math.cos(yaw) * z,
     }
 end
 
-local function navigationPointFromRawPosition(position)
+local function projectVelocityToBodyFrd(rawVelocity, yaw)
+    local horizontal = projectWorldHorizontalToBodyFrd(rawVelocity.x, rawVelocity.z, yaw)
+
     return {
-        frdErrorFrom = function(currentPosition, yaw)
-            return worldHorizontalToBodyFrd(
-                position.x - currentPosition.x,
-                position.z - currentPosition.z,
-                yaw
-            )
-        end,
+        forward = horizontal.forward,
+        right = horizontal.right,
+        down = -rawVelocity.y,
+        total = rawVelocity.total,
+        horizontal = rawVelocity.horizontal,
     }
 end
 
-local function bodyFrameFromOrientation(orientation)
-    local q = orientation:normalize()
+local function projectAngularVelocityToBodyRates(rawAngularVelocity, bodyFrame)
+    return {
+        roll = rawAngularVelocity:dot(bodyFrame.forward),
+        pitch = rawAngularVelocity:dot(bodyFrame.right),
+        yaw = rawAngularVelocity:dot(bodyFrame.down),
+    }
+end
+
+local function buildBodyFrame(rawPose)
+    local q = rawPose.orientation:normalize()
 
     return {
         forward = q:mul(BODY_AXIS.forward),
@@ -37,93 +57,116 @@ local function bodyFrameFromOrientation(orientation)
     }
 end
 
-local function bodyPoseFromSample(sample)
+local function makeNavigationPoint(rawPosition)
+    return {
+        projectErrorToBodyFrd = function(currentPosition, yaw)
+            return projectWorldHorizontalToBodyFrd(
+                rawPosition.x - currentPosition.x,
+                rawPosition.z - currentPosition.z,
+                yaw
+            )
+        end,
+    }
+end
+
+local function buildBodyPose(rawPosition, bodyFrame)
     local horizontal = math.sqrt(
-        sample.body.frame.forward.x * sample.body.frame.forward.x
-            + sample.body.frame.forward.z * sample.body.frame.forward.z
+        bodyFrame.forward.x * bodyFrame.forward.x
+            + bodyFrame.forward.z * bodyFrame.forward.z
     )
-    local roll = mathx.atan2(-sample.body.frame.right.y, -sample.body.frame.down.y)
-    local pitch = mathx.atan2(-sample.body.frame.forward.y, horizontal)
-    local yaw = mathx.atan2(sample.body.frame.forward.x, -sample.body.frame.forward.z)
+    local roll = mathx.atan2(-bodyFrame.right.y, -bodyFrame.down.y)
+    local pitch = mathx.atan2(-bodyFrame.forward.y, horizontal)
+    local yaw = mathx.atan2(bodyFrame.forward.x, -bodyFrame.forward.z)
 
     local pose = {
-        down = -sample.raw.position.y,
-        roll = mathx.wrapPi(-roll),
+        down = -rawPosition.y,
+        roll = mathx.wrapPi(roll),
         pitch = mathx.wrapPi(pitch),
         yaw = mathx.wrapPi(yaw),
     }
 
     function pose:captureNavigationPoint()
-        return navigationPointFromRawPosition(sample.raw.position)
+        return makeNavigationPoint(rawPosition)
     end
 
     function pose:frdErrorToNavigationPoint(target)
-        return target.frdErrorFrom(sample.raw.position, self.yaw)
+        return target.projectErrorToBodyFrd(rawPosition, self.yaw)
     end
 
     return pose
 end
 
-local function poseSample()
-    local rawPose = sublevel.getLogicalPose()
-    local sample = {
+local function makeRawVelocity(rawVelocity)
+    return {
+        x = rawVelocity.x,
+        y = rawVelocity.y,
+        z = rawVelocity.z,
+        total = rawVelocity:length(),
+        horizontal = math.sqrt(rawVelocity.x * rawVelocity.x + rawVelocity.z * rawVelocity.z),
+        vertical = rawVelocity.y,
+    }
+end
+
+local function buildPoseSnapshot(rawPose)
+    local snapshot = {
         raw = {
+            pose = rawPose,
             position = rawPose.position,
         },
-        body = {
-            frame = bodyFrameFromOrientation(rawPose.orientation),
-        },
+        body = {},
     }
 
-    sample.body.pose = bodyPoseFromSample(sample)
+    snapshot.body.frame = buildBodyFrame(snapshot.raw.pose)
+    snapshot.body.pose = buildBodyPose(snapshot.raw.position, snapshot.body.frame)
 
-    return sample
+    return snapshot
 end
 
-local function velocitySample(yaw)
-    local rawVelocity = sublevel.getLinearVelocity()
-    local bodyHorizontal = worldHorizontalToBodyFrd(rawVelocity.x, rawVelocity.z, yaw)
-    local totalSpeed = rawVelocity:length()
-    local horizontalSpeed = math.sqrt(rawVelocity.x * rawVelocity.x + rawVelocity.z * rawVelocity.z)
-
-    return {
+local function buildVelocitySnapshot(rawVelocity, yaw)
+    local snapshot = {
         raw = {
-            velocity = {
-                x = rawVelocity.x,
-                y = rawVelocity.y,
-                z = rawVelocity.z,
-                total = totalSpeed,
-                horizontal = horizontalSpeed,
-                vertical = rawVelocity.y,
-            },
+            velocity = makeRawVelocity(rawVelocity),
         },
-        body = {
-            velocity = {
-                forward = bodyHorizontal.forward,
-                right = bodyHorizontal.right,
-                down = -rawVelocity.y,
-                total = totalSpeed,
-                horizontal = horizontalSpeed,
-            },
-        },
+        body = {},
     }
+
+    snapshot.body.velocity = projectVelocityToBodyFrd(snapshot.raw.velocity, yaw)
+
+    return snapshot
 end
 
-local function angularVelocitySample(bodyFrame)
-    local rawAngularVelocity = sublevel.getAngularVelocity()
-
+local function buildAngularVelocitySnapshot(rawAngularVelocity, bodyFrame)
     return {
         raw = {
             angularVelocity = rawAngularVelocity,
         },
         body = {
-            rates = {
-                roll = -rawAngularVelocity:dot(bodyFrame.forward),
-                pitch = -rawAngularVelocity:dot(bodyFrame.right),
-                yaw = rawAngularVelocity:dot(bodyFrame.down),
-            },
+            rates = projectAngularVelocityToBodyRates(rawAngularVelocity, bodyFrame),
         },
     }
+end
+
+local function publishPoseSnapshot(shared, snapshot)
+    shared.pose = snapshot.body.pose
+    shared.rawPosition = snapshot.raw.position
+    shared.poseTime = os.clock()
+end
+
+local function publishVelocitySnapshot(shared, snapshot)
+    shared.velocity = snapshot.body.velocity
+    shared.rawVelocity = snapshot.raw.velocity
+    shared.velocityTime = os.clock()
+end
+
+local function publishAngularVelocitySnapshot(shared, snapshot)
+    local now = os.clock()
+
+    shared.rollRate = snapshot.body.rates.roll
+    shared.pitchRate = snapshot.body.rates.pitch
+    shared.yawRate = snapshot.body.rates.yaw
+    shared.rollRateTime = now
+    shared.pitchRateTime = now
+    shared.yawRateTime = now
 end
 
 local function waitForPose(shared)
@@ -133,15 +176,12 @@ local function waitForPose(shared)
 end
 
 function data_task.run(shared)
-    local latestPoseSample = nil
+    local latestPoseSnapshot = nil
 
     local function poseTask()
         while shared.running do
-            latestPoseSample = poseSample()
-
-            shared.pose = latestPoseSample.body.pose
-            shared.rawPosition = latestPoseSample.raw.position
-            shared.poseTime = os.clock()
+            latestPoseSnapshot = buildPoseSnapshot(readRawPose())
+            publishPoseSnapshot(shared, latestPoseSnapshot)
             sleep(0)
         end
     end
@@ -149,21 +189,15 @@ function data_task.run(shared)
     local function angularVelocityTask()
         waitForPose(shared)
 
-        while shared.running and latestPoseSample == nil do
+        while shared.running and latestPoseSnapshot == nil do
             sleep(0)
         end
 
         while shared.running do
-            local sample = angularVelocitySample(latestPoseSample.body.frame)
-            local now = os.clock()
-
-            shared.rollRate = sample.body.rates.roll
-            shared.pitchRate = sample.body.rates.pitch
-            shared.yawRate = sample.body.rates.yaw
-            shared.rollRateTime = now
-            shared.pitchRateTime = now
-            shared.yawRateTime = now
-
+            publishAngularVelocitySnapshot(
+                shared,
+                buildAngularVelocitySnapshot(readRawAngularVelocity(), latestPoseSnapshot.body.frame)
+            )
             sleep(0)
         end
     end
@@ -172,12 +206,7 @@ function data_task.run(shared)
         waitForPose(shared)
 
         while shared.running do
-            local sample = velocitySample(shared.pose.yaw)
-
-            shared.velocity = sample.body.velocity
-            shared.rawVelocity = sample.raw.velocity
-            shared.velocityTime = os.clock()
-
+            publishVelocitySnapshot(shared, buildVelocitySnapshot(readRawVelocity(), shared.pose.yaw))
             sleep(LINEAR_VELOCITY_DT)
         end
     end

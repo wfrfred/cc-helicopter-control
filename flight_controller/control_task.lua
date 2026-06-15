@@ -18,10 +18,12 @@ local function clampDt(dt)
 end
 
 local zeroInput = {
-    roll = 0.0,
-    pitch = 0.0,
-    yaw = 0.0,
-    climb = 0.0,
+    controls = {
+        roll = 0.0,
+        pitch = 0.0,
+        yaw = 0.0,
+        climb = 0.0,
+    },
     event = {
         cruiseLock = false,
     },
@@ -76,8 +78,16 @@ local lateralMode = {
     navigation = "navigation",
 }
 
-local function manualLateralInput(input)
-    return input.roll ~= 0 or input.pitch ~= 0
+local verticalMode = {
+    heightHold = "height_hold",
+}
+
+local yawMode = {
+    yawHold = "yaw_hold",
+}
+
+local function manualLateralInput(controls)
+    return controls.roll ~= 0 or controls.pitch ~= 0
 end
 
 local function makeLateralMachine(initialState)
@@ -103,7 +113,7 @@ local function enterLateralMode(machine, mode, state, positionHold)
     end
 end
 
-local function selectLateralMode(machine, input)
+local function selectLateralMode(machine, controls)
     if machine.navigationTarget ~= nil then
         return lateralMode.navigation
     end
@@ -112,7 +122,7 @@ local function selectLateralMode(machine, input)
         return lateralMode.cruise
     end
 
-    if manualLateralInput(input) then
+    if manualLateralInput(controls) then
         return lateralMode.manual
     end
 
@@ -120,7 +130,7 @@ local function selectLateralMode(machine, input)
 end
 
 local function updateCruiseTarget(machine, context)
-    local manualInput = manualLateralInput(context.input)
+    local manualInput = manualLateralInput(context.input.controls)
 
     if context.input.event.cruiseLock then
         machine.cruiseVelocity = navigation.projectHorizontalVelocityToBodyFrd(context.state)
@@ -146,12 +156,16 @@ local function updateCruiseTarget(machine, context)
     end
 end
 
-local function manualLateral(machine, context)
-    return position_hold.inactive(), {
-        roll = context.manualAttitude.roll,
-        pitch = context.manualAttitude.pitch,
-        source = machine.mode,
+local function attitudeTarget(source, attitude)
+    return {
+        roll = attitude.roll,
+        pitch = attitude.pitch,
+        source = source,
     }
+end
+
+local function manualLateral(machine, context)
+    return position_hold.inactive(), context.manualAttitude:target(machine.mode)
 end
 
 local function cruiseLateral(machine, context)
@@ -161,11 +175,7 @@ local function cruiseLateral(machine, context)
         context.dt
     )
 
-    return positionResult, {
-        roll = positionResult.roll,
-        pitch = positionResult.pitch,
-        source = machine.mode,
-    }
+    return positionResult, attitudeTarget(machine.mode, positionResult.output.attitude)
 end
 
 local function positionHoldLateral(machine, context)
@@ -175,11 +185,7 @@ local function positionHoldLateral(machine, context)
         context.dt
     )
 
-    return positionResult, {
-        roll = positionResult.roll,
-        pitch = positionResult.pitch,
-        source = machine.mode,
-    }
+    return positionResult, attitudeTarget(machine.mode, positionResult.output.attitude)
 end
 
 local function navigationLateral(machine, context)
@@ -189,11 +195,7 @@ local function navigationLateral(machine, context)
         context.dt
     )
 
-    return positionResult, {
-        roll = positionResult.roll,
-        pitch = positionResult.pitch,
-        source = machine.mode,
-    }
+    return positionResult, attitudeTarget(machine.mode, positionResult.output.attitude)
 end
 
 local function lateralPositionTarget(machine)
@@ -220,7 +222,7 @@ local function updateLateral(machine, context)
 
     enterLateralMode(
         machine,
-        selectLateralMode(machine, context.input),
+        selectLateralMode(machine, context.input.controls),
         context.state,
         context.positionHold
     )
@@ -228,8 +230,58 @@ local function updateLateral(machine, context)
     return lateralHandlers[machine.mode](machine, context)
 end
 
+local function makeControlState(state)
+    local pose = state.body.pose
+
+    return {
+        pose = pose,
+        rates = state.body.rates,
+        vertical = {
+            height = pose.height,
+            speed = state.raw.velocity.y,
+        },
+    }
+end
+
+local function makeTarget(attitude, position, verticalLock, yawLockResult)
+    return {
+        attitude = attitude,
+        position = position,
+        vertical = {
+            height = verticalLock.target,
+            speed = verticalLock.commandedRate,
+            active = verticalLock.active,
+            pending = verticalLock.pending,
+            error = verticalLock.error,
+            source = verticalLock.state,
+        },
+        yaw = {
+            angle = yawLockResult.target,
+            rate = yawLockResult.commandedRate,
+            active = yawLockResult.active,
+            pending = yawLockResult.pending,
+            error = yawLockResult.error,
+            source = yawLockResult.state,
+        },
+    }
+end
+
+local function makeTelemetryState(state)
+    return {
+        raw = {
+            position = state.raw.position,
+            velocity = state.raw.velocity,
+        },
+        body = {
+            pose = state.body.pose,
+            velocity = state.body.velocity,
+            rates = state.body.rates,
+        },
+    }
+end
+
 function control_task.run(shared)
-    local mixer = rotor.new(config.hardware.rotor, config.calibration.rotor, config.calibration.mixer_axis)
+    local mixer = rotor.new(config.hardware.rotor, config.calibration.rotor)
 
     waitForSensors(shared)
 
@@ -257,11 +309,6 @@ function control_task.run(shared)
     local controller = Controller.new(config.control)
     local controllerPids = controller:pidControllers()
     local positionPids = positionHold:pidControllers()
-    local flight = {
-        mode = {},
-        target = {},
-        lock = {},
-    }
 
     local lastLoopTime = os.clock() - config.control.loop.dt
     local telemetryTimer = 0.0
@@ -276,17 +323,12 @@ function control_task.run(shared)
             cruiseLock = input.event.cruiseLock,
         }
 
-        manualAttitude:update(input, dt)
+        manualAttitude:update(input.controls, dt)
 
         local now = os.clock()
         local state = shared.state
         local pose = state.body.pose
-        local rates = state.body.rates
-        local height = pose.height
-        local verticalSpeed = state.raw.velocity.y
-        local poseAge = now - state.time.pose
-        local ratesAge = now - state.time.rates
-        local velocityAge = now - state.time.velocity
+        local controlState = makeControlState(state)
 
         local positionResult, attitudeTarget = updateLateral(lateralMachine, {
             input = input,
@@ -296,48 +338,28 @@ function control_task.run(shared)
             dt = dt,
         })
 
-        local verticalLock = heightLock:update(input.climb, height, verticalSpeed, dt)
-        local yawLockResult = yawLock:update(input.yaw, pose.yaw, rates.yaw, dt)
-
-        flight.mode.lateral = lateralMachine.mode
-        flight.mode.vertical = "height"
-        flight.mode.yaw = "yaw"
-        flight.lock.height = verticalLock.state
-        flight.lock.yaw = yawLockResult.state
-        flight.target.attitude = attitudeTarget
-        flight.target.position = lateralPositionTarget(lateralMachine)
-        flight.target.vertical = {
-            height = verticalLock.target,
-            rate = verticalLock.commandedRate,
-            active = verticalLock.active,
-            pending = verticalLock.pending,
-            error = verticalLock.error,
-            source = verticalLock.state,
-        }
-        flight.target.yaw = {
-            angle = yawLockResult.target,
-            rate = yawLockResult.commandedRate,
-            active = yawLockResult.active,
-            pending = yawLockResult.pending,
-            error = yawLockResult.error,
-            source = yawLockResult.state,
-        }
+        local controls = input.controls
+        local vertical = controlState.vertical
+        local verticalLock = heightLock:update(controls.climb, vertical.height, vertical.speed, dt)
+        local yawLockResult = yawLock:update(controls.yaw, pose.yaw, controlState.rates.yaw, dt)
+        local target = makeTarget(
+            attitudeTarget,
+            lateralPositionTarget(lateralMachine),
+            verticalLock,
+            yawLockResult
+        )
 
         local result = controller:update({
-            target = flight.target,
-            state = {
-                pose = state.body.pose,
-                rates = state.body.rates,
-                height = height,
-                verticalSpeed = verticalSpeed,
-            },
+            target = target,
+            state = controlState,
             dt = dt,
         })
 
         mixer:setCommands(result.commands)
         local rotorOutput = mixer:update()
+        result.output.rotor = rotorOutput.blades
 
-        shared.target = flight.target
+        shared.target = target
         shared.controlResult = result
         shared.commands = result.commands
 
@@ -345,10 +367,6 @@ function control_task.run(shared)
         if telemetryTimer >= config.control.loop.telemetry_dt then
             telemetryTimer = 0.0
 
-            local terms = result.terms
-            local rawPosition = state.raw.position
-            local rawVelocity = state.raw.velocity
-            local bodyVelocity = state.body.velocity
             shared.telemetryTime = now
             shared.telemetry = {
                 status = "running",
@@ -356,97 +374,33 @@ function control_task.run(shared)
                 dt = dt,
 
                 age = {
-                    pose = poseAge,
-                    rates = ratesAge,
-                    velocity = velocityAge,
+                    pose = now - state.time.pose,
+                    rates = now - state.time.rates,
+                    velocity = now - state.time.velocity,
                 },
 
                 input = {
-                    controls = {
-                        roll = input.roll,
-                        pitch = input.pitch,
-                        yaw = input.yaw,
-                        climb = input.climb,
-                    },
-                    event = {
-                        cruiseLock = inputEvent.cruiseLock,
-                    },
+                    controls = input.controls,
+                    event = inputEvent,
                     age = inputAge,
                     stale = inputStale,
                     sender = shared.inputSender,
                 },
 
                 mode = {
-                    lateral = flight.mode.lateral,
-                    vertical = flight.mode.vertical,
-                    yaw = flight.mode.yaw,
+                    lateral = lateralMachine.mode,
+                    vertical = verticalMode.heightHold,
+                    yaw = yawMode.yawHold,
                 },
 
                 lock = {
-                    height = flight.lock.height,
-                    yaw = flight.lock.yaw,
+                    height = verticalLock.state,
+                    yaw = yawLockResult.state,
                 },
 
-                state = {
-                    raw = {
-                        position = {
-                            x = rawPosition.x,
-                            y = rawPosition.y,
-                            z = rawPosition.z,
-                        },
-                        velocity = {
-                            x = rawVelocity.x,
-                            y = rawVelocity.y,
-                            z = rawVelocity.z,
-                        },
-                    },
-                    body = {
-                        pose = {
-                            height = pose.height,
-                            roll = pose.roll,
-                            pitch = pose.pitch,
-                            yaw = pose.yaw,
-                        },
-                        velocity = {
-                            forward = bodyVelocity.forward,
-                            right = bodyVelocity.right,
-                            down = bodyVelocity.down,
-                        },
-                        rates = {
-                            roll = rates.roll,
-                            pitch = rates.pitch,
-                            yaw = rates.yaw,
-                        },
-                    },
-                },
+                state = makeTelemetryState(state),
 
-                output = {
-                    commands = result.commands,
-                    collective = {
-                        command = result.commands.collective,
-                        feedforward = terms.verticalSpeed.feedforward,
-                        feedback = terms.verticalSpeed.feedback,
-                        uncompensated = terms.verticalSpeed.uncompensatedOut,
-                        tilt = {
-                            compensation = terms.verticalSpeed.tiltCompensation,
-                            verticalFactor = terms.verticalSpeed.tiltVerticalFactor,
-                        },
-                    },
-                    pitch = {
-                        command = result.commands.pitch,
-                        feedforward = terms.pitch.feedforward,
-                        feedback = terms.pitch.feedback,
-                    },
-                    yaw = {
-                        command = result.commands.yaw,
-                        feedforward = terms.yaw.rateFeedforward,
-                        feedback = terms.yaw.rateFeedback,
-                    },
-                    rotor = {
-                        upper = rotorOutput.upper,
-                        lower = rotorOutput.lower,
-                    },
-                },
+                output = result.output,
 
                 pid = {
                     vertical = {
@@ -471,98 +425,13 @@ function control_task.run(shared)
                     },
                 },
 
-                target = {
-                    vertical = {
-                        height = terms.height.target,
-                        speed = terms.verticalSpeed.target,
-                    },
-                    attitude = {
-                        roll = terms.roll.target,
-                        pitch = terms.pitch.target,
-                    },
-                    yaw = {
-                        angle = terms.yaw.target,
-                        rate = terms.yaw.targetRate,
-                    },
-                },
+                target = result.target,
 
-                current = {
-                    vertical = {
-                        height = terms.height.current,
-                        speed = terms.verticalSpeed.current,
-                    },
-                    attitude = {
-                        roll = terms.roll.current,
-                        pitch = terms.pitch.current,
-                    },
-                    yaw = {
-                        angle = terms.yaw.current,
-                        rate = terms.yaw.rate,
-                    },
-                },
+                current = result.current,
 
-                error = {
-                    vertical = {
-                        height = terms.height.err,
-                        speed = terms.verticalSpeed.err,
-                    },
-                    attitude = {
-                        roll = terms.roll.err,
-                        pitch = terms.pitch.err,
-                    },
-                    yaw = {
-                        angle = terms.yaw.err,
-                        rate = terms.yaw.rateErr,
-                    },
-                },
+                error = result.error,
 
-                positionHold = {
-                    active = positionResult.active,
-                    position = {
-                        target = {
-                            right = positionResult.targetRight,
-                            forward = positionResult.targetForward,
-                        },
-                        current = {
-                            right = positionResult.currentPositionRight,
-                            forward = positionResult.currentPositionForward,
-                        },
-                        error = {
-                            right = positionResult.errorRight,
-                            forward = positionResult.errorForward,
-                        },
-                    },
-                    velocity = {
-                        target = {
-                            right = positionResult.targetVelocityRight,
-                            forward = positionResult.targetVelocityForward,
-                        },
-                        current = {
-                            right = positionResult.currentVelocityRight,
-                            forward = positionResult.currentVelocityForward,
-                        },
-                        error = {
-                            right = positionResult.velocityErrorRight,
-                            forward = positionResult.velocityErrorForward,
-                        },
-                    },
-                    output = {
-                        right = {
-                            value = positionResult.outputRight,
-                            feedforward = positionResult.feedforwardRight,
-                            feedback = positionResult.feedbackRight,
-                        },
-                        forward = {
-                            value = positionResult.outputForward,
-                            feedforward = positionResult.feedforwardForward,
-                            feedback = positionResult.feedbackForward,
-                        },
-                        attitude = {
-                            roll = positionResult.roll,
-                            pitch = positionResult.pitch,
-                        },
-                    },
-                },
+                positionHold = positionResult,
             }
         end
 

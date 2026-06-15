@@ -12,29 +12,46 @@ local function resetAll(controllers)
     end
 end
 
+local function horizontal(right, forward)
+    return {
+        right = right,
+        forward = forward,
+    }
+end
+
+local function emptyPositionState()
+    return {
+        target = horizontal(0.0, 0.0),
+        current = horizontal(0.0, 0.0),
+        error = horizontal(0.0, 0.0),
+    }
+end
+
 local function makeInactiveResult()
     return {
         active = false,
-        targetRight = 0.0,
-        targetForward = 0.0,
-        currentPositionRight = 0.0,
-        currentPositionForward = 0.0,
-        errorRight = 0.0,
-        errorForward = 0.0,
-        targetVelocityRight = 0.0,
-        targetVelocityForward = 0.0,
-        currentVelocityRight = 0.0,
-        currentVelocityForward = 0.0,
-        feedforwardRight = 0.0,
-        feedforwardForward = 0.0,
-        feedbackRight = 0.0,
-        feedbackForward = 0.0,
-        outputRight = 0.0,
-        outputForward = 0.0,
-        velocityErrorRight = 0.0,
-        velocityErrorForward = 0.0,
-        roll = nil,
-        pitch = nil,
+        position = emptyPositionState(),
+        velocity = {
+            target = horizontal(0.0, 0.0),
+            current = horizontal(0.0, 0.0),
+            error = horizontal(0.0, 0.0),
+        },
+        output = {
+            right = {
+                value = 0.0,
+                feedforward = 0.0,
+                feedback = 0.0,
+            },
+            forward = {
+                value = 0.0,
+                feedforward = 0.0,
+                feedback = 0.0,
+            },
+            attitude = {
+                roll = nil,
+                pitch = nil,
+            },
+        },
     }
 end
 
@@ -77,39 +94,32 @@ function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
     local feedforwardForward = self.velocityForwardFeedforwardGain * targetVelocity.forward
     local outputRight = feedforwardRight + feedbackRight
     local outputForward = feedforwardForward + feedbackForward
-    local positionState = position or {
-        current = {
-            right = 0.0,
-            forward = 0.0,
-        },
-        error = {
-            right = 0.0,
-            forward = 0.0,
-        },
-    }
+    local positionState = position or emptyPositionState()
 
     return {
         active = true,
-        targetRight = 0.0,
-        targetForward = 0.0,
-        currentPositionRight = positionState.current.right,
-        currentPositionForward = positionState.current.forward,
-        errorRight = positionState.error.right,
-        errorForward = positionState.error.forward,
-        targetVelocityRight = targetVelocity.right,
-        targetVelocityForward = targetVelocity.forward,
-        currentVelocityRight = horizontalVelocity.right,
-        currentVelocityForward = horizontalVelocity.forward,
-        velocityErrorRight = velocityErrorRight,
-        velocityErrorForward = velocityErrorForward,
-        feedforwardRight = feedforwardRight,
-        feedforwardForward = feedforwardForward,
-        feedbackRight = feedbackRight,
-        feedbackForward = feedbackForward,
-        outputRight = outputRight,
-        outputForward = outputForward,
-        roll = mathx.clamp(outputRight, -self.control.attitude.limit.roll, self.control.attitude.limit.roll),
-        pitch = mathx.clamp(outputForward, -self.control.attitude.limit.pitch, self.control.attitude.limit.pitch),
+        position = positionState,
+        velocity = {
+            target = targetVelocity,
+            current = horizontalVelocity,
+            error = horizontal(velocityErrorRight, velocityErrorForward),
+        },
+        output = {
+            right = {
+                value = outputRight,
+                feedforward = feedforwardRight,
+                feedback = feedbackRight,
+            },
+            forward = {
+                value = outputForward,
+                feedforward = feedforwardForward,
+                feedback = feedbackForward,
+            },
+            attitude = {
+                roll = mathx.clamp(outputRight, -self.control.attitude.limit.roll, self.control.attitude.limit.roll),
+                pitch = mathx.clamp(outputForward, -self.control.attitude.limit.pitch, self.control.attitude.limit.pitch),
+            },
+        },
     }
 end
 
@@ -135,14 +145,9 @@ function Hold:update(bodyPositionError, horizontalVelocity, dt)
         horizontalVelocity,
         dt,
         {
-            current = {
-                right = -bodyPositionError.right,
-                forward = -bodyPositionError.forward,
-            },
-            error = {
-                right = errorRight,
-                forward = errorForward,
-            },
+            target = horizontal(0.0, 0.0),
+            current = horizontal(-bodyPositionError.right, -bodyPositionError.forward),
+            error = horizontal(errorRight, errorForward),
         }
     )
 end

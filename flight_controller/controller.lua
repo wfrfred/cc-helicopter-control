@@ -33,17 +33,18 @@ function Controller:update(input)
     local state = input.state
     local pose = state.pose
     local rates = state.rates
+    local vertical = state.vertical
     local attitudeTarget = target.attitude
     local verticalTarget = target.vertical
     local yawTarget = target.yaw
-    local height = state.height
-    local verticalSpeed = state.verticalSpeed
+    local height = vertical.height
+    local verticalSpeed = vertical.speed
     local rollRate = rates.roll
     local pitchRate = rates.pitch
     local yawRate = rates.yaw
     local dt = input.dt
 
-    local targetVerticalSpeed = verticalTarget.rate
+    local targetVerticalSpeed = verticalTarget.speed
     local heightErr = verticalTarget.error
 
     if verticalTarget.active then
@@ -102,12 +103,83 @@ function Controller:update(input)
         self.collective.max
     )
 
+    local commands = {
+        collective = collective,
+        roll = rollCmd,
+        pitch = pitchCmd,
+        yaw = yawCmd,
+    }
+
     return {
-        commands = {
-            collective = collective,
-            roll = rollCmd,
-            pitch = pitchCmd,
-            yaw = yawCmd,
+        commands = commands,
+
+        output = {
+            commands = commands,
+            collective = {
+                command = commands.collective,
+                feedforward = collectiveFeedforward,
+                feedback = collectiveFeedback,
+                uncompensated = collectiveOut,
+                tilt = {
+                    compensation = tiltCompensation,
+                    verticalFactor = tiltVerticalFactor,
+                },
+            },
+            pitch = {
+                command = commands.pitch,
+                feedforward = pitchFeedforward,
+                feedback = pitchFeedback,
+            },
+            yaw = {
+                command = commands.yaw,
+                feedforward = yawRateFeedforward,
+                feedback = yawRateFeedback,
+            },
+        },
+
+        target = {
+            vertical = {
+                height = verticalTarget.height,
+                speed = targetVerticalSpeed,
+            },
+            attitude = {
+                roll = attitudeTarget.roll,
+                pitch = attitudeTarget.pitch,
+            },
+            yaw = {
+                angle = yawTarget.angle,
+                rate = targetYawRate,
+            },
+        },
+
+        current = {
+            vertical = {
+                height = height,
+                speed = verticalSpeed,
+            },
+            attitude = {
+                roll = pose.roll,
+                pitch = pose.pitch,
+            },
+            yaw = {
+                angle = pose.yaw,
+                rate = yawRate,
+            },
+        },
+
+        error = {
+            vertical = {
+                height = heightErr,
+                speed = verticalSpeedErr,
+            },
+            attitude = {
+                roll = rollErr,
+                pitch = pitchErr,
+            },
+            yaw = {
+                angle = yawErr,
+                rate = yawRateErr,
+            },
         },
 
         terms = {

@@ -5,10 +5,12 @@ local input_task = {}
 
 local function defaultInput()
     return {
-        roll = 0.0,
-        pitch = 0.0,
-        yaw = 0.0,
-        climb = 0.0,
+        controls = {
+            roll = 0.0,
+            pitch = 0.0,
+            yaw = 0.0,
+            climb = 0.0,
+        },
         event = {
             cruiseLock = false,
         },
@@ -26,11 +28,15 @@ local function axis(value)
 end
 
 local function normalize(msg)
+    local controls = msg.controls
+
     return {
-        roll = axis(msg.roll),
-        pitch = axis(msg.pitch),
-        yaw = axis(msg.yaw),
-        climb = axis(msg.climb),
+        controls = {
+            roll = axis(controls.roll),
+            pitch = axis(controls.pitch),
+            yaw = axis(controls.yaw),
+            climb = axis(controls.climb),
+        },
         event = {
             cruiseLock = msg.event.cruiseLock == true,
         },

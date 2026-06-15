@@ -29,14 +29,14 @@ local function makeTuple(bladeMount, rotorPhase, phaseOffset, collective, roll, 
     local out = {}
 
     for blade, mount in pairs(bladeMount) do
-        local phase = rotorPhase - mount + phaseOffset
-        out[blade] = collective + roll * math.sin(phase) + pitch * math.cos(phase)
+        local phase = rotorPhase + mount + phaseOffset
+        out[blade] = collective - roll * math.sin(phase) + pitch * math.cos(phase)
     end
 
     return out
 end
 
-function rotor.new(hardware, calibration, mixerAxis)
+function rotor.new(hardware, calibration)
     local upper = peripheral.wrap(hardware.upper_bearing)
     local lower = peripheral.wrap(hardware.lower_bearing)
 
@@ -50,7 +50,6 @@ function rotor.new(hardware, calibration, mixerAxis)
         lower = lower,
         phase_offset_upper = calibration.phase_offset_upper,
         phase_offset_lower = calibration.phase_offset_lower,
-        mixer_axis = mixerAxis,
         blade_mount = hardware.blade_mount,
         commands = {
             collective = 0.0,
@@ -62,27 +61,27 @@ function rotor.new(hardware, calibration, mixerAxis)
 end
 
 function Mixer:setCommands(commands)
-    self.commands = commands
+    self.commands = {
+        collective = commands.collective,
+        roll = commands.roll,
+        pitch = commands.pitch,
+        yaw = commands.yaw,
+    }
 end
 
 function Mixer:update()
     local upperPhase = getPhaseRad(self.upper)
     local lowerPhase = getPhaseRad(self.lower)
-    local collectiveCmd = self.mixer_axis.collective * self.commands.collective
-    local rollCmd = self.mixer_axis.roll * self.commands.roll
-    local pitchCmd = self.mixer_axis.pitch * self.commands.pitch
-    local yawCmd = self.mixer_axis.yaw * self.commands.yaw
-
-    local upperCollective = collectiveCmd + yawCmd
-    local lowerCollective = collectiveCmd - yawCmd
+    local upperCollective = self.commands.collective - self.commands.yaw
+    local lowerCollective = self.commands.collective + self.commands.yaw
 
     local upperMsg = makeTuple(
         self.blade_mount,
         upperPhase,
         self.phase_offset_upper,
         upperCollective,
-        rollCmd,
-        pitchCmd
+        self.commands.roll,
+        self.commands.pitch
     )
 
     local lowerMsg = makeTuple(
@@ -90,18 +89,22 @@ function Mixer:update()
         lowerPhase,
         self.phase_offset_lower,
         lowerCollective,
-        rollCmd,
-        pitchCmd
+        self.commands.roll,
+        self.commands.pitch
     )
 
     rednet.broadcast(upperMsg, protocol.LAYER.UPPER)
     rednet.broadcast(lowerMsg, protocol.LAYER.LOWER)
 
     return {
-        upperPhase = upperPhase,
-        lowerPhase = lowerPhase,
-        upper = upperMsg,
-        lower = lowerMsg,
+        phase = {
+            upper = upperPhase,
+            lower = lowerPhase,
+        },
+        blades = {
+            upper = upperMsg,
+            lower = lowerMsg,
+        },
     }
 end
 

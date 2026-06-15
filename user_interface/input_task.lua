@@ -9,10 +9,12 @@ local SEND_DT = config.input.send_dt
 
 local function defaultInput()
     return {
-        roll = 0.0,
-        pitch = 0.0,
-        yaw = 0.0,
-        climb = 0.0,
+        controls = {
+            roll = 0.0,
+            pitch = 0.0,
+            yaw = 0.0,
+            climb = 0.0,
+        },
         event = {
             cruiseLock = false,
         },
@@ -37,16 +39,10 @@ function input_task.run(shared)
         shared.input = ctl
         shared.inputTime = now
         shared.inputSeq = shared.inputSeq + 1
+        ctl.seq = shared.inputSeq
+        ctl.time = now
 
-        rednet.broadcast({
-            roll = ctl.roll,
-            pitch = ctl.pitch,
-            yaw = ctl.yaw,
-            climb = ctl.climb,
-            event = ctl.event,
-            seq = shared.inputSeq,
-            time = now,
-        }, protocol.CONTROL.INPUT)
+        rednet.broadcast(ctl, protocol.CONTROL.INPUT)
 
         sleep(SEND_DT)
     end

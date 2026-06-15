@@ -68,10 +68,13 @@ Produced by `input_task.lua`. Consumed by `control_task.lua`.
 
 ```lua
 shared.input = {
-    roll = 0.0,   -- pilot roll input, normalized
-    pitch = 0.0,  -- pilot pitch input, normalized
-    yaw = 0.0,    -- pilot yaw input, normalized
-    climb = 0.0,  -- pilot vertical input, normalized
+    controls = {
+        roll = 0.0,   -- pilot roll input, normalized
+        pitch = 0.0,  -- pilot pitch input, normalized
+        yaw = 0.0,    -- pilot yaw input, normalized
+        climb = 0.0,  -- pilot vertical input, normalized
+    },
+
     event = {
         cruiseLock = false, -- latched request to lock current horizontal velocity
     },
@@ -152,13 +155,19 @@ target = {
 
     vertical = {
         height = 0.0,
-        rate = 0.0,
+        speed = 0.0,
+        active = true,
+        pending = false,
+        error = 0.0,
         source = "locked",
     },
 
     yaw = {
         angle = 0.0,
         rate = 0.0,
+        active = true,
+        pending = false,
+        error = 0.0,
         source = "locked",
     },
 
@@ -221,8 +230,8 @@ shared.telemetry = {
 
     mode = {
         lateral = "manual", -- or "cruise", "position_hold", "navigation"
-        vertical = "height",
-        yaw = "yaw",
+        vertical = "height_hold",
+        yaw = "yaw_hold",
     },
 
     lock = {
@@ -322,7 +331,6 @@ sublevel.getLogicalPose()
 sublevel.getLinearVelocity()
 sublevel.getAngularVelocity()
 config.calibration.body_axis
-config.runtime.data
 lib.mathx
 ```
 
@@ -395,10 +403,12 @@ config runtime network settings
 
 ```lua
 shared.input = {
-    roll,
-    pitch,
-    yaw,
-    climb,
+    controls = {
+        roll,
+        pitch,
+        yaw,
+        climb,
+    },
     event = {
         cruiseLock,
     },
@@ -464,26 +474,26 @@ rotor:update()
 ### Owns
 
 ```lua
-flight = {
-    mode = {
-        lateral = "manual", -- or "cruise", "position_hold", "navigation"
-        vertical = "height",
-        yaw = "yaw",
-    },
+lateralMachine = {
+    mode = "manual", -- or "cruise", "position_hold", "navigation"
+    positionTarget = ...,
+    cruiseVelocity = ...,
+    navigationTarget = ...,
+}
 
-    lock = {
-        height = "locked", -- or "manual", "pending"
-        yaw = "locked",    -- or "manual", "pending"
-    },
+heightLock = rate_lock.new(...)
+yawLock = rate_lock.new(...)
 
-    target = {
-        attitude = ...,
-        vertical = ...,
-        yaw = ...,
-        position = ...,
-    },
+target = {
+    attitude = ...,
+    vertical = ...,
+    yaw = ...,
+    position = ...,
 }
 ```
+
+Telemetry derives `mode` and `lock` directly from these owners. Do not keep a
+separate mirror table that only copies fields back into telemetry.
 
 ### State-machine responsibilities
 
@@ -510,20 +520,20 @@ roll/pitch released and position hold enabled:
     current position is captured if needed
 
 climb input active:
-    vertical mode stays height
+    vertical mode stays height_hold
     height lock substate becomes manual
 
 climb input released:
-    vertical mode stays height
+    vertical mode stays height_hold
     height lock substate becomes pending, then locked
     current absolute height target is captured if needed
 
 yaw input active:
-    yaw mode stays yaw
+    yaw mode stays yaw_hold
     yaw lock substate becomes manual
 
 yaw input released:
-    yaw mode stays yaw
+    yaw mode stays yaw_hold
     yaw lock substate becomes pending, then locked
     current yaw target is captured if needed
 
@@ -619,11 +629,11 @@ A lock result for one scalar axis:
 ```lua
 lockResult = {
     target = ...,
-    rate = ...,
+    commandedRate = ...,
     active = ...,
-    manual = ...,
+    pending = ...,
     error = ...,
-    debug = ...,
+    state = ...,
 }
 ```
 
@@ -721,15 +731,22 @@ dt
 
 ```lua
 positionHoldResult = {
-    attitude = {
-        roll = ...,
-        pitch = ...,
+    active = ...,
+    position = {
+        target = { right = ..., forward = ... },
+        current = { right = ..., forward = ... },
+        error = { right = ..., forward = ... },
     },
-    error = {
-        forward = ...,
-        right = ...,
+    velocity = {
+        target = { right = ..., forward = ... },
+        current = { right = ..., forward = ... },
+        error = { right = ..., forward = ... },
     },
-    debug = ...,
+    output = {
+        right = { value = ..., feedforward = ..., feedback = ... },
+        forward = { value = ..., feedforward = ..., feedback = ... },
+        attitude = { roll = ..., pitch = ... },
+    },
 }
 ```
 
@@ -882,6 +899,7 @@ height/yaw lock logic
 ### Notes
 
 Avoid positional command APIs. `collective, roll, yaw, pitch` ordering is too easy to misuse.
+Do not add command-axis sign remaps in `rotor.lua`. If roll/pitch/yaw signs are wrong, fix the rotor phase or install calibration.
 
 ---
 

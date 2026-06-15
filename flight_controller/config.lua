@@ -18,10 +18,6 @@ config.runtime = {
     telemetry = {
         broadcast_dt = 0.1,
     },
-
-    data = {
-        linear_velocity_dt = 0.1,
-    },
 }
 
 config.hardware = {
@@ -31,9 +27,9 @@ config.hardware = {
         lower_bearing = "swivel_bearing_5",
         blade_mount = {
             [1] = 0.0,
-            [2] = math.pi / 2,
+            [2] = -math.pi / 2,
             [3] = math.pi,
-            [4] = 3 * math.pi / 2,
+            [4] = math.pi / 2,
         },
     },
 }
@@ -46,15 +42,8 @@ config.calibration = {
     },
 
     rotor = {
-        phase_offset_upper = math.pi / 2,
-        phase_offset_lower = math.pi / 2,
-    },
-
-    mixer_axis = {
-        collective = 1,
-        roll = -1,
-        pitch = 1,
-        yaw = -1,
+        phase_offset_upper = 0,
+        phase_offset_lower = math.pi,
     },
 }
 

@@ -28,12 +28,12 @@ function target_state.new(initial, control)
     }, State)
 end
 
-function State:update(input, dt)
+function State:update(controls, dt)
     local control = self.control
 
-    if input.roll ~= 0 then
+    if controls.roll ~= 0 then
         self.roll = mathx.clamp(
-            self.roll + input.roll * control.attitude.target_rate.roll * dt,
+            self.roll + controls.roll * control.attitude.target_rate.roll * dt,
             -control.attitude.limit.roll,
             control.attitude.limit.roll
         )
@@ -41,9 +41,9 @@ function State:update(input, dt)
         self.roll = moveToward(self.roll, control.attitude.home.roll, control.attitude.center_rate.roll, dt)
     end
 
-    if input.pitch ~= 0 then
+    if controls.pitch ~= 0 then
         self.pitch = mathx.clamp(
-            self.pitch + input.pitch * control.attitude.target_rate.pitch * dt,
+            self.pitch + controls.pitch * control.attitude.target_rate.pitch * dt,
             -control.attitude.limit.pitch,
             control.attitude.limit.pitch
         )
@@ -51,6 +51,14 @@ function State:update(input, dt)
         self.pitch = moveToward(self.pitch, control.attitude.home.pitch, control.attitude.center_rate.pitch, dt)
     end
 
+end
+
+function State:target(source)
+    return {
+        roll = self.roll,
+        pitch = self.pitch,
+        source = source,
+    }
 end
 
 return target_state

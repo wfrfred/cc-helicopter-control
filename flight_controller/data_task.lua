@@ -161,7 +161,7 @@ function data_task.run(shared)
             shared.state.body.velocity = velocity.body.velocity
             shared.state.time.velocity = velocity.time
 
-            sleep(config.runtime.data.linear_velocity_dt)
+            sleep(0)
         end
     end
 

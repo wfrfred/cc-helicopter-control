@@ -66,10 +66,12 @@ function input.read()
     previousCapsLock = capsLock
 
     return {
-        pitch = boolToAxis(w, s),
-        yaw = boolToAxis(d, a),
-        roll = boolToAxis(e, q),
-        climb = boolToAxis(space, shift),
+        controls = {
+            roll = boolToAxis(e, q),
+            pitch = boolToAxis(w, s),
+            yaw = boolToAxis(d, a),
+            climb = boolToAxis(space, shift),
+        },
         event = {
             cruiseLock = cruiseLock,
         },

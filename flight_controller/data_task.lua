@@ -114,6 +114,7 @@ function data_task.run(shared)
 
             shared.state.raw.position = pose.raw.position
             shared.state.raw.orientation = pose.raw.orientation
+            shared.state.body.frame = pose.body.frame
             shared.state.body.pose = pose.body.pose
             shared.state.time.pose = pose.time
 

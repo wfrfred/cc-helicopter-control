@@ -43,6 +43,7 @@ local function stateReady(state)
     return state ~= nil and
         state.raw.position ~= nil and
         state.raw.velocity ~= nil and
+        state.body.frame ~= nil and
         state.body.pose ~= nil and
         state.body.rates ~= nil and
         state.body.velocity ~= nil and
@@ -61,7 +62,7 @@ local function waitForSensors(shared)
         shared.telemetry = {
             status = "waiting_sensors",
             time = now,
-            havePose = haveState and state.body.pose ~= nil,
+            havePose = haveState and state.body.pose ~= nil and state.body.frame ~= nil,
             haveRates = haveState and state.body.rates ~= nil,
             haveVelocity = haveState and state.body.velocity ~= nil,
         }
@@ -272,6 +273,7 @@ local function makeControlState(state)
     local pose = state.body.pose
 
     return {
+        frame = state.body.frame,
         pose = pose,
         rates = state.body.rates,
         vertical = {

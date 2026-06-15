@@ -23,18 +23,90 @@ local function collectiveFeedforward(collective, vertical)
     end
 end
 
+local function vec(x, y, z)
+    return {
+        x = x,
+        y = y,
+        z = z,
+    }
+end
+
+local function add(a, b)
+    return vec(a.x + b.x, a.y + b.y, a.z + b.z)
+end
+
+local function scale(a, k)
+    return vec(a.x * k, a.y * k, a.z * k)
+end
+
+local function cross(a, b)
+    return vec(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    )
+end
+
 local function attitudeVerticalFactor(roll, pitch, minFactor)
     local factor = math.cos(roll) * math.cos(pitch)
 
     return mathx.clamp(factor, minFactor, 1.0)
 end
 
-local function updateAngleRate(axis, targetAngle, currentAngle, currentRate, dt)
-    local angleError = mathx.wrapPi(targetAngle - currentAngle)
+local function frameFromPose(roll, pitch, yaw)
+    local sinYaw = math.sin(yaw)
+    local cosYaw = math.cos(yaw)
+    local sinPitch = math.sin(pitch)
+    local cosPitch = math.cos(pitch)
+    local sinRoll = math.sin(roll)
+    local cosRoll = math.cos(roll)
+
+    local forwardHorizontal = vec(sinYaw, 0.0, -cosYaw)
+    local rightLevel = vec(cosYaw, 0.0, sinYaw)
+    local worldDown = vec(0.0, -1.0, 0.0)
+    local forward = add(
+        scale(forwardHorizontal, cosPitch),
+        scale(worldDown, sinPitch)
+    )
+    local downLevel = cross(forward, rightLevel)
+
+    return {
+        forward = forward,
+        right = add(
+            scale(rightLevel, cosRoll),
+            scale(downLevel, sinRoll)
+        ),
+        down = add(
+            scale(rightLevel, -sinRoll),
+            scale(downLevel, cosRoll)
+        ),
+    }
+end
+
+local function attitudeError(current, target)
+    local worldError = scale(
+        add(
+            add(
+                cross(current.forward, target.forward),
+                cross(current.right, target.right)
+            ),
+            cross(current.down, target.down)
+        ),
+        0.5
+    )
+
+    return mathx.project(worldError, {
+        roll = current.forward,
+        pitch = current.right,
+        yaw = current.down,
+    })
+end
+
+local function updateAngleRate(axis, targetAngle, currentAngle, bodyError, currentRate, dt)
     local angle = axis.angle:update({
         target = targetAngle,
         current = currentAngle,
-        error = angleError,
+        error = bodyError,
         dt = dt,
         derivative = -currentRate,
     })
@@ -89,6 +161,7 @@ end
 function Controller:update(input)
     local target = input.target
     local state = input.state
+    local frame = state.frame
     local pose = state.pose
     local rates = state.rates
     local vertical = state.vertical
@@ -102,6 +175,7 @@ function Controller:update(input)
     local yawRate = rates.yaw
     local dt = input.dt
     local pids = self.controllers
+    local currentFrame = frame or frameFromPose(pose.roll, pose.pitch, pose.yaw)
 
     local targetVerticalSpeed = verticalTarget.speed
     local heightErr = verticalTarget.error
@@ -134,10 +208,28 @@ function Controller:update(input)
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
 
+    local targetYawRate = yawTarget.rate
+    local yawErr = yawTarget.error
+    local yawAngleActive = yawTarget.active
+    local yawAngleResult = nil
+    local targetYawForAttitude = pose.yaw
+
+    if yawAngleActive then
+        targetYawForAttitude = yawTarget.angle
+    end
+
+    local targetFrame = frameFromPose(
+        attitudeTarget.roll,
+        attitudeTarget.pitch,
+        targetYawForAttitude
+    )
+    local bodyAttitudeError = attitudeError(currentFrame, targetFrame)
+
     local rollResult = updateAngleRate(
         pids.attitude.roll,
         attitudeTarget.roll,
         pose.roll,
+        bodyAttitudeError.roll,
         rollRate,
         dt
     )
@@ -145,20 +237,16 @@ function Controller:update(input)
         pids.attitude.pitch,
         attitudeTarget.pitch,
         pose.pitch,
+        bodyAttitudeError.pitch,
         pitchRate,
         dt
     )
-
-    local targetYawRate = yawTarget.rate
-    local yawErr = yawTarget.error
-    local yawAngleActive = yawTarget.active
-    local yawAngleResult = nil
 
     if yawAngleActive then
         yawAngleResult = pids.yaw.angle:update({
             target = yawTarget.angle,
             current = pose.yaw,
-            error = yawErr,
+            error = bodyAttitudeError.yaw,
             dt = dt,
             derivative = -yawRate,
         })
@@ -272,7 +360,7 @@ function Controller:update(input)
                 },
             },
             yaw = {
-                angle = yawErr,
+                angle = bodyAttitudeError.yaw,
                 rate = yawRateResult.error,
             },
         },
@@ -307,7 +395,8 @@ function Controller:update(input)
                     result = yawAngleResult,
                     target = yawTarget.angle,
                     current = pose.yaw,
-                    error = yawErr,
+                    error = bodyAttitudeError.yaw,
+                    headingError = yawErr,
                     output = targetYawRate,
                     active = yawAngleActive,
                     pending = yawTarget.pending,

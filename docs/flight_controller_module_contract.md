@@ -101,6 +101,12 @@ shared.state = {
     },
 
     body = {
+        frame = {
+            forward = { x = 0.0, y = 0.0, z = -1.0 },
+            right = { x = 1.0, y = 0.0, z = 0.0 },
+            down = { x = 0.0, y = -1.0, z = 0.0 },
+        },
+
         pose = {
             height = 0.0,
             roll = 0.0,
@@ -139,7 +145,7 @@ local bodyBasis = {
 }
 ```
 
-This basis does not need to be exposed unless a future module has a clear need for it.
+This basis is exposed as `state.body.frame` because controller attitude error is computed in the current body frame. `state.body.pose.roll/pitch/yaw` remain useful as human-facing attitude angles and target-capture values.
 
 ### `target`
 
@@ -845,12 +851,15 @@ Converts target and body state into body commands.
 
 This is the stabilization/control law module. It owns PID instances and control terms, not flight modes.
 
+Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct Euler-angle subtraction. `state.body.pose.roll/pitch/yaw` and `target.yaw.angle` preserve the input-facing semantics: A/D still changes the heading/yaw target through `rate_lock.lua`, while controller projects the resulting attitude error onto the current body axes.
+
 Roll and pitch use cascaded control: an angle PID produces a target body rate, then a rate PID produces the final body command. The rate PID owns the linear feedforward for commanded rate.
 
 ### Depends on
 
 ```text
 target
+state.frame
 state.pose
 state.rates
 state.vertical
@@ -894,6 +903,7 @@ result = {
 local result = controller:update({
     target = target,
     state = {
+        frame = shared.state.body.frame,
         pose = shared.state.body.pose,
         rates = shared.state.body.rates,
         vertical = {

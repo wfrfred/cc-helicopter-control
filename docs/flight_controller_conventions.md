@@ -62,6 +62,12 @@ shared.state = {
     },
 
     body = {
+        frame = {
+            forward = ...,
+            right = ...,
+            down = ...,
+        },
+
         pose = {
             height = ...,
             roll = ...,

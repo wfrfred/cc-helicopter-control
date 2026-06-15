@@ -93,8 +93,9 @@ function attitude_view.draw(mon, shared)
         return
     end
 
-    local current = expectTable(telemetry.current, "telemetry.current")
-    drawHorizon(mon, expectTable(current.attitude, "telemetry.current.attitude"))
+    local state = expectTable(telemetry.state, "telemetry.state")
+    local body = expectTable(state.body, "telemetry.state.body")
+    drawHorizon(mon, expectTable(body.pose, "telemetry.state.body.pose"))
 end
 
 return attitude_view

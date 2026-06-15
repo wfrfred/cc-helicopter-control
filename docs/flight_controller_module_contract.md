@@ -24,7 +24,7 @@ actuator_controller
 
 ### 1. `control_task.lua` owns flight modes
 
-Flight modes and mode transitions belong in `control_task.lua`, because this is where input, current state, target ownership, manual override, position hold, height hold, yaw hold, and future navigation meet.
+Flight modes and mode transitions belong in `control_task.lua`, because this is where input, current state, target ownership, manual override, position hold, height hold, heading hold, and future navigation meet.
 
 There should not be a separate `guidance.lua` unless `control_task.lua` becomes too large after the state machine is made explicit. For now, a separate guidance module would mostly move complexity into another file without improving the interface.
 
@@ -71,7 +71,7 @@ shared.input = {
     controls = {
         roll = 0.0,   -- pilot roll input, normalized
         pitch = 0.0,  -- pilot pitch input, normalized
-        yaw = 0.0,    -- pilot yaw input, normalized
+        heading = 0.0, -- pilot heading input, normalized
         climb = 0.0,  -- pilot vertical input, normalized
     },
 
@@ -111,7 +111,7 @@ shared.state = {
             height = 0.0,
             roll = 0.0,
             pitch = 0.0,
-            yaw = 0.0,
+            heading = 0.0,
         },
 
         velocity = {
@@ -145,7 +145,7 @@ local bodyBasis = {
 }
 ```
 
-This basis is exposed as `state.body.frame` because controller attitude error is computed in the current body frame. `state.body.pose.roll/pitch/yaw` remain useful as human-facing attitude angles and target-capture values.
+This basis is exposed as `state.body.frame` because controller attitude error is computed in the current body frame. `state.body.pose.heading` is the navigation heading from `atan2(forward.x, -forward.z)`, not a body yaw component.
 
 ### `target`
 
@@ -168,7 +168,7 @@ target = {
         source = "locked",
     },
 
-    yaw = {
+    heading = {
         angle = 0.0,
         rate = 0.0,
         active = true,
@@ -227,7 +227,7 @@ shared.telemetry = {
     },
 
     input = {
-        controls = { roll = ..., pitch = ..., yaw = ..., climb = ... },
+        controls = { roll = ..., pitch = ..., heading = ..., climb = ... },
         event = { cruiseLock = ... },
         age = ...,
         stale = ...,
@@ -237,12 +237,12 @@ shared.telemetry = {
     mode = {
         lateral = "manual", -- or "cruise", "position_hold", "navigation"
         vertical = "height_hold",
-        yaw = "yaw_hold",
+        heading = "heading_hold",
     },
 
     lock = {
         height = "locked", -- or "manual", "pending"
-        yaw = "locked",    -- or "manual", "pending"
+        heading = "locked", -- or "manual", "pending"
     },
 
     state = {
@@ -253,9 +253,11 @@ shared.telemetry = {
     output = {
         commands = ...,
         collective = ...,
-        roll = ...,
-        pitch = ...,
-        yaw = ...,
+        attitude = {
+            roll = ...,
+            pitch = ...,
+            yaw = ...,
+        },
         rotor = ...,
     },
 
@@ -266,38 +268,38 @@ shared.telemetry = {
         attitude = {
             roll = { angle = ..., rate = ... },
             pitch = { angle = ..., rate = ... },
+            yaw = { angle = ..., rate = ... },
         },
-        yaw = ...,
     },
 
     target = {
         vertical = ...,
         attitude = {
-            roll = ...,
-            pitch = ...,
-            rate = { roll = ..., pitch = ... },
+            roll = { angle = ..., rate = ... },
+            pitch = { angle = ..., rate = ... },
+            yaw = { angle = ..., rate = ... },
         },
-        yaw = ...,
+        heading = ...,
     },
 
     current = {
         vertical = ...,
         attitude = {
-            roll = ...,
-            pitch = ...,
-            rate = { roll = ..., pitch = ... },
+            roll = { angle = ..., rate = ... },
+            pitch = { angle = ..., rate = ... },
+            yaw = { angle = ..., rate = ... },
         },
-        yaw = ...,
+        heading = ...,
     },
 
     error = {
         vertical = ...,
         attitude = {
-            roll = ...,
-            pitch = ...,
-            rate = { roll = ..., pitch = ... },
+            roll = { angle = ..., rate = ... },
+            pitch = { angle = ..., rate = ... },
+            yaw = { angle = ..., rate = ... },
         },
-        yaw = ...,
+        heading = ...,
     },
 }
 ```
@@ -386,7 +388,7 @@ pose/rate conversion math
 ```text
 pilot input interpretation
 flight mode decisions
-yaw-only horizontal control projection
+heading-level horizontal control projection
 position hold
 PID control
 rotor mixing
@@ -405,7 +407,7 @@ body.velocity = mathx.project(rawVelocity, {
 })
 ```
 
-Yaw-only horizontal projection is a target-selection concern in `control_task.lua`, not a base sensor-state concern.
+Heading-level horizontal projection is a target-selection concern in `control_task.lua`, not a base sensor-state concern.
 
 ---
 
@@ -430,7 +432,7 @@ shared.input = {
     controls = {
         roll,
         pitch,
-        yaw,
+        heading,
         climb,
     },
     event = {
@@ -449,7 +451,7 @@ flight mode transitions
 PID control
 position hold
 height hold
-yaw hold
+heading hold
 ```
 
 ---
@@ -460,7 +462,7 @@ yaw hold
 
 Owns the main flight-control loop and the flight-mode state machine.
 
-This is the correct place to decide which target source is active on each axis. It is allowed to coordinate manual input, height hold, yaw hold, position hold, and future navigation.
+This is the correct place to decide which target source is active on each axis. It is allowed to coordinate manual input, height hold, heading hold, position hold, and future navigation.
 
 ### Depends on
 
@@ -506,12 +508,12 @@ lateralMachine = {
 }
 
 heightLock = rate_lock.new(...)
-yawLock = rate_lock.new(...)
+headingLock = rate_lock.new(...)
 
 target = {
     attitude = ...,
     vertical = ...,
-    yaw = ...,
+    heading = ...,
     position = ...,
 }
 ```
@@ -528,10 +530,10 @@ manual roll/pitch input active:
 
 velocity cruise command active:
     lateral mode becomes cruise
-    cruise velocity is tracked in yaw-level FRD
+    cruise velocity is tracked in navigation heading-level FRD
 
 caps lock pressed:
-    current horizontal velocity is captured in yaw-level FRD
+    current horizontal velocity is captured in navigation heading-level FRD
     lateral mode becomes cruise
     if roll/pitch is already active, that held input is ignored until it returns to center
 
@@ -552,14 +554,14 @@ climb input released:
     height lock substate becomes pending, then locked
     current absolute height target is captured if needed
 
-yaw input active:
-    yaw mode stays yaw_hold
-    yaw lock substate becomes manual
+heading input active:
+    heading mode stays heading_hold
+    heading lock substate becomes manual
 
-yaw input released:
-    yaw mode stays yaw_hold
-    yaw lock substate becomes pending, then locked
-    current yaw target is captured if needed
+heading input released:
+    heading mode stays heading_hold
+    heading lock substate becomes pending, then locked
+    current heading target is captured if needed
 
 future navigation command active:
     lateral mode becomes navigation
@@ -619,7 +621,7 @@ or updates a target object owned by `control_task.lua`.
 
 ```text
 height hold
-yaw hold
+heading hold
 position hold
 PID command output
 rotor mixing
@@ -634,7 +636,7 @@ flight-mode ownership
 
 Generic primitive for manual rate input followed by hold-target capture.
 
-This module can be used for vertical height/down hold and yaw hold. It is not itself a flight-mode manager.
+This module can be used for vertical height/down hold and heading hold. It is not itself a flight-mode manager.
 
 ### Depends on
 
@@ -670,7 +672,7 @@ control_task.lua
 ### Must not do
 
 ```text
-decide global yaw mode
+decide global heading mode
 decide global vertical mode
 call controller
 call rotor
@@ -684,7 +686,7 @@ call rotor
 
 Provides shared math helpers, including the canonical single-axis and multi-axis projection API.
 
-Use `mathx.component(value, axis)` for one scalar component and `mathx.project(value, axes)` for a named multi-axis projection. This keeps raw-to-body projection, yaw-level horizontal projection, and coordinate component capture on one interface.
+Use `mathx.component(value, axis)` for one scalar component and `mathx.project(value, axes)` for a named multi-axis projection. This keeps raw-to-body projection, heading-level horizontal projection, and coordinate component capture on one interface.
 
 ### Depends on
 
@@ -715,7 +717,7 @@ format telemetry snapshots
 
 ### Notes
 
-`mathx.project` is only the projection primitive. The caller still owns the semantic boundary: `data_task.lua` uses it for raw-to-body sensor projection, while `control_task.lua` uses it for target capture and yaw-level horizontal projection.
+`mathx.project` is only the projection primitive. The caller still owns the semantic boundary: `data_task.lua` uses it for raw-to-body sensor projection, while `control_task.lua` uses it for target capture and heading-level horizontal projection.
 
 ---
 
@@ -786,7 +788,7 @@ own axis semantics beyond target/current/error
 
 Primitive for horizontal position hold.
 
-It converts yaw-level FRD horizontal position error and yaw-level FRD horizontal velocity into attitude targets or position-control terms when lateral mode is position hold.
+It converts navigation heading-level FRD horizontal position error and navigation heading-level FRD horizontal velocity into attitude targets or position-control terms when lateral mode is position hold.
 
 It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions, then projects raw position targets and raw horizontal velocity into matching FRD vectors with `mathx.project`.
 
@@ -831,7 +833,7 @@ own global lateral mode
 capture raw position targets
 read state.raw.position
 read state.raw.velocity
-read state.body.pose.yaw for horizontal projection
+read state.body.pose.heading for horizontal projection
 run final attitude PID
 run rotor mixing
 interpret raw sensor axes
@@ -839,7 +841,7 @@ interpret raw sensor axes
 
 ### Notes
 
-Yaw-only horizontal projection belongs in `control_task.lua`, not in `data_task.lua` or `position_hold.lua`. Position error and horizontal velocity must be in the same projected frame before entering `position_hold.lua`.
+Heading-level horizontal projection belongs in `control_task.lua`, not in `data_task.lua` or `position_hold.lua`. Position error and horizontal velocity must be in the same projected frame before entering `position_hold.lua`.
 
 ---
 
@@ -851,9 +853,9 @@ Converts target and body state into body commands.
 
 This is the stabilization/control law module. It owns PID instances and control terms, not flight modes.
 
-Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct Euler-angle subtraction. `state.body.pose.roll/pitch/yaw` and `target.yaw.angle` preserve the input-facing semantics: A/D still changes the heading/yaw target through `rate_lock.lua`, while controller projects the resulting attitude error onto the current body axes.
+Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct Euler-angle subtraction. `state.body.pose.heading` and `target.heading.angle` preserve the input-facing semantics: A/D changes the navigation heading target through `rate_lock.lua`, while controller builds a target frame from `target.attitude.roll`, `target.attitude.pitch`, and `target.heading.angle`, then projects attitude error onto the current body axes.
 
-Roll and pitch use cascaded control: an angle PID produces a target body rate, then a rate PID produces the final body command. The rate PID owns the linear feedforward for commanded rate.
+Roll, pitch, and yaw use cascaded control: an angle PID produces a target body rate, then a rate PID produces the final body command. The rate PID owns the linear feedforward for commanded rate.
 
 ### Depends on
 
@@ -888,10 +890,7 @@ result = {
         attitude = {
             roll = { angle = ..., rate = ... },
             pitch = { angle = ..., rate = ... },
-        },
-        yaw = {
-            angle = ...,
-            rate = ...,
+            yaw = { angle = ..., rate = ... },
         },
     },
 }
@@ -980,7 +979,7 @@ PID control
 flight mode decisions
 sensor conversion
 input stale handling
-height/yaw lock logic
+height/heading lock logic
 ```
 
 ### Notes
@@ -1086,7 +1085,7 @@ These should be resolved before adding navigation or autoland.
 
 ```text
 1. Should body.velocity be true tilted-body FRD velocity only? Current answer: yes.
-2. Should yaw-only horizontal velocity be exposed by data_task? Current answer: no.
+2. Should heading-level horizontal velocity be exposed by data_task? Current answer: no.
 3. Should control_task own flight mode state? Current answer: yes.
 4. Should rate_lock remain? Current answer: yes, as a primitive, not as mode owner.
 5. Should position_hold own lateral mode or raw target lifetime? Current answer: no; control_task owns mode/target lifetime, projects raw targets with mathx.project, and position_hold consumes FRD errors.

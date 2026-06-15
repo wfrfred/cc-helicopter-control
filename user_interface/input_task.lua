@@ -12,7 +12,7 @@ local function defaultInput()
         controls = {
             roll = 0.0,
             pitch = 0.0,
-            yaw = 0.0,
+            heading = 0.0,
             climb = 0.0,
         },
         event = {

@@ -306,8 +306,8 @@ local function drawFlightState(mon, x, y, width, limitY, telemetry)
     local body = expectTable(state.body, "telemetry.state.body")
     local position = expectTable(raw.position, "telemetry.state.raw.position")
     local velocity = expectTable(raw.velocity, "telemetry.state.raw.velocity")
-    local attitude = expectTable(current.attitude, "telemetry.current.attitude")
-    local yaw = expectTable(current.yaw, "telemetry.current.yaw")
+    local pose = expectTable(body.pose, "telemetry.state.body.pose")
+    local rates = expectTable(body.rates, "telemetry.state.body.rates")
     local vertical = expectTable(current.vertical, "telemetry.current.vertical")
     local bodyVelocity = expectTable(body.velocity, "telemetry.state.body.velocity")
     local items = {
@@ -316,10 +316,10 @@ local function drawFlightState(mon, x, y, width, limitY, telemetry)
         { label = "VSPD", value = vertical.speed, pattern = "%+.1f" },
         { label = "TSPD", value = velocityTotal(velocity), pattern = "%.1f" },
 
-        { label = "ROLL", value = deg(attitude.roll), pattern = "%+.1f" },
-        { label = "PITCH", value = deg(attitude.pitch), pattern = "%+.1f" },
-        { label = "YAW", value = deg(yaw.angle), pattern = "%.1f" },
-        { label = "YRATE", value = deg(yaw.rate), pattern = "%+.1f" },
+        { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },
+        { label = "PITCH", value = deg(pose.pitch), pattern = "%+.1f" },
+        { label = "HEAD", value = deg(pose.heading), pattern = "%.1f" },
+        { label = "YRATE", value = deg(rates.yaw), pattern = "%+.1f" },
 
         { label = "POSX", value = position.x, pattern = "%.1f" },
         { label = "POSY", value = position.y, pattern = "%.1f" },
@@ -607,19 +607,21 @@ local function drawRunning(mon, shared, telemetry)
     local pidData = expectTable(telemetry.pid, "telemetry.pid")
     local verticalPid = expectTable(pidData.vertical, "telemetry.pid.vertical")
     local attitudePid = expectTable(pidData.attitude, "telemetry.pid.attitude")
-    local yawPid = expectTable(pidData.yaw, "telemetry.pid.yaw")
     local targetVertical = expectTable(target.vertical, "telemetry.target.vertical")
     local targetAttitude = expectTable(target.attitude, "telemetry.target.attitude")
-    local targetAttitudeRate = expectTable(targetAttitude.rate, "telemetry.target.attitude.rate")
-    local targetYaw = expectTable(target.yaw, "telemetry.target.yaw")
+    local targetRoll = expectTable(targetAttitude.roll, "telemetry.target.attitude.roll")
+    local targetPitch = expectTable(targetAttitude.pitch, "telemetry.target.attitude.pitch")
+    local targetYaw = expectTable(targetAttitude.yaw, "telemetry.target.attitude.yaw")
     local currentVertical = expectTable(current.vertical, "telemetry.current.vertical")
     local currentAttitude = expectTable(current.attitude, "telemetry.current.attitude")
-    local currentAttitudeRate = expectTable(currentAttitude.rate, "telemetry.current.attitude.rate")
-    local currentYaw = expectTable(current.yaw, "telemetry.current.yaw")
+    local currentRoll = expectTable(currentAttitude.roll, "telemetry.current.attitude.roll")
+    local currentPitch = expectTable(currentAttitude.pitch, "telemetry.current.attitude.pitch")
+    local currentYaw = expectTable(currentAttitude.yaw, "telemetry.current.attitude.yaw")
     local errorVertical = expectTable(err.vertical, "telemetry.error.vertical")
     local errorAttitude = expectTable(err.attitude, "telemetry.error.attitude")
-    local errorAttitudeRate = expectTable(errorAttitude.rate, "telemetry.error.attitude.rate")
-    local errorYaw = expectTable(err.yaw, "telemetry.error.yaw")
+    local errorRoll = expectTable(errorAttitude.roll, "telemetry.error.attitude.roll")
+    local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
+    local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
     local inputTelemetry = expectTable(telemetry.input, "telemetry.input")
     local now = os.clock()
 
@@ -653,12 +655,12 @@ local function drawRunning(mon, shared, telemetry)
     if y <= h then drawControllerHeader(mon, 2, y, w - 2) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", targetVertical.height, currentVertical.height, errorVertical.height, false, verticalPid.height) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "VSPD", targetVertical.speed, currentVertical.speed, errorVertical.speed, false, verticalPid.speed) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", targetAttitude.roll, currentAttitude.roll, errorAttitude.roll, true, attitudePid.roll.angle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "RRAT", targetAttitudeRate.roll, currentAttitudeRate.roll, errorAttitudeRate.roll, true, attitudePid.roll.rate) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", targetAttitude.pitch, currentAttitude.pitch, errorAttitude.pitch, true, attitudePid.pitch.angle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PRAT", targetAttitudeRate.pitch, currentAttitudeRate.pitch, errorAttitudeRate.pitch, true, attitudePid.pitch.rate) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, yawPid.angle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, yawPid.rate) y = y + 2 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate) y = y + 2 end
 
     y = drawControllerOutputs(mon, 2, y, w - 2, h, output)
 

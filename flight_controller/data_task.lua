@@ -22,13 +22,13 @@ local function buildPose(rawPosition, frame)
     )
     local roll = mathx.atan2(-frame.right.y, -frame.down.y)
     local pitch = mathx.atan2(-frame.forward.y, horizontal)
-    local yaw = mathx.atan2(frame.forward.x, -frame.forward.z)
+    local heading = mathx.atan2(frame.forward.x, -frame.forward.z)
 
     return {
         height = rawPosition.y,
         roll = mathx.wrapPi(roll),
         pitch = mathx.wrapPi(pitch),
-        yaw = mathx.wrapPi(yaw),
+        heading = mathx.wrapPi(heading),
     }
 end
 

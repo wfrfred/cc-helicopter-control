@@ -100,12 +100,12 @@ config.control = {
         rate_feedforward = {
             roll = 1.0 / math.rad(45),
             pitch = 1.0 / math.rad(45),
+            yaw = 1.3 / math.rad(45),
         },
     },
 
-    yaw = {
+    heading = {
         target_rate = math.rad(60),
-        rate_feedforward_gain = 1.3 / math.rad(45),
         lock = {
             rate_deadband = math.rad(2),
             relock_timeout = 0.6,
@@ -240,29 +240,29 @@ config.control = {
                     deadband = math.rad(0.5),
                 },
             },
-        },
 
-        yaw = {
-            angle = {
-                kp = 1.0,
-                ki = 0.0,
-                kd = 0.0,
-                i_min = -0.5,
-                i_max = 0.5,
-                out_min = -math.rad(60),
-                out_max = math.rad(60),
-                deadband = math.rad(0.05),
-            },
+            yaw = {
+                angle = {
+                    kp = 1.0,
+                    ki = 0.0,
+                    kd = 0.0,
+                    i_min = -0.5,
+                    i_max = 0.5,
+                    out_min = -math.rad(60),
+                    out_max = math.rad(60),
+                    deadband = math.rad(0.05),
+                },
 
-            rate = {
-                kp = 5.0,
-                ki = 0.0,
-                kd = 0.0,
-                i_min = -2.0,
-                i_max = 2.0,
-                out_min = -8.0,
-                out_max = 8.0,
-                deadband = 0.01,
+                rate = {
+                    kp = 5.0,
+                    ki = 0.0,
+                    kd = 0.0,
+                    i_min = -2.0,
+                    i_max = 2.0,
+                    out_min = -8.0,
+                    out_max = 8.0,
+                    deadband = 0.01,
+                },
             },
         },
     },

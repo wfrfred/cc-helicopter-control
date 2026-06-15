@@ -53,16 +53,16 @@ local function attitudeVerticalFactor(roll, pitch, minFactor)
     return mathx.clamp(factor, minFactor, 1.0)
 end
 
-local function frameFromPose(roll, pitch, yaw)
-    local sinYaw = math.sin(yaw)
-    local cosYaw = math.cos(yaw)
+local function frameFromPose(roll, pitch, heading)
+    local sinHeading = math.sin(heading)
+    local cosHeading = math.cos(heading)
     local sinPitch = math.sin(pitch)
     local cosPitch = math.cos(pitch)
     local sinRoll = math.sin(roll)
     local cosRoll = math.cos(roll)
 
-    local forwardHorizontal = vec(sinYaw, 0.0, -cosYaw)
-    local rightLevel = vec(cosYaw, 0.0, sinYaw)
+    local forwardHorizontal = vec(sinHeading, 0.0, -cosHeading)
+    local rightLevel = vec(cosHeading, 0.0, sinHeading)
     local worldDown = vec(0.0, -1.0, 0.0)
     local forward = add(
         scale(forwardHorizontal, cosPitch),
@@ -102,10 +102,10 @@ local function attitudeError(current, target)
     })
 end
 
-local function updateAngleRate(axis, targetAngle, currentAngle, bodyError, currentRate, dt)
+local function updateAngleRate(axis, bodyError, currentRate, dt)
     local angle = axis.angle:update({
-        target = targetAngle,
-        current = currentAngle,
+        target = bodyError,
+        current = 0.0,
         error = bodyError,
         dt = dt,
         derivative = -currentRate,
@@ -137,23 +137,22 @@ function controller.new(control)
                 angle = pid.new(control.pid.attitude.pitch.angle),
                 rate = pid.new(control.pid.attitude.pitch.rate),
             },
-        },
-        yaw = {
-            angle = pid.new(control.pid.yaw.angle),
-            rate = pid.new(control.pid.yaw.rate),
+            yaw = {
+                angle = pid.new(control.pid.attitude.yaw.angle),
+                rate = pid.new(control.pid.attitude.yaw.rate),
+            },
         },
     }
 
     controllers.vertical.speed:setFeedforward(collectiveFeedforward(control.collective, control.vertical))
     controllers.attitude.roll.rate:setFeedforward(linearFeedforward(control.attitude.rate_feedforward.roll))
     controllers.attitude.pitch.rate:setFeedforward(linearFeedforward(control.attitude.rate_feedforward.pitch))
-    controllers.yaw.rate:setFeedforward(linearFeedforward(control.yaw.rate_feedforward_gain))
+    controllers.attitude.yaw.rate:setFeedforward(linearFeedforward(control.attitude.rate_feedforward.yaw))
 
     return setmetatable({
         collective = control.collective,
         vertical = control.vertical,
         attitude = control.attitude,
-        yaw = control.yaw,
         controllers = controllers,
     }, Controller)
 end
@@ -167,7 +166,7 @@ function Controller:update(input)
     local vertical = state.vertical
     local attitudeTarget = target.attitude
     local verticalTarget = target.vertical
-    local yawTarget = target.yaw
+    local headingTarget = target.heading
     local height = vertical.height
     local verticalSpeed = vertical.speed
     local rollRate = rates.roll
@@ -175,7 +174,7 @@ function Controller:update(input)
     local yawRate = rates.yaw
     local dt = input.dt
     local pids = self.controllers
-    local currentFrame = frame or frameFromPose(pose.roll, pose.pitch, pose.yaw)
+    local currentFrame = frame or frameFromPose(pose.roll, pose.pitch, pose.heading)
 
     local targetVerticalSpeed = verticalTarget.speed
     local heightErr = verticalTarget.error
@@ -208,54 +207,50 @@ function Controller:update(input)
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
 
-    local targetYawRate = yawTarget.rate
-    local yawErr = yawTarget.error
-    local yawAngleActive = yawTarget.active
-    local yawAngleResult = nil
-    local targetYawForAttitude = pose.yaw
+    local targetYawRate = headingTarget.rate
+    local headingErr = headingTarget.error
+    local headingActive = headingTarget.active
+    local targetHeadingForAttitude = pose.heading
 
-    if yawAngleActive then
-        targetYawForAttitude = yawTarget.angle
+    if headingActive then
+        targetHeadingForAttitude = headingTarget.angle
     end
 
     local targetFrame = frameFromPose(
         attitudeTarget.roll,
         attitudeTarget.pitch,
-        targetYawForAttitude
+        targetHeadingForAttitude
     )
     local bodyAttitudeError = attitudeError(currentFrame, targetFrame)
 
     local rollResult = updateAngleRate(
         pids.attitude.roll,
-        attitudeTarget.roll,
-        pose.roll,
         bodyAttitudeError.roll,
         rollRate,
         dt
     )
     local pitchResult = updateAngleRate(
         pids.attitude.pitch,
-        attitudeTarget.pitch,
-        pose.pitch,
         bodyAttitudeError.pitch,
         pitchRate,
         dt
     )
+    local yawAngleResult = nil
 
-    if yawAngleActive then
-        yawAngleResult = pids.yaw.angle:update({
-            target = yawTarget.angle,
-            current = pose.yaw,
+    if headingActive then
+        yawAngleResult = pids.attitude.yaw.angle:update({
+            target = bodyAttitudeError.yaw,
+            current = 0.0,
             error = bodyAttitudeError.yaw,
             dt = dt,
             derivative = -yawRate,
         })
         targetYawRate = yawAngleResult.output
     else
-        pids.yaw.angle:reset()
+        pids.attitude.yaw.angle:reset()
     end
 
-    local yawRateResult = pids.yaw.rate:update({
+    local yawRateResult = pids.attitude.yaw.rate:update({
         target = targetYawRate,
         current = yawRate,
         dt = dt,
@@ -289,22 +284,25 @@ function Controller:update(input)
                     verticalFactor = tiltVerticalFactor,
                 },
             },
-            roll = {
-                command = commands.roll,
-                feedforward = rollResult.rate.terms.ff,
-                feedback = rollResult.rate.terms.raw,
-                targetRate = rollResult.rate.target,
-            },
-            pitch = {
-                command = commands.pitch,
-                feedforward = pitchResult.rate.terms.ff,
-                feedback = pitchResult.rate.terms.raw,
-                targetRate = pitchResult.rate.target,
-            },
-            yaw = {
-                command = commands.yaw,
-                feedforward = yawRateResult.terms.ff,
-                feedback = yawRateResult.terms.raw,
+            attitude = {
+                roll = {
+                    command = commands.roll,
+                    feedforward = rollResult.rate.terms.ff,
+                    feedback = rollResult.rate.terms.raw,
+                    targetRate = rollResult.rate.target,
+                },
+                pitch = {
+                    command = commands.pitch,
+                    feedforward = pitchResult.rate.terms.ff,
+                    feedback = pitchResult.rate.terms.raw,
+                    targetRate = pitchResult.rate.target,
+                },
+                yaw = {
+                    command = commands.yaw,
+                    feedforward = yawRateResult.terms.ff,
+                    feedback = yawRateResult.terms.raw,
+                    targetRate = yawRateResult.target,
+                },
             },
         },
 
@@ -314,16 +312,25 @@ function Controller:update(input)
                 speed = targetVerticalSpeed,
             },
             attitude = {
-                roll = attitudeTarget.roll,
-                pitch = attitudeTarget.pitch,
-                rate = {
-                    roll = rollResult.rate.target,
-                    pitch = pitchResult.rate.target,
+                roll = {
+                    angle = rollResult.angle.target,
+                    rate = rollResult.rate.target,
+                },
+                pitch = {
+                    angle = pitchResult.angle.target,
+                    rate = pitchResult.rate.target,
+                },
+                yaw = {
+                    angle = yawAngleResult and yawAngleResult.target or 0.0,
+                    rate = yawRateResult.target,
                 },
             },
-            yaw = {
-                angle = yawTarget.angle,
-                rate = targetYawRate,
+            heading = {
+                angle = headingTarget.angle,
+                rate = headingTarget.rate,
+                active = headingTarget.active,
+                pending = headingTarget.pending,
+                source = headingTarget.source,
             },
         },
 
@@ -333,16 +340,21 @@ function Controller:update(input)
                 speed = verticalSpeed,
             },
             attitude = {
-                roll = pose.roll,
-                pitch = pose.pitch,
-                rate = {
-                    roll = rollRate,
-                    pitch = pitchRate,
+                roll = {
+                    angle = rollResult.angle.current,
+                    rate = rollRate,
+                },
+                pitch = {
+                    angle = pitchResult.angle.current,
+                    rate = pitchRate,
+                },
+                yaw = {
+                    angle = yawAngleResult and yawAngleResult.current or 0.0,
+                    rate = yawRate,
                 },
             },
-            yaw = {
-                angle = pose.yaw,
-                rate = yawRate,
+            heading = {
+                angle = pose.heading,
             },
         },
 
@@ -352,16 +364,21 @@ function Controller:update(input)
                 speed = verticalSpeedResult.error,
             },
             attitude = {
-                roll = rollResult.angle.error,
-                pitch = pitchResult.angle.error,
-                rate = {
-                    roll = rollResult.rate.error,
-                    pitch = pitchResult.rate.error,
+                roll = {
+                    angle = rollResult.angle.error,
+                    rate = rollResult.rate.error,
+                },
+                pitch = {
+                    angle = pitchResult.angle.error,
+                    rate = pitchResult.rate.error,
+                },
+                yaw = {
+                    angle = bodyAttitudeError.yaw,
+                    rate = yawRateResult.error,
                 },
             },
-            yaw = {
-                angle = bodyAttitudeError.yaw,
-                rate = yawRateResult.error,
+            heading = {
+                angle = headingErr,
             },
         },
 
@@ -388,20 +405,21 @@ function Controller:update(input)
             attitude = {
                 roll = rollResult,
                 pitch = pitchResult,
-            },
-
-            yaw = {
-                angle = {
-                    result = yawAngleResult,
-                    target = yawTarget.angle,
-                    current = pose.yaw,
-                    error = bodyAttitudeError.yaw,
-                    headingError = yawErr,
-                    output = targetYawRate,
-                    active = yawAngleActive,
-                    pending = yawTarget.pending,
+                yaw = {
+                    angle = {
+                        result = yawAngleResult,
+                        target = yawAngleResult and yawAngleResult.target or 0.0,
+                        current = yawAngleResult and yawAngleResult.current or 0.0,
+                        error = bodyAttitudeError.yaw,
+                        headingError = headingErr,
+                        output = targetYawRate,
+                        active = headingActive,
+                        pending = headingTarget.pending,
+                        headingTarget = headingTarget.angle,
+                        headingCurrent = pose.heading,
+                    },
+                    rate = yawRateResult,
                 },
-                rate = yawRateResult,
             },
         },
     }
@@ -416,10 +434,6 @@ function Controller:pidControllers()
             speed = pids.vertical.speed,
         },
         attitude = pids.attitude,
-        yaw = {
-            angle = pids.yaw.angle,
-            rate = pids.yaw.rate,
-        },
     }
 end
 

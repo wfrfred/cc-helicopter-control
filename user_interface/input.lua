@@ -69,7 +69,7 @@ function input.read()
         controls = {
             roll = boolToAxis(e, q),
             pitch = boolToAxis(w, s),
-            yaw = boolToAxis(d, a),
+            heading = boolToAxis(d, a),
             climb = boolToAxis(space, shift),
         },
         event = {

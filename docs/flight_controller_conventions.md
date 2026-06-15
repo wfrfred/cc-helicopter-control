@@ -72,7 +72,7 @@ shared.state = {
             height = ...,
             roll = ...,
             pitch = ...,
-            yaw = ...,
+            heading = ...,
         },
 
         velocity = {

@@ -20,7 +20,7 @@ local zeroInput = {
     controls = {
         roll = 0.0,
         pitch = 0.0,
-        yaw = 0.0,
+        heading = 0.0,
         climb = 0.0,
     },
     event = {
@@ -82,8 +82,8 @@ local verticalMode = {
     heightHold = "height_hold",
 }
 
-local yawMode = {
-    yawHold = "yaw_hold",
+local headingMode = {
+    headingHold = "heading_hold",
 }
 
 local function manualLateralInput(controls)
@@ -95,15 +95,15 @@ local positionTargetAxes = {
     z = { z = 1.0 },
 }
 
-local function yawHorizontalAxes(yaw)
+local function headingHorizontalAxes(heading)
     return {
         right = {
-            x = math.cos(yaw),
-            z = math.sin(yaw),
+            x = math.cos(heading),
+            z = math.sin(heading),
         },
         forward = {
-            x = math.sin(yaw),
-            z = -math.cos(yaw),
+            x = math.sin(heading),
+            z = -math.cos(heading),
         },
     }
 end
@@ -112,21 +112,21 @@ local function makePositionTarget(state)
     return mathx.project(state.raw.position, positionTargetAxes)
 end
 
-local function projectHorizontalToBodyFrd(value, yaw)
-    return mathx.project(value, yawHorizontalAxes(yaw))
+local function projectHorizontalToNavigationFrd(value, heading)
+    return mathx.project(value, headingHorizontalAxes(heading))
 end
 
-local function projectPositionTargetErrorToBodyFrd(target, state)
+local function projectPositionTargetErrorToNavigationFrd(target, state)
     local position = state.raw.position
 
-    return projectHorizontalToBodyFrd({
+    return projectHorizontalToNavigationFrd({
         x = target.x - position.x,
         z = target.z - position.z,
-    }, state.body.pose.yaw)
+    }, state.body.pose.heading)
 end
 
-local function projectHorizontalVelocityToBodyFrd(state)
-    return projectHorizontalToBodyFrd(state.raw.velocity, state.body.pose.yaw)
+local function projectHorizontalVelocityToNavigationFrd(state)
+    return projectHorizontalToNavigationFrd(state.raw.velocity, state.body.pose.heading)
 end
 
 local function makeLateralMachine(initialState)
@@ -172,7 +172,7 @@ local function updateCruiseTarget(machine, context)
     local manualInput = manualLateralInput(context.input.controls)
 
     if context.input.event.cruiseLock then
-        machine.cruiseVelocity = projectHorizontalVelocityToBodyFrd(context.state)
+        machine.cruiseVelocity = projectHorizontalVelocityToNavigationFrd(context.state)
         machine.cruiseManualReleasePending = manualInput
         context.positionHold:reset()
         context.input.event.cruiseLock = false
@@ -210,7 +210,7 @@ end
 local function cruiseLateral(machine, context)
     local positionResult = context.positionHold:updateVelocity(
         machine.cruiseVelocity,
-        projectHorizontalVelocityToBodyFrd(context.state),
+        projectHorizontalVelocityToNavigationFrd(context.state),
         context.dt
     )
 
@@ -219,8 +219,8 @@ end
 
 local function positionHoldLateral(machine, context)
     local positionResult = context.positionHold:update(
-        projectPositionTargetErrorToBodyFrd(machine.positionTarget, context.state),
-        projectHorizontalVelocityToBodyFrd(context.state),
+        projectPositionTargetErrorToNavigationFrd(machine.positionTarget, context.state),
+        projectHorizontalVelocityToNavigationFrd(context.state),
         context.dt
     )
 
@@ -229,8 +229,8 @@ end
 
 local function navigationLateral(machine, context)
     local positionResult = context.positionHold:update(
-        projectPositionTargetErrorToBodyFrd(machine.navigationTarget.position, context.state),
-        projectHorizontalVelocityToBodyFrd(context.state),
+        projectPositionTargetErrorToNavigationFrd(machine.navigationTarget.position, context.state),
+        projectHorizontalVelocityToNavigationFrd(context.state),
         context.dt
     )
 
@@ -283,7 +283,7 @@ local function makeControlState(state)
     }
 end
 
-local function makeTarget(attitude, position, verticalLock, yawLockResult)
+local function makeTarget(attitude, position, verticalLock, headingLockResult)
     return {
         attitude = attitude,
         position = position,
@@ -295,13 +295,13 @@ local function makeTarget(attitude, position, verticalLock, yawLockResult)
             error = verticalLock.error,
             source = verticalLock.state,
         },
-        yaw = {
-            angle = yawLockResult.target,
-            rate = yawLockResult.commandedRate,
-            active = yawLockResult.active,
-            pending = yawLockResult.pending,
-            error = yawLockResult.error,
-            source = yawLockResult.state,
+        heading = {
+            angle = headingLockResult.target,
+            rate = headingLockResult.commandedRate,
+            active = headingLockResult.active,
+            pending = headingLockResult.pending,
+            error = headingLockResult.error,
+            source = headingLockResult.state,
         },
     }
 end
@@ -313,6 +313,7 @@ local function makeTelemetryState(state)
             velocity = state.raw.velocity,
         },
         body = {
+            frame = state.body.frame,
             pose = state.body.pose,
             velocity = state.body.velocity,
             rates = state.body.rates,
@@ -337,11 +338,11 @@ function control_task.run(shared)
         rate_deadband = config.control.vertical.lock.speed_deadband,
         relock_timeout = config.control.vertical.lock.relock_timeout,
     })
-    local yawLock = rate_lock.new({
-        initial_target = initial.yaw,
-        target_rate = config.control.yaw.target_rate,
-        rate_deadband = config.control.yaw.lock.rate_deadband,
-        relock_timeout = config.control.yaw.lock.relock_timeout,
+    local headingLock = rate_lock.new({
+        initial_target = initial.heading,
+        target_rate = config.control.heading.target_rate,
+        rate_deadband = config.control.heading.lock.rate_deadband,
+        relock_timeout = config.control.heading.lock.relock_timeout,
         error = function(target, current)
             return mathx.wrapPi(target - current)
         end,
@@ -381,12 +382,12 @@ function control_task.run(shared)
         local controls = input.controls
         local vertical = controlState.vertical
         local verticalLock = heightLock:update(controls.climb, vertical.height, vertical.speed, dt)
-        local yawLockResult = yawLock:update(controls.yaw, pose.yaw, controlState.rates.yaw, dt)
+        local headingLockResult = headingLock:update(controls.heading, pose.heading, controlState.rates.yaw, dt)
         local target = makeTarget(
             attitudeTarget,
             lateralPositionTarget(lateralMachine),
             verticalLock,
-            yawLockResult
+            headingLockResult
         )
 
         local result = controller:update({
@@ -430,12 +431,12 @@ function control_task.run(shared)
                 mode = {
                     lateral = lateralMachine.mode,
                     vertical = verticalMode.heightHold,
-                    yaw = yawMode.yawHold,
+                    heading = headingMode.headingHold,
                 },
 
                 lock = {
                     height = verticalLock.state,
-                    yaw = yawLockResult.state,
+                    heading = headingLockResult.state,
                 },
 
                 state = makeTelemetryState(state),
@@ -464,10 +465,10 @@ function control_task.run(shared)
                             angle = controllerPids.attitude.pitch.angle:terms(),
                             rate = controllerPids.attitude.pitch.rate:terms(),
                         },
-                    },
-                    yaw = {
-                        angle = controllerPids.yaw.angle:terms(),
-                        rate = controllerPids.yaw.rate:terms(),
+                        yaw = {
+                            angle = controllerPids.attitude.yaw.angle:terms(),
+                            rate = controllerPids.attitude.yaw.rate:terms(),
+                        },
                     },
                 },
 

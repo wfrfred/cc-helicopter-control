@@ -35,6 +35,10 @@ Prefer structured objects over repeated name prefixes. If a value is already a
 coherent table such as `commands`, keep and pass that table instead of splitting
 it into fields such as `collective_cmd`, `roll_cmd`, `pitch_cmd`, and `yaw_cmd`.
 
+PID controllers use structured inputs and outputs. Put axis feedforward on the
+PID object as `feedforward(input)` and consume `result.output`; do not recombine
+`feedback + feedforward` in controller call sites.
+
 ## Copy Semantics
 
 For read-only snapshot passing, pass the table reference directly. Do not copy

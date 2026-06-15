@@ -442,8 +442,8 @@ function control_task.run(shared)
 
                 pid = {
                     vertical = {
-                        height = controllerPids.height:terms(),
-                        speed = controllerPids.verticalSpeed:terms(),
+                        height = controllerPids.vertical.height:terms(),
+                        speed = controllerPids.vertical.speed:terms(),
                     },
                     position = {
                         right = positionPids.positionRight:terms(),
@@ -454,12 +454,18 @@ function control_task.run(shared)
                         forward = positionPids.velocityForward:terms(),
                     },
                     attitude = {
-                        roll = controllerPids.roll:terms(),
-                        pitch = controllerPids.pitch:terms(),
+                        roll = {
+                            angle = controllerPids.attitude.roll.angle:terms(),
+                            rate = controllerPids.attitude.roll.rate:terms(),
+                        },
+                        pitch = {
+                            angle = controllerPids.attitude.pitch.angle:terms(),
+                            rate = controllerPids.attitude.pitch.rate:terms(),
+                        },
                     },
                     yaw = {
-                        angle = controllerPids.yawAngle:terms(),
-                        rate = controllerPids.yawRate:terms(),
+                        angle = controllerPids.yaw.angle:terms(),
+                        rate = controllerPids.yaw.rate:terms(),
                     },
                 },
 

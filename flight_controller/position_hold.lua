@@ -19,6 +19,12 @@ local function horizontal(right, forward)
     }
 end
 
+local function linearFeedforward(gain)
+    return function(input)
+        return gain * input.target
+    end
+end
+
 local function emptyPositionState()
     return {
         target = horizontal(0.0, 0.0),
@@ -67,10 +73,11 @@ function position_hold.new(control)
         velocityForward = pid.new(control.pid.velocity.forward),
     }
 
+    controllers.velocityRight:setFeedforward(linearFeedforward(control.position_hold.velocity_feedforward.right))
+    controllers.velocityForward:setFeedforward(linearFeedforward(control.position_hold.velocity_feedforward.forward))
+
     return setmetatable({
         control = control,
-        velocityRightFeedforwardGain = control.position_hold.velocity_feedforward.right,
-        velocityForwardFeedforwardGain = control.position_hold.velocity_feedforward.forward,
         controllers = controllers,
     }, Hold)
 end
@@ -80,20 +87,18 @@ function Hold:reset()
 end
 
 function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
-    local feedbackRight, velocityErrorRight = self.controllers.velocityRight:update(
-        targetVelocity.right,
-        horizontalVelocity.right,
-        dt
-    )
-    local feedbackForward, velocityErrorForward = self.controllers.velocityForward:update(
-        targetVelocity.forward,
-        horizontalVelocity.forward,
-        dt
-    )
-    local feedforwardRight = self.velocityRightFeedforwardGain * targetVelocity.right
-    local feedforwardForward = self.velocityForwardFeedforwardGain * targetVelocity.forward
-    local outputRight = feedforwardRight + feedbackRight
-    local outputForward = feedforwardForward + feedbackForward
+    local rightResult = self.controllers.velocityRight:update({
+        target = targetVelocity.right,
+        current = horizontalVelocity.right,
+        dt = dt,
+    })
+    local forwardResult = self.controllers.velocityForward:update({
+        target = targetVelocity.forward,
+        current = horizontalVelocity.forward,
+        dt = dt,
+    })
+    local outputRight = rightResult.output
+    local outputForward = forwardResult.output
     local positionState = position or emptyPositionState()
 
     return {
@@ -102,18 +107,18 @@ function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
         velocity = {
             target = targetVelocity,
             current = horizontalVelocity,
-            error = horizontal(velocityErrorRight, velocityErrorForward),
+            error = horizontal(rightResult.error, forwardResult.error),
         },
         output = {
             right = {
                 value = outputRight,
-                feedforward = feedforwardRight,
-                feedback = feedbackRight,
+                feedforward = rightResult.terms.ff,
+                feedback = rightResult.terms.raw,
             },
             forward = {
                 value = outputForward,
-                feedforward = feedforwardForward,
-                feedback = feedbackForward,
+                feedforward = forwardResult.terms.ff,
+                feedback = forwardResult.terms.raw,
             },
             attitude = {
                 roll = mathx.clamp(outputRight, -self.control.attitude.limit.roll, self.control.attitude.limit.roll),
@@ -124,30 +129,30 @@ function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
 end
 
 function Hold:update(bodyPositionError, horizontalVelocity, dt)
-    local targetVelocityRight, errorRight = self.controllers.positionRight:update(
-        bodyPositionError.right,
-        0.0,
-        dt,
-        -horizontalVelocity.right
-    )
-    local targetVelocityForward, errorForward = self.controllers.positionForward:update(
-        bodyPositionError.forward,
-        0.0,
-        dt,
-        -horizontalVelocity.forward
-    )
+    local rightResult = self.controllers.positionRight:update({
+        target = bodyPositionError.right,
+        current = 0.0,
+        dt = dt,
+        derivative = -horizontalVelocity.right,
+    })
+    local forwardResult = self.controllers.positionForward:update({
+        target = bodyPositionError.forward,
+        current = 0.0,
+        dt = dt,
+        derivative = -horizontalVelocity.forward,
+    })
 
     return self:updateVelocity(
         {
-            right = targetVelocityRight,
-            forward = targetVelocityForward,
+            right = rightResult.output,
+            forward = forwardResult.output,
         },
         horizontalVelocity,
         dt,
         {
             target = horizontal(0.0, 0.0),
             current = horizontal(-bodyPositionError.right, -bodyPositionError.forward),
-            error = horizontal(errorRight, errorForward),
+            error = horizontal(rightResult.error, forwardResult.error),
         }
     )
 end

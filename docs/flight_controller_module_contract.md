@@ -247,6 +247,7 @@ shared.telemetry = {
     output = {
         commands = ...,
         collective = ...,
+        roll = ...,
         pitch = ...,
         yaw = ...,
         rotor = ...,
@@ -256,25 +257,40 @@ shared.telemetry = {
         vertical = ...,
         position = ...,
         velocity = ...,
-        attitude = ...,
+        attitude = {
+            roll = { angle = ..., rate = ... },
+            pitch = { angle = ..., rate = ... },
+        },
         yaw = ...,
     },
 
     target = {
         vertical = ...,
-        attitude = ...,
+        attitude = {
+            roll = ...,
+            pitch = ...,
+            rate = { roll = ..., pitch = ... },
+        },
         yaw = ...,
     },
 
     current = {
         vertical = ...,
-        attitude = ...,
+        attitude = {
+            roll = ...,
+            pitch = ...,
+            rate = { roll = ..., pitch = ... },
+        },
         yaw = ...,
     },
 
     error = {
         vertical = ...,
-        attitude = ...,
+        attitude = {
+            roll = ...,
+            pitch = ...,
+            rate = { roll = ..., pitch = ... },
+        },
         yaw = ...,
     },
 }
@@ -697,6 +713,67 @@ format telemetry snapshots
 
 ---
 
+## `lib/pid.lua`
+
+### Does
+
+Provides a structured PID primitive with optional per-controller feedforward.
+
+### Provides
+
+```lua
+local controller = pid.new({
+    kp = ...,
+    ki = ...,
+    kd = ...,
+    i_min = ...,
+    i_max = ...,
+    out_min = ...,
+    out_max = ...,
+    deadband = ...,
+    feedforward = function(input) return 0.0 end, -- optional
+})
+
+local result = controller:update({
+    target = ...,
+    current = ...,
+    dt = ...,
+    derivative = ..., -- optional
+    error = ...,      -- optional, for wrapped angles
+})
+```
+
+`feedforward` is a function field on the PID object. It defaults to a zero function. PID output is clamped after `raw + ff`.
+
+```lua
+result = {
+    target = ...,
+    current = ...,
+    error = ...,
+    integral = ...,
+    derivative = ...,
+    output = ...,
+    terms = {
+        p = ...,
+        i = ...,
+        d = ...,
+        raw = ...,    -- p + i + d
+        ff = ...,     -- feedforward(input)
+        output = ..., -- clamp(raw + ff)
+    },
+}
+```
+
+### Must not do
+
+```text
+know flight modes
+read shared state
+own axis semantics beyond target/current/error
+```
+
+---
+
 ## `position_hold.lua`
 
 ### Does
@@ -768,14 +845,15 @@ Converts target and body state into body commands.
 
 This is the stabilization/control law module. It owns PID instances and control terms, not flight modes.
 
+Roll and pitch use cascaded control: an angle PID produces a target body rate, then a rate PID produces the final body command. The rate PID owns the linear feedforward for commanded rate.
+
 ### Depends on
 
 ```text
 target
 state.pose
 state.rates
-state.height
-state.verticalSpeed
+state.vertical
 config.control
 lib.pid
 lib.mathx
@@ -794,13 +872,19 @@ result = {
     },
 
     terms = {
-        height = ...,
-        roll = ...,
-        pitch = ...,
-        yaw = ...,
+        vertical = {
+            height = ...,
+            speed = ...,
+        },
+        attitude = {
+            roll = { angle = ..., rate = ... },
+            pitch = { angle = ..., rate = ... },
+        },
+        yaw = {
+            angle = ...,
+            rate = ...,
+        },
     },
-
-    debug = ...,
 }
 ```
 
@@ -812,8 +896,10 @@ local result = controller:update({
     state = {
         pose = shared.state.body.pose,
         rates = shared.state.body.rates,
-        height = shared.state.body.pose.height,
-        verticalSpeed = verticalSpeed,
+        vertical = {
+            height = shared.state.body.pose.height,
+            speed = shared.state.raw.velocity.y,
+        },
     },
     dt = dt,
 })

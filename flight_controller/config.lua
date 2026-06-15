@@ -97,8 +97,9 @@ config.control = {
             pitch = math.rad(60),
         },
 
-        pitch = {
-            feedforward_bias = 0.3,
+        rate_feedforward = {
+            roll = 1.0 / math.rad(45),
+            pitch = 1.0 / math.rad(45),
         },
     },
 
@@ -137,8 +138,8 @@ config.control = {
                 kd = 0.0,
                 i_min = -3.0,
                 i_max = 3.0,
-                out_min = -6.0,
-                out_max = 6.0,
+                out_min = 0.0,
+                out_max = 10.0,
                 deadband = 0.03,
             },
         },
@@ -193,25 +194,51 @@ config.control = {
 
         attitude = {
             roll = {
-                kp = 6.0,
-                ki = 0.0,
-                kd = 0.5,
-                i_min = -2.0,
-                i_max = 2.0,
-                out_min = -8.0,
-                out_max = 8.0,
-                deadband = math.rad(0.05),
+                angle = {
+                    kp = 3.0,
+                    ki = 0.0,
+                    kd = 0.0,
+                    i_min = -math.rad(15),
+                    i_max = math.rad(15),
+                    out_min = -math.rad(90),
+                    out_max = math.rad(90),
+                    deadband = math.rad(0.05),
+                },
+
+                rate = {
+                    kp = 2.0,
+                    ki = 0.0,
+                    kd = 0.0,
+                    i_min = -2.0,
+                    i_max = 2.0,
+                    out_min = -8.0,
+                    out_max = 8.0,
+                    deadband = math.rad(0.5),
+                },
             },
 
             pitch = {
-                kp = 6.0,
-                ki = 0.0,
-                kd = 0.5,
-                i_min = -1.5,
-                i_max = 1.5,
-                out_min = -12.0,
-                out_max = 12.0,
-                deadband = math.rad(0.15),
+                angle = {
+                    kp = 3.0,
+                    ki = 0.0,
+                    kd = 0.0,
+                    i_min = -math.rad(15),
+                    i_max = math.rad(15),
+                    out_min = -math.rad(90),
+                    out_max = math.rad(90),
+                    deadband = math.rad(0.15),
+                },
+
+                rate = {
+                    kp = 2.2,
+                    ki = 0.0,
+                    kd = 0.0,
+                    i_min = -1.5,
+                    i_max = 1.5,
+                    out_min = -12.0,
+                    out_max = 12.0,
+                    deadband = math.rad(0.5),
+                },
             },
         },
 

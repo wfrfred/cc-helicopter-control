@@ -30,7 +30,7 @@ local function makeTuple(bladeMount, rotorPhase, phaseOffset, collective, roll, 
 
     for blade, mount in pairs(bladeMount) do
         local phase = rotorPhase + mount + phaseOffset
-        out[blade] = collective - roll * math.sin(phase) + pitch * math.cos(phase)
+        out[blade] = collective + roll * math.sin(phase) + pitch * math.cos(phase)
     end
 
     return out
@@ -74,7 +74,6 @@ function Mixer:update()
     local lowerPhase = getPhaseRad(self.lower)
     local upperCollective = self.commands.collective - self.commands.yaw
     local lowerCollective = self.commands.collective + self.commands.yaw
-    local cyclicPitch = -self.commands.pitch
 
     local upperMsg = makeTuple(
         self.blade_mount,
@@ -82,7 +81,7 @@ function Mixer:update()
         self.phase_offset_upper,
         upperCollective,
         self.commands.roll,
-        cyclicPitch
+        self.commands.pitch
     )
 
     local lowerMsg = makeTuple(
@@ -91,7 +90,7 @@ function Mixer:update()
         self.phase_offset_lower,
         lowerCollective,
         self.commands.roll,
-        cyclicPitch
+        self.commands.pitch
     )
 
     rednet.broadcast(upperMsg, protocol.LAYER.UPPER)

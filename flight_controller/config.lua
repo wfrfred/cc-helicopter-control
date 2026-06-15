@@ -27,9 +27,9 @@ config.hardware = {
         lower_bearing = "swivel_bearing_5",
         blade_mount = {
             [1] = 0.0,
-            [2] = -math.pi / 2,
+            [2] = math.pi / 2,
             [3] = math.pi,
-            [4] = math.pi / 2,
+            [4] = -math.pi / 2,
         },
     },
 }
@@ -42,8 +42,8 @@ config.calibration = {
     },
 
     rotor = {
-        phase_offset_upper = 0,
-        phase_offset_lower = math.pi,
+        phase_offset_upper = math.pi,
+        phase_offset_lower = 0,
     },
 }
 

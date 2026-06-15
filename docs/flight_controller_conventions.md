@@ -39,6 +39,13 @@ PID controllers use structured inputs and outputs. Put axis feedforward on the
 PID object as `feedforward(input)` and consume `result.output`; do not recombine
 `feedback + feedforward` in controller call sites.
 
+## Coordinate Semantics
+
+`roll`, `pitch`, and `yaw` are body-axis names. They use the FRD right-hand
+frame: roll is around `forward`, pitch is around `right`, and yaw is around
+`down`. Positive pitch means nose up. Horizontal navigation heading is named
+`heading`, never `yaw`.
+
 ## Copy Semantics
 
 For read-only snapshot passing, pass the table reference directly. Do not copy

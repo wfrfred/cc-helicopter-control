@@ -66,7 +66,7 @@ local function frameFromPose(roll, pitch, heading)
     local worldDown = vec(0.0, -1.0, 0.0)
     local forward = add(
         scale(forwardHorizontal, cosPitch),
-        scale(worldDown, sinPitch)
+        scale(worldDown, -sinPitch)
     )
     local downLevel = cross(forward, rightLevel)
 

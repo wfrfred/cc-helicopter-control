@@ -74,6 +74,7 @@ function Mixer:update()
     local lowerPhase = getPhaseRad(self.lower)
     local upperCollective = self.commands.collective - self.commands.yaw
     local lowerCollective = self.commands.collective + self.commands.yaw
+    local cyclicPitch = -self.commands.pitch
 
     local upperMsg = makeTuple(
         self.blade_mount,
@@ -81,7 +82,7 @@ function Mixer:update()
         self.phase_offset_upper,
         upperCollective,
         self.commands.roll,
-        self.commands.pitch
+        cyclicPitch
     )
 
     local lowerMsg = makeTuple(
@@ -90,7 +91,7 @@ function Mixer:update()
         self.phase_offset_lower,
         lowerCollective,
         self.commands.roll,
-        self.commands.pitch
+        cyclicPitch
     )
 
     rednet.broadcast(upperMsg, protocol.LAYER.UPPER)

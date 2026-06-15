@@ -145,7 +145,7 @@ local bodyBasis = {
 }
 ```
 
-This basis is exposed as `state.body.frame` because controller attitude error is computed in the current body frame. `state.body.pose.heading` is the navigation heading from `atan2(forward.x, -forward.z)`, not a body yaw component.
+This basis is exposed as `state.body.frame` because controller attitude error is computed in the current body frame. `state.body.pose.pitch` follows the FRD right-hand convention: positive pitch is nose up, so `frame.forward.y > 0` produces positive pitch. `state.body.pose.heading` is the navigation heading from `atan2(forward.x, -forward.z)`, not a body yaw component.
 
 ### `target`
 
@@ -596,6 +596,7 @@ monitor/UI drawing
 Primitive for manual roll/pitch target management.
 
 It converts pilot roll/pitch input into attitude targets, including slew limits and return-to-home behavior.
+Pilot pitch input keeps the driving convention separate from the body-axis sign convention: W lowers the nose by decreasing pitch target; S raises the nose by increasing pitch target.
 
 ### Depends on
 
@@ -826,6 +827,8 @@ positionHoldResult = {
 }
 ```
 
+Positive `output.forward.value` means a navigation-frame forward acceleration request. Since body-axis positive pitch is nose up, `output.attitude.pitch` is negative for a positive forward request.
+
 ### Must not do
 
 ```text
@@ -853,7 +856,7 @@ Converts target and body state into body commands.
 
 This is the stabilization/control law module. It owns PID instances and control terms, not flight modes.
 
-Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct Euler-angle subtraction. `state.body.pose.heading` and `target.heading.angle` preserve the input-facing semantics: A/D changes the navigation heading target through `rate_lock.lua`, while controller builds a target frame from `target.attitude.roll`, `target.attitude.pitch`, and `target.heading.angle`, then projects attitude error onto the current body axes.
+Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct Euler-angle subtraction. Positive pitch is around the body `right` axis and means nose up. `state.body.pose.heading` and `target.heading.angle` preserve the input-facing semantics: A/D changes the navigation heading target through `rate_lock.lua`, while controller builds a target frame from `target.attitude.roll`, `target.attitude.pitch`, and `target.heading.angle`, then projects attitude error onto the current body axes.
 
 Roll, pitch, and yaw use cascaded control: an angle PID produces a target body rate, then a rate PID produces the final body command. The rate PID owns the linear feedforward for commanded rate.
 
@@ -985,7 +988,7 @@ height/heading lock logic
 ### Notes
 
 Avoid positional command APIs. `collective, roll, yaw, pitch` ordering is too easy to misuse.
-Do not add command-axis sign remaps in `rotor.lua`. If roll/pitch/yaw signs are wrong, fix the rotor phase or install calibration.
+`commands.roll/pitch/yaw` are body-axis commands. If hardware mixing needs a sign adaptation, keep it in `rotor.lua`; do not invert body-axis semantics in controller code.
 
 ---
 

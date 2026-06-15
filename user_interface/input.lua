@@ -68,7 +68,7 @@ function input.read()
     return {
         controls = {
             roll = boolToAxis(e, q),
-            pitch = boolToAxis(w, s),
+            pitch = boolToAxis(s, w),
             heading = boolToAxis(d, a),
             climb = boolToAxis(space, shift),
         },

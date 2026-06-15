@@ -352,6 +352,7 @@ function control_task.run(shared)
     local positionPids = positionHold:pidControllers()
 
     local lastLoopTime = os.clock() - config.control.loop.dt
+    local lastHeading = initial.heading
     local telemetryTimer = 0.0
 
     while shared.running do
@@ -370,6 +371,9 @@ function control_task.run(shared)
         local state = shared.state
         local pose = state.body.pose
         local controlState = makeControlState(state)
+        local headingRate = mathx.wrapPi(pose.heading - lastHeading) / dt
+
+        lastHeading = pose.heading
 
         local positionResult, attitudeTarget = updateLateral(lateralMachine, {
             input = input,
@@ -382,7 +386,7 @@ function control_task.run(shared)
         local controls = input.controls
         local vertical = controlState.vertical
         local verticalLock = heightLock:update(controls.climb, vertical.height, vertical.speed, dt)
-        local headingLockResult = headingLock:update(controls.heading, pose.heading, controlState.rates.yaw, dt)
+        local headingLockResult = headingLock:update(controls.heading, pose.heading, headingRate, dt)
         local target = makeTarget(
             attitudeTarget,
             lateralPositionTarget(lateralMachine),

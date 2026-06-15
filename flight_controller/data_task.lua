@@ -21,7 +21,7 @@ local function buildPose(rawPosition, frame)
             + frame.forward.z * frame.forward.z
     )
     local roll = mathx.atan2(-frame.right.y, -frame.down.y)
-    local pitch = mathx.atan2(-frame.forward.y, horizontal)
+    local pitch = mathx.atan2(frame.forward.y, horizontal)
     local heading = mathx.atan2(frame.forward.x, -frame.forward.z)
 
     return {

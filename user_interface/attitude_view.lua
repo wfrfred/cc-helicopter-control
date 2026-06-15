@@ -31,7 +31,7 @@ end
 
 local function getAttitude(current)
     local roll = math.deg(current.roll) + ROLL_OFFSET_DEG
-    local pitch = -math.deg(current.pitch) + PITCH_OFFSET_DEG
+    local pitch = math.deg(current.pitch) + PITCH_OFFSET_DEG
 
     return clamp(roll, -ROLL_LIMIT_DEG, ROLL_LIMIT_DEG),
            clamp(pitch, -PITCH_LIMIT_DEG, PITCH_LIMIT_DEG)

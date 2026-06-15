@@ -122,7 +122,7 @@ function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
             },
             attitude = {
                 roll = mathx.clamp(outputRight, -self.control.attitude.limit.roll, self.control.attitude.limit.roll),
-                pitch = mathx.clamp(outputForward, -self.control.attitude.limit.pitch, self.control.attitude.limit.pitch),
+                pitch = mathx.clamp(-outputForward, -self.control.attitude.limit.pitch, self.control.attitude.limit.pitch),
             },
         },
     }

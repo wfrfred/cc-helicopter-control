@@ -28,4 +28,20 @@ function mathx.clamp(x, lo, hi)
     return x
 end
 
+function mathx.component(value, axis)
+    return (value.x or 0.0) * (axis.x or 0.0)
+        + (value.y or 0.0) * (axis.y or 0.0)
+        + (value.z or 0.0) * (axis.z or 0.0)
+end
+
+function mathx.project(value, axes)
+    local out = {}
+
+    for name, axis in pairs(axes) do
+        out[name] = mathx.component(value, axis)
+    end
+
+    return out
+end
+
 return mathx

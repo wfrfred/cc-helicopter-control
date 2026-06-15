@@ -9,7 +9,9 @@ system's FRD frame. Function names in this file use these prefixes:
   body-frame data for that read. No shared-state writes.
 - `build*`: build derived structures from already-read raw inputs, such as body
   frames and body poses. No `sublevel` reads and no shared-state writes.
-- `project*`: project a raw vector or world-space delta into another frame.
+- `component*` / `project*`: use `mathx.component` for one axis and
+  `mathx.project` for multiple named axes. Wrap them only when a named semantic
+  boundary would make the caller clearer.
 - `make*`: construct a small plain object without reading external state.
 
 Required frame data should not use fallback defaults. If a required field is
@@ -85,9 +87,9 @@ shared.state = {
 ```
 
 Control code consumes `shared.state.body.*`. Raw xyz data stays inside
-`data_task.lua` unless a boundary layer such as telemetry, UI, or navigation
-needs it. Navigation projects raw position targets into FRD error vectors before
-position hold consumes them.
+`data_task.lua` unless a boundary layer such as telemetry, UI, or `control_task`
+target capture needs it. Control code projects raw position targets into FRD
+error vectors before position hold consumes them.
 
 Keep `body.velocity` limited to FRD components. Derived display fields such as
 total speed, horizontal speed, and vertical speed are computed where they are

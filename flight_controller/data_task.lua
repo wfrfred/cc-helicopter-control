@@ -5,22 +5,6 @@ local data_task = {}
 
 local bodyAxis = config.calibration.body_axis
 
-local function projectVelocityToBodyFrd(rawVelocity, frame)
-    return {
-        forward = rawVelocity:dot(frame.forward),
-        right = rawVelocity:dot(frame.right),
-        down = rawVelocity:dot(frame.down),
-    }
-end
-
-local function projectAngularVelocityToBodyRates(rawAngularVelocity, frame)
-    return {
-        roll = rawAngularVelocity:dot(frame.forward),
-        pitch = rawAngularVelocity:dot(frame.right),
-        yaw = rawAngularVelocity:dot(frame.down),
-    }
-end
-
 local function buildFrame(rawPose)
     local q = rawPose.orientation:normalize()
 
@@ -81,7 +65,11 @@ local function readVelocity(frame)
             velocity = rawVelocity,
         },
         body = {
-            velocity = projectVelocityToBodyFrd(rawVelocity, frame),
+            velocity = mathx.project(rawVelocity, {
+                forward = frame.forward,
+                right = frame.right,
+                down = frame.down,
+            }),
         },
         time = os.clock(),
     }
@@ -95,7 +83,11 @@ local function readRates(frame)
             angularVelocity = rawAngularVelocity,
         },
         body = {
-            rates = projectAngularVelocityToBodyRates(rawAngularVelocity, frame),
+            rates = mathx.project(rawAngularVelocity, {
+                roll = frame.forward,
+                pitch = frame.right,
+                yaw = frame.down,
+            }),
         },
         time = os.clock(),
     }

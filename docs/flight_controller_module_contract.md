@@ -36,9 +36,9 @@ Examples:
 
 ```text
 rate_lock.lua       owns one rate-to-hold target primitive
-navigation.lua      owns raw-position target construction and FRD error projection
 position_hold.lua   owns one horizontal position-control primitive
 target_state.lua    owns manual roll/pitch target primitive
+lib/mathx.lua       owns projection/component primitives
 control_task.lua    owns which primitive is active and why
 ```
 
@@ -46,7 +46,7 @@ control_task.lua    owns which primitive is active and why
 
 Raw Minecraft / Sable coordinates must be interpreted in `data_task.lua`. Other modules should consume the canonical structured state.
 
-`state.raw.*` is not a general control interface. It may be used by boundary modules that need raw coordinates, such as telemetry/UI and navigation. Low-level control primitives consume `state.body.*` or already-projected FRD errors.
+`state.raw.*` is not a general control interface. It may be used by boundary code that needs raw coordinates, such as telemetry/UI and `control_task.lua` target capture. Low-level control primitives consume `state.body.*` or already-projected FRD errors.
 
 `body_axis` is a calibration/install definition used by `data_task.lua` to convert raw sensor vectors to body FRD vectors. It is not a runtime flight mode parameter.
 
@@ -355,7 +355,7 @@ shared.state.time.rates
 
 ```text
 body basis / runtime body axes
-raw-to-body projection helpers
+mathx.project axis declarations
 pose/rate conversion math
 ```
 
@@ -364,7 +364,7 @@ pose/rate conversion math
 ```text
 pilot input interpretation
 flight mode decisions
-yaw-only navigation projection
+yaw-only horizontal control projection
 position hold
 PID control
 rotor mixing
@@ -376,12 +376,14 @@ telemetry formatting
 `body.velocity` should be true body FRD velocity:
 
 ```lua
-body.velocity.forward = rawVelocity:dot(bodyBasis.forward)
-body.velocity.right = rawVelocity:dot(bodyBasis.right)
-body.velocity.down = rawVelocity:dot(bodyBasis.down)
+body.velocity = mathx.project(rawVelocity, {
+    forward = bodyBasis.forward,
+    right = bodyBasis.right,
+    down = bodyBasis.down,
+})
 ```
 
-Yaw-only horizontal projection is a navigation or position-hold concern, not a base sensor-state concern.
+Yaw-only horizontal projection is a target-selection concern in `control_task.lua`, not a base sensor-state concern.
 
 ---
 
@@ -448,10 +450,10 @@ config.runtime.control
 
 target_state.lua
 rate_lock.lua
-navigation.lua
 position_hold.lua
 controller.lua
 rotor.lua
+lib.mathx
 ```
 
 ### Provides
@@ -540,7 +542,7 @@ yaw input released:
 future navigation command active:
     lateral mode becomes navigation
     control_task owns target lifetime
-    navigation projects target/current position into FRD error
+    control_task projects target/current position into FRD error with mathx.project
 
 future landing command active:
     vertical mode becomes landing
@@ -654,55 +656,44 @@ call rotor
 
 ---
 
-## `navigation.lua`
+## `lib/mathx.lua`
 
 ### Does
 
-Converts raw position and velocity data into yaw-level FRD navigation vectors.
+Provides shared math helpers, including the canonical single-axis and multi-axis projection API.
 
-This is a boundary primitive for code that must touch raw world coordinates. It may capture a raw position target, project the target/current horizontal delta into the current yaw-level FRD heading, and project raw horizontal velocity into the same frame.
+Use `mathx.component(value, axis)` for one scalar component and `mathx.project(value, axes)` for a named multi-axis projection. This keeps raw-to-body projection, yaw-level horizontal projection, and coordinate component capture on one interface.
 
 ### Depends on
 
 ```text
-state.raw.position
-state.raw.velocity
-state.body.pose.yaw or equivalent heading information
-navigation target data
+plain tables or vector-like values with x/y/z fields
 ```
 
 ### Provides
 
 ```lua
-navigationTarget = {
-    x = ...,
-    z = ...,
-}
+mathx.component(value, axis)
 
-bodyPositionError = {
-    forward = ...,
-    right = ...,
-}
-
-horizontalVelocity = {
-    forward = ...,
-    right = ...,
-}
+mathx.project(value, {
+    forward = frame.forward,
+    right = frame.right,
+    down = frame.down,
+})
 ```
 
 ### Must not do
 
 ```text
-own global lateral mode
-run position PID
-run final attitude PID
-run rotor mixing
-format telemetry
+read sensors
+own flight modes
+choose target lifetime
+format telemetry snapshots
 ```
 
 ### Notes
 
-Raw `x/z` position and velocity should stop here. Position-control primitives receive projected FRD horizontal error and velocity in the same yaw-level frame, not raw coordinates.
+`mathx.project` is only the projection primitive. The caller still owns the semantic boundary: `data_task.lua` uses it for raw-to-body sensor projection, while `control_task.lua` uses it for target capture and yaw-level horizontal projection.
 
 ---
 
@@ -714,7 +705,7 @@ Primitive for horizontal position hold.
 
 It converts yaw-level FRD horizontal position error and yaw-level FRD horizontal velocity into attitude targets or position-control terms when lateral mode is position hold.
 
-It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions; `navigation.lua` projects raw position targets and raw horizontal velocity into matching FRD vectors.
+It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions, then projects raw position targets and raw horizontal velocity into matching FRD vectors with `mathx.project`.
 
 ### Depends on
 
@@ -757,7 +748,7 @@ own global lateral mode
 capture raw position targets
 read state.raw.position
 read state.raw.velocity
-read state.body.pose.yaw for navigation projection
+read state.body.pose.yaw for horizontal projection
 run final attitude PID
 run rotor mixing
 interpret raw sensor axes
@@ -765,7 +756,7 @@ interpret raw sensor axes
 
 ### Notes
 
-Yaw-only horizontal projection belongs in `navigation.lua`, not in `data_task.lua` or `position_hold.lua`. Position error and horizontal velocity must be in the same projected frame before entering `position_hold.lua`.
+Yaw-only horizontal projection belongs in `control_task.lua`, not in `data_task.lua` or `position_hold.lua`. Position error and horizontal velocity must be in the same projected frame before entering `position_hold.lua`.
 
 ---
 
@@ -947,7 +938,6 @@ flight_controller/
 │
 ├── target_state.lua
 ├── rate_lock.lua
-├── navigation.lua
 ├── position_hold.lua
 ├── controller.lua
 ├── rotor.lua
@@ -974,7 +964,7 @@ The first phase should not change flight behavior. It should only clarify interf
 3. data_task keeps only three-axis raw/body vectors; derived speeds are computed by consumers.
 4. control_task reads shared.state instead of scattered shared.pose/shared.rollRate/shared.velocity fields.
 5. control_task owns explicit flight mode state.
-6. navigation projects raw position targets into FRD errors before position_hold consumes them.
+6. control_task projects raw position targets into FRD errors before position_hold consumes them.
 7. controller:update() receives { target, state, dt }.
 8. rotor command API changes from positional args to setCommands(commands).
 9. control_task publishes a structured telemetry snapshot directly.
@@ -1003,7 +993,7 @@ These should be resolved before adding navigation or autoland.
 2. Should yaw-only horizontal velocity be exposed by data_task? Current answer: no.
 3. Should control_task own flight mode state? Current answer: yes.
 4. Should rate_lock remain? Current answer: yes, as a primitive, not as mode owner.
-5. Should position_hold own lateral mode or raw target lifetime? Current answer: no; control_task owns mode/target lifetime, navigation projects raw targets, position_hold consumes FRD errors.
+5. Should position_hold own lateral mode or raw target lifetime? Current answer: no; control_task owns mode/target lifetime, projects raw targets with mathx.project, and position_hold consumes FRD errors.
 6. Should rotor commands use named table fields? Current answer: yes.
-7. Should raw.position be visible outside data_task? Current answer: yes, but only for navigation and telemetry/UI, not for controller or position_hold.
+7. Should raw.position be visible outside data_task? Current answer: yes, but only for control_task target capture/projection and telemetry/UI, not for controller or position_hold.
 ```

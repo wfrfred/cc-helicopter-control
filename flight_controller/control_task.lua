@@ -2,7 +2,6 @@ local Controller = require("controller")
 local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
-local navigation = require("navigation")
 local position_hold = require("position_hold")
 local rate_lock = require("rate_lock")
 local config = require("config")
@@ -90,10 +89,49 @@ local function manualLateralInput(controls)
     return controls.roll ~= 0 or controls.pitch ~= 0
 end
 
+local positionTargetAxes = {
+    x = { x = 1.0 },
+    z = { z = 1.0 },
+}
+
+local function yawHorizontalAxes(yaw)
+    return {
+        right = {
+            x = math.cos(yaw),
+            z = math.sin(yaw),
+        },
+        forward = {
+            x = math.sin(yaw),
+            z = -math.cos(yaw),
+        },
+    }
+end
+
+local function makePositionTarget(state)
+    return mathx.project(state.raw.position, positionTargetAxes)
+end
+
+local function projectHorizontalToBodyFrd(value, yaw)
+    return mathx.project(value, yawHorizontalAxes(yaw))
+end
+
+local function projectPositionTargetErrorToBodyFrd(target, state)
+    local position = state.raw.position
+
+    return projectHorizontalToBodyFrd({
+        x = target.x - position.x,
+        z = target.z - position.z,
+    }, state.body.pose.yaw)
+end
+
+local function projectHorizontalVelocityToBodyFrd(state)
+    return projectHorizontalToBodyFrd(state.raw.velocity, state.body.pose.yaw)
+end
+
 local function makeLateralMachine(initialState)
     return {
         mode = lateralMode.positionHold,
-        positionTarget = navigation.makePositionTarget(initialState),
+        positionTarget = makePositionTarget(initialState),
         cruiseVelocity = nil,
         cruiseManualReleasePending = false,
         navigationTarget = nil,
@@ -109,7 +147,7 @@ local function enterLateralMode(machine, mode, state, positionHold)
     positionHold:reset()
 
     if mode == lateralMode.manual or mode == lateralMode.positionHold then
-        machine.positionTarget = navigation.makePositionTarget(state)
+        machine.positionTarget = makePositionTarget(state)
     end
 end
 
@@ -133,7 +171,7 @@ local function updateCruiseTarget(machine, context)
     local manualInput = manualLateralInput(context.input.controls)
 
     if context.input.event.cruiseLock then
-        machine.cruiseVelocity = navigation.projectHorizontalVelocityToBodyFrd(context.state)
+        machine.cruiseVelocity = projectHorizontalVelocityToBodyFrd(context.state)
         machine.cruiseManualReleasePending = manualInput
         context.positionHold:reset()
         context.input.event.cruiseLock = false
@@ -171,7 +209,7 @@ end
 local function cruiseLateral(machine, context)
     local positionResult = context.positionHold:updateVelocity(
         machine.cruiseVelocity,
-        navigation.projectHorizontalVelocityToBodyFrd(context.state),
+        projectHorizontalVelocityToBodyFrd(context.state),
         context.dt
     )
 
@@ -180,8 +218,8 @@ end
 
 local function positionHoldLateral(machine, context)
     local positionResult = context.positionHold:update(
-        navigation.projectPositionTargetErrorToBodyFrd(machine.positionTarget, context.state),
-        navigation.projectHorizontalVelocityToBodyFrd(context.state),
+        projectPositionTargetErrorToBodyFrd(machine.positionTarget, context.state),
+        projectHorizontalVelocityToBodyFrd(context.state),
         context.dt
     )
 
@@ -190,8 +228,8 @@ end
 
 local function navigationLateral(machine, context)
     local positionResult = context.positionHold:update(
-        navigation.projectPositionTargetErrorToBodyFrd(machine.navigationTarget.position, context.state),
-        navigation.projectHorizontalVelocityToBodyFrd(context.state),
+        projectPositionTargetErrorToBodyFrd(machine.navigationTarget.position, context.state),
+        projectHorizontalVelocityToBodyFrd(context.state),
         context.dt
     )
 

@@ -3,6 +3,12 @@ local draw = require("draw")
 local monitor_view = {}
 
 local STALE_TELEMETRY_DT = 0.5
+local PANEL_GAP = 2
+local STATE_COLUMN_WIDTH = 26
+local OUTPUT_COLUMN_WIDTH = 24
+local MIN_STATE_COLUMN_WIDTH = 18
+local MIN_OUTPUT_COLUMN_WIDTH = 16
+local MIN_PID_COLUMN_WIDTH = 28
 
 local function clamp(x, lo, hi)
     if x < lo then return lo end
@@ -35,6 +41,57 @@ local function section(mon, y, title, fg, bg)
     end
 
     draw.writeAt(mon, 1, y, string.upper(title), fg, bg, w)
+end
+
+local function pidPanelLayout(x, width)
+    local gap = math.min(PANEL_GAP, math.max(0, math.floor((width - 3) / 3)))
+    local available = math.max(1, width - gap * 2)
+    local stateWidth = math.min(
+        STATE_COLUMN_WIDTH,
+        math.max(MIN_STATE_COLUMN_WIDTH, math.floor(width * 0.30))
+    )
+    local outputWidth = math.min(
+        OUTPUT_COLUMN_WIDTH,
+        math.max(MIN_OUTPUT_COLUMN_WIDTH, math.floor(width * 0.24))
+    )
+    local pidWidth = available - stateWidth - outputWidth
+
+    if pidWidth < MIN_PID_COLUMN_WIDTH then
+        local need = MIN_PID_COLUMN_WIDTH - pidWidth
+        local stateReduce = math.min(need, stateWidth - MIN_STATE_COLUMN_WIDTH)
+        stateWidth = stateWidth - stateReduce
+        need = need - stateReduce
+
+        local outputReduce = math.min(need, outputWidth - MIN_OUTPUT_COLUMN_WIDTH)
+        outputWidth = outputWidth - outputReduce
+        pidWidth = available - stateWidth - outputWidth
+    end
+
+    if pidWidth < 1 then
+        stateWidth = math.max(1, math.floor(available * 0.30))
+        outputWidth = math.max(1, math.floor(available * 0.24))
+        pidWidth = available - stateWidth - outputWidth
+
+        if pidWidth < 1 then
+            local need = 1 - pidWidth
+            local outputReduce = math.min(need, outputWidth - 1)
+            outputWidth = outputWidth - outputReduce
+            need = need - outputReduce
+
+            local stateReduce = math.min(need, stateWidth - 1)
+            stateWidth = stateWidth - stateReduce
+            pidWidth = available - stateWidth - outputWidth
+        end
+    end
+
+    return {
+        stateX = x,
+        stateWidth = stateWidth,
+        pidX = x + stateWidth + gap,
+        pidWidth = math.max(1, pidWidth),
+        outputX = x + stateWidth + gap + math.max(1, pidWidth) + gap,
+        outputWidth = outputWidth,
+    }
 end
 
 local function drawOutput(mon, x, y, width, label, value, limit)
@@ -196,26 +253,22 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
     draw.writeAt(mon, x, y, text, colors.white, colors.black, width)
 end
 
-local function scaledOffset(value, limit, radius)
-    local scaled = clamp(value / limit, -1.0, 1.0)
-    return math.floor(scaled * radius + (scaled >= 0 and 0.5 or -0.5))
-end
+local function drawValueRow(mon, x, y, width, label, value, pattern)
+    local labelWidth = math.min(7, math.max(4, width - 8))
+    local valueWidth = width - labelWidth - 1
 
-local function drawAxisBar(mon, x, y, width, label, value, limit)
-    if width < 10 then
-        draw.writeAt(mon, x, y, ("%s %+.1f"):format(label, value), colors.white, colors.black, width)
+    if valueWidth < 4 then
+        draw.writeAt(mon, x, y, ("%s %s"):format(label, fmt(value, pattern)), colors.white, colors.black, width)
         return
     end
 
-    local barWidth = width - 8
-    local center = x + 5 + math.floor((barWidth - 1) / 2)
-    local mark = center + scaledOffset(value, limit, math.floor((barWidth - 1) / 2))
+    draw.writeAt(mon, x, y, label, colors.lightGray, colors.black, labelWidth)
+    draw.writeAt(mon, x + labelWidth + 1, y, cell(value, pattern, valueWidth), colors.white, colors.black, valueWidth)
+end
 
-    draw.writeAt(mon, x, y, label, colors.lightGray, colors.black, 4)
-    draw.fill(mon, x + 5, y, barWidth, colors.gray)
-    draw.writeAt(mon, center, y, "+", colors.black, colors.yellow, 1)
-    draw.writeAt(mon, mark, y, "*", colors.white, colors.red, 1)
-    draw.writeAt(mon, x + width - 3, y, ("%+.1f"):format(value), colors.white, colors.black, 4)
+local function scaledOffset(value, limit, radius)
+    local scaled = clamp(value / limit, -1.0, 1.0)
+    return math.floor(scaled * radius + (scaled >= 0 and 0.5 or -0.5))
 end
 
 local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
@@ -228,20 +281,24 @@ local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
     local pose = expectTable(body.pose, "telemetry.state.body.pose")
     local rates = expectTable(body.rates, "telemetry.state.body.rates")
     local rows = {
-        { label = "ROL", value = deg(pose.roll), limit = 45.0 },
-        { label = "PIT", value = deg(pose.pitch), limit = 45.0 },
-        { label = "HEAD", value = deg(pose.heading), limit = 180.0 },
-        { label = "YRAT", value = deg(rates.yaw), limit = 180.0 },
+        { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },
+        { label = "PITCH", value = deg(pose.pitch), pattern = "%+.1f" },
+        { label = "HEAD", value = deg(pose.heading), pattern = "%+.1f" },
+        { label = "RRATE", value = deg(rates.roll), pattern = "%+.1f" },
+        { label = "PRATE", value = deg(rates.pitch), pattern = "%+.1f" },
+        { label = "YRATE", value = deg(rates.yaw), pattern = "%+.1f" },
     }
 
+    draw.writeAt(mon, x, y, "CURRENT", colors.lightGray, colors.black, width)
+
     for index, row in ipairs(rows) do
-        local rowY = y + index - 1
+        local rowY = y + index
 
         if rowY >= y + height then
             return
         end
 
-        drawAxisBar(mon, x, rowY, width, row.label, row.value, row.limit)
+        drawValueRow(mon, x, rowY, width, row.label, row.value, row.pattern)
     end
 end
 
@@ -290,15 +347,8 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local errorRoll = expectTable(errorAttitude.roll, "telemetry.error.attitude.roll")
     local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
     local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
-    local gap = 2
-    local contentWidth = width - gap * 2
-    local stateWidth = math.max(16, math.floor(contentWidth * 0.24))
-    local outputWidth = math.max(14, math.floor(contentWidth * 0.24))
-    local pidWidth = contentWidth - stateWidth - outputWidth
     local bodyHeight = math.min(7, limitY - y + 1)
-    local stateX = x
-    local pidX = stateX + stateWidth + gap
-    local outputX = pidX + pidWidth + gap
+    local layout = pidPanelLayout(x, width)
     local outputRows = {
         { label = "COL", value = commands.collective, limit = 10.0 },
         { label = "ROL", value = commands.roll, limit = 8.0 },
@@ -306,17 +356,17 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
         { label = "YAW", value = commands.yaw, limit = 8.0 },
     }
 
-    drawAttitudeColumn(mon, stateX, y, stateWidth, bodyHeight, telemetry)
-    drawControllerHeader(mon, pidX, y, pidWidth)
+    drawAttitudeColumn(mon, layout.stateX, y, layout.stateWidth, bodyHeight, telemetry)
+    drawControllerHeader(mon, layout.pidX, y, layout.pidWidth)
 
-    if y + 1 <= limitY then drawControllerRow(mon, pidX, y + 1, pidWidth, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
-    if y + 2 <= limitY then drawControllerRow(mon, pidX, y + 2, pidWidth, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
-    if y + 3 <= limitY then drawControllerRow(mon, pidX, y + 3, pidWidth, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) end
-    if y + 4 <= limitY then drawControllerRow(mon, pidX, y + 4, pidWidth, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
-    if y + 5 <= limitY then drawControllerRow(mon, pidX, y + 5, pidWidth, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) end
-    if y + 6 <= limitY then drawControllerRow(mon, pidX, y + 6, pidWidth, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
+    if y + 1 <= limitY then drawControllerRow(mon, layout.pidX, y + 1, layout.pidWidth, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
+    if y + 2 <= limitY then drawControllerRow(mon, layout.pidX, y + 2, layout.pidWidth, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
+    if y + 3 <= limitY then drawControllerRow(mon, layout.pidX, y + 3, layout.pidWidth, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) end
+    if y + 4 <= limitY then drawControllerRow(mon, layout.pidX, y + 4, layout.pidWidth, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
+    if y + 5 <= limitY then drawControllerRow(mon, layout.pidX, y + 5, layout.pidWidth, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) end
+    if y + 6 <= limitY then drawControllerRow(mon, layout.pidX, y + 6, layout.pidWidth, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
 
-    drawPidOutputColumn(mon, outputX, y, outputWidth, bodyHeight, outputRows)
+    drawPidOutputColumn(mon, layout.outputX, y, layout.outputWidth, bodyHeight, outputRows)
 
     return y + bodyHeight
 end
@@ -379,20 +429,6 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     section(mon, y, "position hold", colors.black, colors.pink)
     y = y + 1
 
-    if not positionHold.active then
-        if y <= limitY then
-            draw.writeAt(mon, x, y, "manual roll/pitch", colors.lightGray, colors.black, width)
-            y = y + 1
-        end
-        return y
-    end
-
-    local gap = 2
-    local contentWidth = width - gap * 2
-    local positionWidth = math.floor(contentWidth * 0.30)
-    local outputWidth = math.max(12, math.floor(contentWidth * 0.24))
-    local pidWidth = contentWidth - positionWidth - outputWidth
-
     local rows = {
         {
             label = "XPOS",
@@ -430,16 +466,14 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     local outputRows = {
         { label = "VX", value = targetWorldVelocity.x, limit = 20.0 },
         { label = "VZ", value = targetWorldVelocity.z, limit = 20.0 },
-        { label = "ROL", value = deg(output.attitude.roll), limit = 30.0 },
-        { label = "PIT", value = deg(output.attitude.pitch), limit = 30.0 },
+        { label = "ROL", value = deg(output.attitude.roll or 0.0), limit = 30.0 },
+        { label = "PIT", value = deg(output.attitude.pitch or 0.0), limit = 30.0 },
     }
     local bodyHeight = math.min(5, limitY - y + 1)
-    local positionColumnX = x
-    local pidX = positionColumnX + positionWidth + gap
-    local outputColumnX = pidX + pidWidth + gap
+    local layout = pidPanelLayout(x, width)
 
-    drawPositionColumn(mon, positionColumnX, y, positionWidth, bodyHeight, target, currentPosition)
-    drawControllerHeader(mon, pidX, y, pidWidth)
+    drawPositionColumn(mon, layout.stateX, y, layout.stateWidth, bodyHeight, target, currentPosition)
+    drawControllerHeader(mon, layout.pidX, y, layout.pidWidth)
 
     for index, row in ipairs(rows) do
         local rowY = y + index
@@ -450,9 +484,9 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
 
         drawControllerRow(
             mon,
-            pidX,
+            layout.pidX,
             rowY,
-            pidWidth,
+            layout.pidWidth,
             row.label,
             row.target,
             row.current,
@@ -463,7 +497,7 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         )
     end
 
-    drawPidOutputColumn(mon, outputColumnX, y, outputWidth, bodyHeight, outputRows)
+    drawPidOutputColumn(mon, layout.outputX, y, layout.outputWidth, bodyHeight, outputRows)
 
     y = y + bodyHeight
 

@@ -3,6 +3,7 @@ local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
 local position_hold = require("position_hold")
+local navigation = require("navigation")
 local rate_lock = require("rate_lock")
 local config = require("config")
 
@@ -131,13 +132,13 @@ local function headingRateFromAttitudeRates(bodyFrame, rates)
         + (rates.yaw or 0.0) * fromForwardChange(bodyFrame.right.x, bodyFrame.right.z)
 end
 
-local function makeLateralMachine(initialState)
+local function makeLateralMachine(initialState, navigator)
     return {
         mode = lateralMode.positionHold,
         positionTarget = makePositionTarget(initialState),
         cruiseWorldVelocity = nil,
         cruiseManualReleasePending = false,
-        navigationTarget = nil,
+        navigator = navigator,
     }
 end
 
@@ -155,7 +156,7 @@ local function enterLateralMode(machine, mode, state, positionHold)
 end
 
 local function selectLateralMode(machine, controls)
-    if machine.navigationTarget ~= nil then
+    if machine.navigator:isActive() then
         return lateralMode.navigation
     end
 
@@ -168,6 +169,33 @@ local function selectLateralMode(machine, controls)
     end
 
     return lateralMode.positionHold
+end
+
+local function updateNavigationCommand(machine, command, state)
+    if command == nil then
+        return machine.navigator:state()
+    end
+
+    local result = machine.navigator:command(command, state)
+
+    if result.active then
+        machine.cruiseWorldVelocity = nil
+    end
+
+    return result
+end
+
+local function cancelNavigationForManualInput(machine, controls)
+    if not machine.navigator:isActive() then
+        return false
+    end
+
+    if manualLateralInput(controls) or controls.climb ~= 0.0 or controls.heading ~= 0.0 then
+        machine.navigator:cancel("manual")
+        return true
+    end
+
+    return false
 end
 
 local function updateCruiseTarget(machine, context)
@@ -232,23 +260,31 @@ local function positionHoldLateral(machine, context)
 end
 
 local function navigationLateral(machine, context)
+    local navigationResult = machine.navigator:update(context.state, context.dt)
+
+    if not navigationResult.active then
+        return position_hold.inactive(), context.manualAttitude:target(machine.mode), navigationResult
+    end
+
     local positionResult = context.positionHold:update(
-        worldPositionError(machine.navigationTarget.position, context.state),
+        worldPositionError(navigationResult.target.position, context.state),
         worldHorizontalVelocity(context.state),
-        context.attitudeHeading,
+        navigationResult.target.heading,
         context.dt
     )
 
-    return positionResult, attitudeTarget(machine.mode, positionResult.output.attitude)
+    return positionResult, attitudeTarget(machine.mode, positionResult.output.attitude), navigationResult
 end
 
-local function lateralPositionTarget(machine)
+local function lateralPositionTarget(machine, navigationResult)
     if machine.mode == lateralMode.positionHold then
         return machine.positionTarget
     end
 
-    if machine.mode == lateralMode.navigation then
-        return machine.navigationTarget.position
+    if machine.mode == lateralMode.navigation and
+        navigationResult ~= nil and
+        navigationResult.target ~= nil then
+        return navigationResult.target.position
     end
 
     return nil
@@ -262,6 +298,12 @@ local lateralHandlers = {
 }
 
 local function updateLateral(machine, context)
+    local navigationResult = updateNavigationCommand(machine, context.navigationCommand, context.state)
+
+    if cancelNavigationForManualInput(machine, context.input.controls) then
+        navigationResult = machine.navigator:state()
+    end
+
     updateCruiseTarget(machine, context)
 
     enterLateralMode(
@@ -271,7 +313,9 @@ local function updateLateral(machine, context)
         context.positionHold
     )
 
-    return lateralHandlers[machine.mode](machine, context)
+    local positionResult, target, handlerNavigationResult = lateralHandlers[machine.mode](machine, context)
+
+    return positionResult, target, handlerNavigationResult or navigationResult
 end
 
 local function makeControlState(state)
@@ -311,6 +355,48 @@ local function makeTarget(attitude, position, verticalLock, headingLockResult)
     }
 end
 
+local function navigationVerticalLock(navigationResult, vertical)
+    if not navigationResult.active or navigationResult.target == nil then
+        return nil
+    end
+
+    local targetHeight = navigationResult.target.height
+
+    if targetHeight == nil then
+        return nil
+    end
+
+    return {
+        target = targetHeight,
+        error = targetHeight - vertical.height,
+        commandedRate = 0.0,
+        active = true,
+        pending = false,
+        state = "navigation_" .. navigationResult.phase,
+    }
+end
+
+local function navigationHeadingLock(navigationResult, pose)
+    if not navigationResult.active or navigationResult.target == nil then
+        return nil
+    end
+
+    local targetHeading = navigationResult.target.heading
+
+    if targetHeading == nil then
+        return nil
+    end
+
+    return {
+        target = mathx.wrapPi(targetHeading),
+        error = mathx.wrapPi(targetHeading - pose.heading),
+        commandedRate = 0.0,
+        active = true,
+        pending = false,
+        state = "navigation_" .. navigationResult.phase,
+    }
+end
+
 local function makeTelemetryState(state)
     return {
         raw = {
@@ -336,7 +422,8 @@ function control_task.run(shared)
 
     local manualAttitude = target_state.new(initial, config.control)
     local positionHold = position_hold.new(config.control)
-    local lateralMachine = makeLateralMachine(initialState)
+    local navigator = navigation.new(config.navigation)
+    local lateralMachine = makeLateralMachine(initialState, navigator)
     local heightLock = rate_lock.new({
         initial_target = initial.height,
         target_rate = config.control.vertical.target_rate,
@@ -386,18 +473,33 @@ function control_task.run(shared)
             attitudeHeading = headingLockResult.target
         end
 
-        local positionResult, attitudeTarget = updateLateral(lateralMachine, {
+        local navigationCommand = shared.navigationCommand
+        shared.navigationCommand = nil
+
+        local positionResult, attitudeTarget, navigationResult = updateLateral(lateralMachine, {
             input = input,
             state = state,
             manualAttitude = manualAttitude,
             positionHold = positionHold,
             attitudeHeading = attitudeHeading,
+            navigationCommand = navigationCommand,
             dt = dt,
         })
+        local navigationVertical = navigationVerticalLock(navigationResult, vertical)
+        local navigationHeading = navigationHeadingLock(navigationResult, pose)
+
+        if navigationVertical ~= nil then
+            verticalLock = navigationVertical
+        end
+
+        if navigationHeading ~= nil then
+            headingLockResult = navigationHeading
+            attitudeHeading = headingLockResult.target
+        end
 
         local target = makeTarget(
             attitudeTarget,
-            lateralPositionTarget(lateralMachine),
+            lateralPositionTarget(lateralMachine, navigationResult),
             verticalLock,
             headingLockResult
         )
@@ -491,6 +593,7 @@ function control_task.run(shared)
                 error = result.error,
 
                 positionHold = positionResult,
+                navigation = navigationResult,
             }
         end
 

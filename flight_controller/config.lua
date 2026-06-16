@@ -142,7 +142,7 @@ config.control = {
                 bias = -0.33,
             },
             yaw = {
-                gain = 5.5,
+                gain = 1.5,
             },
         },
     },
@@ -157,8 +157,8 @@ config.control = {
 
     position_hold = {
         velocity_feedforward = {
-            x = 0.016,
-            z = 0.018,
+            x = 0.0185,
+            z = 0.0175,
         },
     },
 
@@ -189,22 +189,22 @@ config.control = {
 
         position = {
             x = {
-                kp = 0.15,
-                ki = 0.005,
-                kd = 0.0,
-                i_min = -10.0,
-                i_max = 10.0,
+                kp = 0.45,
+                ki = 0.12,
+                kd = 0.25,
+                i_min = -0.75,
+                i_max = 0.75,
                 out_min = -20.0,
                 out_max = 20.0,
                 deadband = 0.05,
             },
 
             z = {
-                kp = 0.20,
-                ki = 0.01,
-                kd = 0.0,
-                i_min = -10.0,
-                i_max = 10.0,
+                kp = 0.40,
+                ki = 0.12,
+                kd = 0.20,
+                i_min = -0.42,
+                i_max = 0.42,
                 out_min = -20.0,
                 out_max = 20.0,
                 deadband = 0.05,
@@ -213,22 +213,22 @@ config.control = {
 
         velocity = {
             x = {
-                kp = 0.030,
-                ki = 0.01,
-                kd = 0.005,
-                i_min = -0.35,
-                i_max = 0.35,
+                kp = 0.055,
+                ki = 0.025,
+                kd = 0.00,
+                i_min = -0.4,
+                i_max = 0.4,
                 out_min = -math.rad(20),
                 out_max = math.rad(20),
                 deadband = 0.05,
             },
 
             z = {
-                kp = 0.032,
-                ki = 0.01,
-                kd = 0.006,
-                i_min = -0.35,
-                i_max = 0.35,
+                kp = 0.055,
+                ki = 0.020,
+                kd = 0.00,
+                i_min = -0.4,
+                i_max = 0.4,
                 out_min = -math.rad(30),
                 out_max = math.rad(30),
                 deadband = 0.05,
@@ -238,11 +238,11 @@ config.control = {
         attitude = {
             roll = {
                 angle = {
-                    kp = 1.85,
-                    ki = 0.20,
-                    kd = 0.08,
-                    i_min = -math.rad(1.2),
-                    i_max = math.rad(1.2),
+                    kp = 1.80,
+                    ki = 0.18,
+                    kd = 0.05,
+                    i_min = -math.rad(1.0),
+                    i_max = math.rad(1.0),
                     out_min = -math.rad(90),
                     out_max = math.rad(90),
                     deadband = math.rad(0.05),
@@ -262,11 +262,11 @@ config.control = {
 
             pitch = {
                 angle = {
-                    kp = 1.20,
-                    ki = 0.18,
-                    kd = 0.06,
-                    i_min = -math.rad(1.2),
-                    i_max = math.rad(1.2),
+                    kp = 1.25,
+                    ki = 0.20,
+                    kd = 0.05,
+                    i_min = -math.rad(1.0),
+                    i_max = math.rad(1.0),
                     out_min = -math.rad(90),
                     out_max = math.rad(90),
                     deadband = math.rad(0.05),
@@ -286,9 +286,9 @@ config.control = {
 
             yaw = {
                 angle = {
-                    kp = 1.0,
+                    kp = 0.85,
                     ki = 0.0,
-                    kd = 0.0,
+                    kd = 0.25,
                     i_min = -0.5,
                     i_max = 0.5,
                     out_min = -math.rad(60),
@@ -297,7 +297,7 @@ config.control = {
                 },
 
                 rate = {
-                    kp = 5.0,
+                    kp = 6.5,
                     ki = 0.0,
                     kd = 0.0,
                     i_min = -2.0,

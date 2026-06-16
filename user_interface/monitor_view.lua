@@ -28,6 +28,15 @@ local function cell(value, pattern, width)
     return draw.clip(fmt(value, pattern), width)
 end
 
+local function leftText(text, width)
+    return draw.clip(text, width)
+end
+
+local function rightText(text, width)
+    local clipped = draw.clip(text, width)
+    return string.rep(" ", width - #clipped) .. clipped
+end
+
 local function expectTable(value, name)
     assert(type(value) == "table", name .. " must be table")
     return value
@@ -171,20 +180,89 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
     return y
 end
 
-local function drawControllerHeader(mon, x, y, width)
-    local text
-
+local function pidTableSpec(width)
     if width >= 62 then
-        text = ("%-5s %7s %7s %7s %7s %7s %7s"):format("AXIS", "TARGET", "CURRENT", "ERROR", "P", "I", "D")
-    elseif width >= 48 then
-        text = ("%-5s %6s %6s %6s %6s %6s %6s"):format("AXIS", "TGT", "CUR", "ERR", "P", "I", "D")
-    elseif width >= 36 then
-        text = ("%-4s %5s %5s %5s %3s %3s %3s"):format("AX", "TGT", "CUR", "ERR", "P", "I", "D")
-    else
-        text = ("%-3s %4s %4s %4s %2s %2s %2s"):format("AX", "TGT", "CUR", "ERR", "P", "I", "D")
+        return {
+            labels = { "AXIS", "TARGET", "CURRENT", "ERROR", "P", "I", "D" },
+            widths = { 5, 7, 7, 7, 7, 7, 7 },
+            valuePattern = "%.1f",
+            termPattern = "%+.1f",
+        }
     end
 
-    draw.writeAt(mon, x, y, text, colors.lightGray, colors.black, width)
+    if width >= 48 then
+        return {
+            labels = { "AXIS", "TGT", "CUR", "ERR", "P", "I", "D" },
+            widths = { 5, 6, 6, 6, 6, 6, 6 },
+            valuePattern = "%.1f",
+            termPattern = "%+.1f",
+        }
+    end
+
+    if width >= 36 then
+        return {
+            labels = { "AX", "TGT", "CUR", "ERR", "P", "I", "D" },
+            widths = { 4, 5, 5, 5, 3, 3, 3 },
+            valuePattern = "%.1f",
+            termPattern = "%+.0f",
+        }
+    end
+
+    return {
+        labels = { "AX", "TGT", "CUR", "ERR", "P", "I", "D" },
+        widths = { 3, 4, 4, 4, 2, 2, 2 },
+        valuePattern = "%.0f",
+        termPattern = "%+.0f",
+    }
+end
+
+local function pidTableLayout(width, columnWidths)
+    local gapCount = #columnWidths - 1
+    local totalColumnWidth = 0
+
+    for _, columnWidth in ipairs(columnWidths) do
+        totalColumnWidth = totalColumnWidth + columnWidth
+    end
+
+    local minGap = width >= totalColumnWidth + gapCount and 1 or 0
+    local spare = math.max(0, width - totalColumnWidth - minGap * gapCount)
+    local baseExtra = gapCount > 0 and math.floor(spare / gapCount) or 0
+    local remainder = gapCount > 0 and (spare - baseExtra * gapCount) or 0
+    local layout = {}
+    local cursor = 0
+
+    for index, columnWidth in ipairs(columnWidths) do
+        layout[index] = {
+            offset = cursor,
+            width = columnWidth,
+        }
+
+        if index < #columnWidths then
+            local gap = minGap + baseExtra
+            if index <= remainder then
+                gap = gap + 1
+            end
+            cursor = cursor + columnWidth + gap
+        end
+    end
+
+    return layout
+end
+
+local function drawPidTableCells(mon, x, y, width, values, fg)
+    local spec = pidTableSpec(width)
+    local layout = pidTableLayout(width, spec.widths)
+
+    for index, value in ipairs(values) do
+        local column = layout[index]
+        local text = index == 1 and leftText(value, column.width) or rightText(value, column.width)
+
+        draw.writeAt(mon, x + column.offset, y, text, fg, colors.black, column.width)
+    end
+end
+
+local function drawControllerHeader(mon, x, y, width)
+    drawPidTableCells(mon, x, y, width, pidTableSpec(width).labels, colors.lightGray)
 end
 
 local function drawControllerRow(mon, x, y, width, label, target, current, err, angle, terms, angularTerms)
@@ -206,51 +284,16 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
         d = deg(d)
     end
 
-    local text
-
-    if width >= 62 then
-        text = ("%-5s %7s %7s %7s %7s %7s %7s"):format(
-            label,
-            cell(target, "%.1f", 7),
-            cell(current, "%.1f", 7),
-            cell(err, "%.1f", 7),
-            cell(p, "%+.1f", 7),
-            cell(i, "%+.1f", 7),
-            cell(d, "%+.1f", 7)
-        )
-    elseif width >= 48 then
-        text = ("%-5s %6s %6s %6s %6s %6s %6s"):format(
-            label,
-            cell(target, "%.1f", 6),
-            cell(current, "%.1f", 6),
-            cell(err, "%.1f", 6),
-            cell(p, "%+.1f", 6),
-            cell(i, "%+.1f", 6),
-            cell(d, "%+.1f", 6)
-        )
-    elseif width >= 36 then
-        text = ("%-4s %5s %5s %5s %3s %3s %3s"):format(
-            label,
-            cell(target, "%.1f", 5),
-            cell(current, "%.1f", 5),
-            cell(err, "%.1f", 5),
-            cell(p, "%+.0f", 3),
-            cell(i, "%+.0f", 3),
-            cell(d, "%+.0f", 3)
-        )
-    else
-        text = ("%-3s %4s %4s %4s %2s %2s %2s"):format(
-            label,
-            cell(target, "%.0f", 4),
-            cell(current, "%.0f", 4),
-            cell(err, "%.0f", 4),
-            cell(p, "%+.0f", 2),
-            cell(i, "%+.0f", 2),
-            cell(d, "%+.0f", 2)
-        )
-    end
-
-    draw.writeAt(mon, x, y, text, colors.white, colors.black, width)
+    local spec = pidTableSpec(width)
+    drawPidTableCells(mon, x, y, width, {
+        label,
+        cell(target, spec.valuePattern, spec.widths[2]),
+        cell(current, spec.valuePattern, spec.widths[3]),
+        cell(err, spec.valuePattern, spec.widths[4]),
+        cell(p, spec.termPattern, spec.widths[5]),
+        cell(i, spec.termPattern, spec.widths[6]),
+        cell(d, spec.termPattern, spec.widths[7]),
+    }, colors.white)
 end
 
 local function drawValueRow(mon, x, y, width, label, value, pattern)

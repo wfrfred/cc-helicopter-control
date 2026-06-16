@@ -457,7 +457,7 @@ function Navigator:toggle(id, state)
     end
 
     if self.active ~= nil and self.active.waypoint.id == id then
-        return self:state()
+        return self:cancel("toggle")
     end
 
     return self:select(id)

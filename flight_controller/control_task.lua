@@ -1,4 +1,5 @@
 local Controller = require("controller")
+local attitude_decoupler = require("lib.attitude_decoupler")
 local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
@@ -114,6 +115,49 @@ local function worldHorizontalVelocity(state)
         x = state.raw.velocity.x,
         z = state.raw.velocity.z,
     }
+end
+
+local function copyCommands(commands)
+    return {
+        collective = commands.collective,
+        roll = commands.roll,
+        pitch = commands.pitch,
+        yaw = commands.yaw,
+    }
+end
+
+local function finalClampCommands(commands, limits)
+    return {
+        collective = commands.collective,
+        roll = mathx.clamp(commands.roll, limits.roll_min, limits.roll_max),
+        pitch = mathx.clamp(commands.pitch, limits.pitch_min, limits.pitch_max),
+        yaw = mathx.clamp(commands.yaw, limits.yaw_min, limits.yaw_max),
+    }
+end
+
+local function allocateCommands(result, control)
+    local rawCommands = copyCommands(result.commands)
+    local decoupledCommands = attitude_decoupler.apply(control.attitude_decoupler, rawCommands)
+    local finalCommands = finalClampCommands(decoupledCommands, control.output_limits)
+    local attitude = result.output.attitude
+
+    result.commands = finalCommands
+    result.output.commands = finalCommands
+    result.output.rawCommands = rawCommands
+    result.output.decoupledCommands = decoupledCommands
+    result.output.finalCommands = finalCommands
+
+    attitude.roll.controllerCommand = rawCommands.roll
+    attitude.pitch.controllerCommand = rawCommands.pitch
+    attitude.yaw.controllerCommand = rawCommands.yaw
+
+    attitude.roll.decoupledCommand = decoupledCommands.roll
+    attitude.pitch.decoupledCommand = decoupledCommands.pitch
+    attitude.yaw.decoupledCommand = decoupledCommands.yaw
+
+    attitude.roll.command = finalCommands.roll
+    attitude.pitch.command = finalCommands.pitch
+    attitude.yaw.command = finalCommands.yaw
 end
 
 local function headingRateFromAttitudeRates(bodyFrame, rates)
@@ -522,6 +566,8 @@ function control_task.run(shared)
             state = controlState,
             dt = dt,
         })
+
+        allocateCommands(result, config.control)
 
         mixer:setCommands(result.commands)
         local rotorOutput = mixer:update()

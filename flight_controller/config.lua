@@ -147,6 +147,24 @@ config.control = {
         },
     },
 
+    attitude_decoupler = {
+        enabled = true,
+        matrix = {
+            { 0.957, -0.023, 0.146 },
+            { 0.009, 1.000, -0.058 },
+            { -0.284, 0.005, 0.957 },
+        },
+    },
+
+    output_limits = {
+        roll_min = -8.0,
+        roll_max = 8.0,
+        pitch_min = -8.0,
+        pitch_max = 8.0,
+        yaw_min = -8.0,
+        yaw_max = 8.0,
+    },
+
     heading = {
         target_rate = math.rad(60),
         lock = {

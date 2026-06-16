@@ -9,6 +9,7 @@ local defaults = {
     arrival_radius = 5.0,
     waypoint_radius = 8.0,
     climb_tolerance = 1.0,
+    altitude_tolerance = 1.0,
     heading_tolerance = math.rad(5),
     approach_distance = 40.0,
 }
@@ -71,6 +72,16 @@ local function waypointSummary(waypoint)
     }
 end
 
+local function waypointList(waypoints)
+    local out = {}
+
+    for index, waypoint in ipairs(waypoints) do
+        out[index] = waypointSummary(waypoint)
+    end
+
+    return out
+end
+
 local function approachSummary(approach)
     if approach == nil then
         return nil
@@ -91,6 +102,7 @@ local function inactiveResult(self)
         approach = nil,
         leg = nil,
         target = nil,
+        waypoints = waypointList(self.waypoints),
         arrived = false,
         reason = self.inactiveReason,
     }
@@ -199,16 +211,32 @@ local function buildApproachLegs(waypoint, approach, config)
     return legs
 end
 
-local function cruiseAltitude(waypoint, approach, currentHeight)
+local function cruiseAltitude(waypoint, approach, currentHeight, legs)
+    local finalAltitude = waypoint.position.y
+
+    if approach ~= nil and approach.finalAltitude ~= nil then
+        finalAltitude = approach.finalAltitude
+    end
+
+    if waypoint.hold ~= nil and waypoint.hold.altitude ~= nil then
+        finalAltitude = waypoint.hold.altitude
+    end
+
+    local altitude = math.max(currentHeight, finalAltitude)
+
     if approach ~= nil and approach.cruiseAltitude ~= nil then
-        return approach.cruiseAltitude
+        altitude = math.max(altitude, approach.cruiseAltitude)
     end
 
     if waypoint.cruiseAltitude ~= nil then
-        return waypoint.cruiseAltitude
+        altitude = math.max(altitude, waypoint.cruiseAltitude)
     end
 
-    return math.max(currentHeight, waypoint.position.y)
+    for _, leg in ipairs(legs) do
+        altitude = math.max(altitude, leg.position.y)
+    end
+
+    return altitude
 end
 
 local function currentLeg(active)
@@ -225,10 +253,20 @@ local function legHeading(active, position)
     return mathx.wrapPi(headingTo(position, leg.position))
 end
 
+local function destinationHeight(active)
+    local waypoint = active.waypoint
+    local hold = waypoint.hold or {}
+
+    return hold.altitude or active.destination.y
+end
+
 local function legHeight(active)
     local leg = currentLeg(active)
 
-    if active.phase == "climb" or active.phase == "turn" then
+    if active.phase == "climb" or
+        active.phase == "turn" or
+        active.phase == "transit" or
+        active.phase == "final_approach" then
         return active.cruiseAltitude
     end
 
@@ -258,7 +296,18 @@ local function targetForPhase(active, position, pose)
 
         return {
             position = horizontalTarget(waypoint.position),
-            height = hold.altitude or waypoint.position.y,
+            height = destinationHeight(active),
+            heading = hold.heading or active.arrivalHeading,
+        }
+    end
+
+    if active.phase == "descend" then
+        local waypoint = active.waypoint
+        local hold = waypoint.hold or {}
+
+        return {
+            position = horizontalTarget(active.destination),
+            height = destinationHeight(active),
             heading = hold.heading or active.arrivalHeading,
         }
     end
@@ -272,7 +321,8 @@ end
 
 local function advanceLeg(active, position)
     if active.legIndex >= #active.legs then
-        active.phase = "arrived"
+        active.holdPosition = copyPosition(position)
+        active.phase = "descend"
         return
     end
 
@@ -283,6 +333,7 @@ end
 
 local function updatePhase(active, position, pose, config)
     local climbTolerance = configValue(config, "climb_tolerance")
+    local altitudeTolerance = configValue(config, "altitude_tolerance")
     local headingTolerance = configValue(config, "heading_tolerance")
 
     for _ = 1, 4 do
@@ -304,6 +355,12 @@ local function updatePhase(active, position, pose, config)
 
             if horizontalDistance(position, leg.position) <= leg.radius then
                 advanceLeg(active, position)
+            else
+                return
+            end
+        elseif active.phase == "descend" then
+            if math.abs(position.y - destinationHeight(active)) <= altitudeTolerance then
+                active.phase = "arrived"
             else
                 return
             end
@@ -329,6 +386,7 @@ local function activeResult(active, position, pose)
             position = copyPosition(leg.position),
         } or nil,
         target = targetForPhase(active, position, pose),
+        waypoints = waypointList(active.waypoints),
         arrived = active.phase == "arrived",
         reason = nil,
     }
@@ -352,6 +410,10 @@ function Navigator:select(id)
     assert(waypoint ~= nil, "navigation waypoint not found: " .. tostring(id))
     assert(type(waypoint.id) == "string", "waypoint.id must be string")
     assertPosition(waypoint.position, "waypoint.position")
+
+    if self.active ~= nil and self.active.waypoint.id ~= id then
+        self.active = nil
+    end
 
     self.selected = waypoint
     self.inactiveReason = "selected"
@@ -379,8 +441,10 @@ function Navigator:activate(state, id)
         legIndex = 1,
         phase = "climb",
         holdPosition = copyPosition(position),
-        cruiseAltitude = cruiseAltitude(self.selected, approach, position.y),
+        destination = copyPosition(legs[#legs].position),
+        cruiseAltitude = cruiseAltitude(self.selected, approach, position.y, legs),
         arrivalHeading = approach and approach.heading or pose.heading,
+        waypoints = self.waypoints,
     }
     self.inactiveReason = nil
 
@@ -390,6 +454,10 @@ end
 function Navigator:toggle(id, state)
     if self.selected ~= nil and self.selected.id == id and self.active == nil then
         return self:activate(state)
+    end
+
+    if self.active ~= nil and self.active.waypoint.id == id then
+        return self:state()
     end
 
     return self:select(id)
@@ -459,6 +527,7 @@ function Navigator:state()
             position = copyPosition(currentLeg(self.active).position),
         },
         target = nil,
+        waypoints = waypointList(self.waypoints),
         arrived = self.active.phase == "arrived",
         reason = nil,
     }

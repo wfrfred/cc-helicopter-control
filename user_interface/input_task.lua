@@ -17,6 +17,7 @@ local function defaultInput()
         },
         event = {
             cruiseLock = false,
+            navigation = nil,
         },
     }
 end
@@ -35,6 +36,10 @@ function input_task.run(shared)
     while shared.running do
         local now = os.clock()
         local ctl = input.read()
+        local navigationCommand = shared.pendingNavigationCommand
+
+        shared.pendingNavigationCommand = nil
+        ctl.event.navigation = navigationCommand
 
         shared.input = ctl
         shared.inputTime = now

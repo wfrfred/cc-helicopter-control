@@ -32,6 +32,7 @@ local shared = {
     input = input_task.defaultInput(),
     inputTime = 0.0,
     inputSender = nil,
+    navigationCommand = nil,
     telemetry = nil,
     telemetryTime = 0.0,
     running = true,

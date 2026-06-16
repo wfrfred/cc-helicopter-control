@@ -13,6 +13,7 @@ local function defaultInput()
         },
         event = {
             cruiseLock = false,
+            navigation = nil,
         },
     }
 end
@@ -27,8 +28,33 @@ local function axis(value)
     return clamp(value, -1.0, 1.0)
 end
 
+local function navigationCommand(event)
+    local command = event and event.navigation
+
+    if command == nil then
+        return nil
+    end
+
+    assert(type(command) == "table", "navigation command must be table")
+    assert(type(command.action) == "string", "navigation command action must be string")
+
+    if command.action == "cancel" then
+        return {
+            action = "cancel",
+        }
+    end
+
+    assert(type(command.waypoint) == "string", "navigation command waypoint must be string")
+
+    return {
+        action = command.action,
+        waypoint = command.waypoint,
+    }
+end
+
 local function normalize(msg)
     local controls = msg.controls
+    local event = msg.event or {}
 
     return {
         controls = {
@@ -38,7 +64,8 @@ local function normalize(msg)
             climb = axis(controls.climb),
         },
         event = {
-            cruiseLock = msg.event.cruiseLock == true,
+            cruiseLock = event.cruiseLock == true,
+            navigation = navigationCommand(event),
         },
         seq = msg.seq,
         time = msg.time,
@@ -60,6 +87,11 @@ function input_task.run(shared)
 
             if shared.input.event.cruiseLock then
                 input.event.cruiseLock = true
+            end
+
+            if input.event.navigation ~= nil then
+                shared.navigationCommand = input.event.navigation
+                input.event.navigation = nil
             end
 
             shared.input = input

@@ -126,6 +126,62 @@ local function drawValueGrid(mon, x, y, width, rows)
     end
 end
 
+local function waypointLabel(waypoint, width)
+    local position = expectTable(waypoint.position, "navigation waypoint.position")
+    local name = waypoint.name or waypoint.id
+    local text = ("%s  %.0f %.0f %.0f"):format(name, position.x, position.y, position.z)
+
+    return clip(text, width)
+end
+
+local function drawWaypointRows(mon, shared, x, y, width, limitY, navigation)
+    local waypoints = navigation.waypoints or {}
+    local selected = navigation.selected or {}
+    local active = navigation.active == true and navigation.waypoint or {}
+    local touch = {}
+
+    if #waypoints == 0 then
+        draw.writeAt(mon, x, y, "no waypoints", colors.lightGray, colors.black, width)
+        shared.monitorTouch = shared.monitorTouch or {}
+        shared.monitorTouch.navRows = touch
+        return y + 1
+    end
+
+    for index, waypoint in ipairs(waypoints) do
+        local rowY = y + index - 1
+
+        if rowY > limitY then
+            break
+        end
+
+        local isActive = active.id == waypoint.id
+        local isSelected = selected.id == waypoint.id
+        local fg = colors.white
+        local bg = colors.black
+
+        if isActive then
+            fg = colors.black
+            bg = colors.lime
+        elseif isSelected then
+            fg = colors.white
+            bg = colors.gray
+        end
+
+        draw.writeAt(mon, x, rowY, waypointLabel(waypoint, width), fg, bg, width)
+        touch[#touch + 1] = {
+            y = rowY,
+            x1 = x,
+            x2 = x + width - 1,
+            waypoint = waypoint.id,
+        }
+    end
+
+    shared.monitorTouch = shared.monitorTouch or {}
+    shared.monitorTouch.navRows = touch
+
+    return y + #touch
+end
+
 local function drawOutput(mon, x, y, width, label, value, limit)
     local labelWidth = width >= 24 and 5 or 4
     local valueWidth = 7
@@ -504,7 +560,7 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     return y
 end
 
-local function drawNavigation(mon, x, y, width, limitY, telemetry)
+local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     local state = expectTable(telemetry.state, "telemetry.state")
     local raw = expectTable(state.raw, "telemetry.state.raw")
     local position = expectTable(raw.position, "telemetry.state.raw.position")
@@ -513,6 +569,7 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry)
     local heading = expectTable(target.heading, "telemetry.target.heading")
     local mode = telemetry.mode or {}
     local lock = telemetry.lock or {}
+    local navigation = telemetry.navigation or {}
 
     section(mon, y, "navigation", colors.black, colors.lime)
     y = y + 1
@@ -532,15 +589,19 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry)
         draw.writeAt(mon, x, y, "lateral  " .. tostring(mode.lateral), colors.white, colors.black, width)
         if y + 1 <= limitY then draw.writeAt(mon, x, y + 1, "heading  " .. tostring(lock.heading), colors.white, colors.black, width) end
         if y + 2 <= limitY then draw.writeAt(mon, x, y + 2, "height   " .. tostring(lock.height), colors.white, colors.black, width) end
-        y = y + 3
+        if y + 3 <= limitY then draw.writeAt(mon, x, y + 3, "nav      " .. tostring(navigation.phase or "idle"), colors.white, colors.black, width) end
+        y = y + 4
+    end
+
+    if y <= limitY and navigation.approach ~= nil then
+        draw.writeAt(mon, x, y, "approach " .. tostring(navigation.approach.name or navigation.approach.id), colors.white, colors.black, width)
+        y = y + 1
     end
 
     if y <= limitY then
         y = y + 1
         section(mon, y, "waypoints", colors.black, colors.gray)
-        if y + 1 <= limitY then
-            draw.writeAt(mon, x, y + 1, "waypoint selection will live here", colors.lightGray, colors.black, width)
-        end
+        y = drawWaypointRows(mon, shared, x, y + 1, width, limitY, navigation)
     end
 
     return y
@@ -617,8 +678,13 @@ local function drawRunning(mon, shared, telemetry)
         )
     end
 
+    shared.monitorTouch = {
+        page = activePage,
+        navRows = {},
+    }
+
     local drawer = pageDrawers[activePage] or drawOverview
-    drawer(mon, 2, CONTENT_TOP, w - 2, h - 2, telemetry)
+    drawer(mon, 2, CONTENT_TOP, w - 2, h - 2, telemetry, shared)
     drawFooter(mon, shared, telemetry, staleTelemetry)
 end
 
@@ -646,6 +712,20 @@ function monitor_view.handleTouch(mon, shared, x, y)
     if page then
         shared.monitorPage = page
         return true
+    end
+
+    local touch = shared.monitorTouch
+
+    if touch ~= nil and touch.page == "nav" then
+        for _, row in ipairs(touch.navRows or {}) do
+            if y == row.y and x >= row.x1 and x <= row.x2 then
+                shared.pendingNavigationCommand = {
+                    action = "toggle",
+                    waypoint = row.waypoint,
+                }
+                return true
+            end
+        end
     end
 
     return false

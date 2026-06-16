@@ -20,6 +20,39 @@ config.runtime = {
     },
 }
 
+config.navigation = {
+    arrival_radius = 5.0,
+    waypoint_radius = 8.0,
+    climb_tolerance = 1.0,
+    altitude_tolerance = 1.0,
+    heading_tolerance = math.rad(5),
+    approach_distance = 40.0,
+
+    waypoints = {
+        {
+            id = "west_target",
+            name = "West Target",
+            position = { x = -217, y = 78, z = 264 },
+
+            approaches = {
+                {
+                    id = "west",
+                    name = "West Approach",
+                    heading = math.rad(-90),
+                    distance = 40.0,
+                    altitude = 78,
+                    finalAltitude = 78,
+                },
+            },
+
+            hold = {
+                altitude = 78,
+                heading = math.rad(-90),
+            },
+        },
+    },
+}
+
 config.hardware = {
     rotor = {
         modem_side = "front",

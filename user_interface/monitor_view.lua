@@ -197,8 +197,8 @@ end
 local function pidTableSpec(width)
     if width >= 62 then
         return {
-            labels = { "AXIS", "TARGET", "CURRENT", "ERROR", "P", "I", "D" },
-            widths = { 5, 7, 7, 7, 7, 7, 7 },
+            labels = { "AXIS", "TARGET", "CURRENT", "ERROR", "P", "I", "D", "OUT" },
+            widths = { 5, 7, 7, 7, 7, 7, 7, 7 },
             valuePattern = "%.1f",
             termPattern = "%+.1f",
         }
@@ -206,16 +206,16 @@ local function pidTableSpec(width)
 
     if width >= 48 then
         return {
-            labels = { "AXIS", "TGT", "CUR", "ERR", "P", "I", "D" },
-            widths = { 5, 6, 6, 6, 6, 6, 6 },
+            labels = { "AXIS", "TGT", "CUR", "ERR", "P", "I", "D", "OUT" },
+            widths = { 5, 6, 6, 6, 5, 5, 5, 6 },
             valuePattern = "%.1f",
             termPattern = "%+.1f",
         }
     end
 
     return {
-        labels = { "AX", "TGT", "CUR", "ERR", "P", "I", "D" },
-        widths = { 4, 5, 5, 5, 4, 4, 4 },
+        labels = { "AX", "TGT", "CUR", "ERR", "P", "I", "D", "OUT" },
+        widths = { 4, 5, 5, 5, 4, 4, 4, 5 },
         valuePattern = "%.1f",
         termPattern = "%+.1f",
     }
@@ -282,11 +282,13 @@ local function drawPidRow(mon, x, y, width, label, target, current, err, angle, 
     local p = terms.p
     local i = terms.i
     local d = terms.d
+    local output = terms.output
 
     if angularTerms then
         p = deg(p)
         i = deg(i)
         d = deg(d)
+        output = deg(output)
     end
 
     local spec = pidTableSpec(width)
@@ -299,6 +301,7 @@ local function drawPidRow(mon, x, y, width, label, target, current, err, angle, 
         fmt(p, spec.termPattern),
         fmt(i, spec.termPattern),
         fmt(d, spec.termPattern),
+        fmt(output, spec.termPattern),
     }, colors.white)
 end
 

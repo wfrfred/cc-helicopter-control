@@ -203,13 +203,23 @@ local function drawControllerHeader(mon, x, y, width)
     draw.writeAt(mon, x, y, text, colors.lightGray, colors.black, width)
 end
 
-local function drawControllerRow(mon, x, y, width, label, target, current, err, angle, terms)
+local function drawControllerRow(mon, x, y, width, label, target, current, err, angle, terms, angularTerms)
     expectTable(terms, label .. " pid terms")
 
     if angle then
         target = deg(target)
         current = deg(current)
         err = deg(err)
+    end
+
+    local p = terms.p
+    local i = terms.i
+    local d = terms.d
+
+    if angularTerms then
+        p = deg(p)
+        i = deg(i)
+        d = deg(d)
     end
 
     local text
@@ -220,9 +230,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
             cell(target, "%.1f", 7),
             cell(current, "%.1f", 7),
             cell(err, "%.1f", 7),
-            cell(terms.p, "%+.1f", 7),
-            cell(terms.i, "%+.1f", 7),
-            cell(terms.d, "%+.1f", 7)
+            cell(p, "%+.1f", 7),
+            cell(i, "%+.1f", 7),
+            cell(d, "%+.1f", 7)
         )
     elseif width >= 48 then
         text = ("%-5s %6s %6s %6s %6s %6s %6s"):format(
@@ -230,9 +240,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
             cell(target, "%.1f", 6),
             cell(current, "%.1f", 6),
             cell(err, "%.1f", 6),
-            cell(terms.p, "%+.1f", 6),
-            cell(terms.i, "%+.1f", 6),
-            cell(terms.d, "%+.1f", 6)
+            cell(p, "%+.1f", 6),
+            cell(i, "%+.1f", 6),
+            cell(d, "%+.1f", 6)
         )
     elseif width >= 36 then
         text = ("%-4s %5s %5s %5s  %s/%s/%s"):format(
@@ -240,9 +250,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
             cell(target, "%.1f", 5),
             cell(current, "%.1f", 5),
             cell(err, "%.1f", 5),
-            cell(terms.p, "%+.0f", 3),
-            cell(terms.i, "%+.0f", 3),
-            cell(terms.d, "%+.0f", 3)
+            cell(p, "%+.0f", 3),
+            cell(i, "%+.0f", 3),
+            cell(d, "%+.0f", 3)
         )
     else
         text = ("%s %s/%s/%s %s/%s/%s"):format(
@@ -250,9 +260,9 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
             fmt(target, "%.1f"),
             fmt(current, "%.1f"),
             fmt(err, "%.1f"),
-            fmt(terms.p, "%+.0f"),
-            fmt(terms.i, "%+.0f"),
-            fmt(terms.d, "%+.0f")
+            fmt(p, "%+.0f"),
+            fmt(i, "%+.0f"),
+            fmt(d, "%+.0f")
         )
     end
 
@@ -556,10 +566,10 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         },
     }
     local outputRows = {
-        { value = output.right.value, limit = 20.0 },
-        { value = output.forward.value, limit = 20.0 },
-        { value = deg(velocityRightTerms.output), limit = 20.0 },
-        { value = deg(velocityForwardTerms.output), limit = 30.0 },
+        { value = positionRightTerms.output, limit = 20.0 },
+        { value = positionForwardTerms.output, limit = 20.0 },
+        { value = deg(output.attitude.roll), limit = 30.0 },
+        { value = deg(output.attitude.pitch), limit = 30.0 },
     }
     local bodyHeight = math.min(5, limitY - y + 1)
     local positionColumnX = x
@@ -655,12 +665,12 @@ local function drawRunning(mon, shared, telemetry)
     if y <= h then drawControllerHeader(mon, 2, y, w - 2) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", targetVertical.height, currentVertical.height, errorVertical.height, false, verticalPid.height) y = y + 1 end
     if y <= h then drawControllerRow(mon, 2, y, w - 2, "VSPD", targetVertical.speed, currentVertical.speed, errorVertical.speed, false, verticalPid.speed) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate) y = y + 2 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) y = y + 1 end
+    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) y = y + 2 end
 
     y = drawControllerOutputs(mon, 2, y, w - 2, h, output)
 

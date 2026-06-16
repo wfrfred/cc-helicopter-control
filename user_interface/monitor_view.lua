@@ -7,9 +7,9 @@ local PANEL_GAP = 2
 local STATE_COLUMN_WIDTH = 26
 local OUTPUT_COLUMN_WIDTH = 24
 local POSITION_STATE_COLUMN_WIDTH = 18
-local POSITION_OUTPUT_COLUMN_WIDTH = 14
+local POSITION_OUTPUT_COLUMN_WIDTH = 20
 local MIN_STATE_COLUMN_WIDTH = 14
-local MIN_OUTPUT_COLUMN_WIDTH = 12
+local MIN_OUTPUT_COLUMN_WIDTH = 16
 
 local function clamp(x, lo, hi)
     if x < lo then return lo end
@@ -103,23 +103,6 @@ local function drawOutput(mon, x, y, width, label, value, limit)
     draw.fill(mon, bx, y, bw, colors.gray)
     draw.fill(mon, bx, y, len, bg)
     draw.writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 7)
-end
-
-local function drawOutputBar(mon, x, y, width, value, limit)
-    if width < 8 then
-        draw.writeAt(mon, x, y, ("%+.1f"):format(value), colors.white, colors.black, width)
-        return
-    end
-
-    local valueWidth = math.min(6, math.max(4, width - 2))
-    local barWidth = width - valueWidth - 1
-    local pct = math.abs(clamp(value / limit, -1.0, 1.0))
-    local len = math.floor(barWidth * pct + 0.5)
-    local bg = value >= 0 and colors.blue or colors.purple
-
-    draw.fill(mon, x, y, barWidth, colors.gray)
-    draw.fill(mon, x, y, len, bg)
-    draw.writeAt(mon, x + barWidth + 1, y, ("%+.1f"):format(value), colors.white, colors.black, valueWidth)
 end
 
 local function drawCompactBar(mon, x, y, width, label, value, limit)
@@ -365,14 +348,12 @@ local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
     end
 end
 
-local function drawPidOutputColumn(mon, x, y, width, height, rows, options)
+local function drawPidOutputColumn(mon, x, y, width, height, rows, header)
     if height < 1 then
         return
     end
 
-    options = options or {}
-
-    if options.header then
+    if header then
         draw.writeAt(mon, x, y, "OUTPUT", colors.lightGray, colors.black, width)
         y = y + 1
         height = height - 1
@@ -385,11 +366,7 @@ local function drawPidOutputColumn(mon, x, y, width, height, rows, options)
             return
         end
 
-        if options.labels == false then
-            drawOutputBar(mon, x, rowY, width, row.value, row.limit)
-        else
-            drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
-        end
+        drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
     end
 end
 
@@ -432,10 +409,7 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local topHeight = math.min(5, limitY - y + 1)
 
     drawAttitudeColumn(mon, x, y, stateWidth, topHeight, telemetry)
-    drawPidOutputColumn(mon, x + stateWidth + gap, y, outputWidth, topHeight, outputRows, {
-        header = true,
-        labels = true,
-    })
+    drawPidOutputColumn(mon, x + stateWidth + gap, y, outputWidth, topHeight, outputRows, true)
 
     y = y + topHeight
 
@@ -581,9 +555,7 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         )
     end
 
-    drawPidOutputColumn(mon, layout.outputX, y + 1, layout.outputWidth, bodyHeight - 1, outputRows, {
-        labels = false,
-    })
+    drawPidOutputColumn(mon, layout.outputX, y + 1, layout.outputWidth, bodyHeight - 1, outputRows, false)
 
     y = y + bodyHeight
 

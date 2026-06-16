@@ -14,18 +14,6 @@ local function deg(x)
     return math.deg(x)
 end
 
-local function velocityTotal(velocity)
-    return math.sqrt(
-        velocity.x * velocity.x
-            + velocity.y * velocity.y
-            + velocity.z * velocity.z
-    )
-end
-
-local function velocityHorizontal(velocity)
-    return math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
-end
-
 local function fmt(value, pattern)
     return (pattern or "%.2f"):format(value)
 end
@@ -66,23 +54,6 @@ local function drawOutput(mon, x, y, width, label, value, limit)
     draw.fill(mon, bx, y, bw, colors.gray)
     draw.fill(mon, bx, y, len, bg)
     draw.writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 7)
-end
-
-local function drawOutputBar(mon, x, y, width, value, limit)
-    if width < 9 then
-        draw.writeAt(mon, x, y, ("%+.1f"):format(value), colors.white, colors.black, width)
-        return
-    end
-
-    local valueWidth = 7
-    local barWidth = width - valueWidth - 1
-    local pct = math.abs(clamp(value / limit, -1.0, 1.0))
-    local len = math.floor(barWidth * pct + 0.5)
-    local bg = value >= 0 and colors.blue or colors.purple
-
-    draw.fill(mon, x, y, barWidth, colors.gray)
-    draw.fill(mon, x, y, len, bg)
-    draw.writeAt(mon, x + barWidth + 1, y, ("%+.1f"):format(value), colors.white, colors.black, valueWidth)
 end
 
 local function drawCompactBar(mon, x, y, width, label, value, limit)
@@ -137,50 +108,6 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
         end
 
         drawBladeOutputRow(mon, x, y, width, row)
-        y = y + 1
-    end
-
-    return y
-end
-
-local function drawControllerOutputs(mon, x, y, width, limitY, output)
-    if y > limitY then
-        return y
-    end
-
-    section(mon, y, "controller outputs", colors.black, colors.yellow)
-    y = y + 1
-
-    local columnWidth = math.floor((width - 2) / 2)
-    local commands = expectTable(output.commands, "telemetry.output.commands")
-    local collective = expectTable(output.collective, "telemetry.output.collective")
-    local rows = {
-        {
-            { label = "COL", value = commands.collective },
-            { label = "ROL", value = commands.roll },
-        },
-        {
-            { label = "CFF", value = collective.feedforward },
-            { label = "PIT", value = commands.pitch },
-        },
-        {
-            { label = "CFB", value = collective.feedback },
-            { label = "YAW", value = commands.yaw },
-        },
-    }
-    local limits = {
-        { 10.0, 8.0 },
-        { 10.0, 12.0 },
-        { 6.0, 8.0 },
-    }
-
-    for index, row in ipairs(rows) do
-        if y > limitY then
-            return y
-        end
-
-        drawOutput(mon, x, y, columnWidth, row[1].label, row[1].value, limits[index][1])
-        drawOutput(mon, x + columnWidth + 2, y, columnWidth, row[2].label, row[2].value, limits[index][2])
         y = y + 1
     end
 
@@ -269,86 +196,6 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
     draw.writeAt(mon, x, y, text, colors.white, colors.black, width)
 end
 
-local function drawMetricGroups(mon, x, y, width, limitY, items, fg)
-    local perLine = 1
-
-    if width >= 60 then
-        perLine = 4
-    elseif width >= 44 then
-        perLine = 3
-    elseif width >= 28 then
-        perLine = 2
-    end
-
-    local i = 1
-    while i <= #items and y <= limitY do
-        local parts = {}
-
-        for _ = 1, perLine do
-            local item = items[i]
-
-            if not item then
-                break
-            end
-
-            parts[#parts + 1] = ("%-5s %8s"):format(
-                item.label,
-                cell(item.value, item.pattern or "%.1f", 8)
-            )
-            i = i + 1
-        end
-
-        draw.writeAt(mon, x, y, table.concat(parts, "  "), fg, colors.black, width)
-        y = y + 1
-    end
-
-    return y
-end
-
-local function drawFlightState(mon, x, y, width, limitY, telemetry)
-    if y > limitY then
-        return y
-    end
-
-    local current = expectTable(telemetry.current, "telemetry.current")
-    local state = expectTable(telemetry.state, "telemetry.state")
-    local raw = expectTable(state.raw, "telemetry.state.raw")
-    local body = expectTable(state.body, "telemetry.state.body")
-    local position = expectTable(raw.position, "telemetry.state.raw.position")
-    local velocity = expectTable(raw.velocity, "telemetry.state.raw.velocity")
-    local pose = expectTable(body.pose, "telemetry.state.body.pose")
-    local rates = expectTable(body.rates, "telemetry.state.body.rates")
-    local vertical = expectTable(current.vertical, "telemetry.current.vertical")
-    local bodyVelocity = expectTable(body.velocity, "telemetry.state.body.velocity")
-    local items = {
-        { label = "ALT", value = vertical.height, pattern = "%.1f" },
-        { label = "HSPD", value = velocityHorizontal(velocity), pattern = "%.1f" },
-        { label = "VSPD", value = vertical.speed, pattern = "%+.1f" },
-        { label = "TSPD", value = velocityTotal(velocity), pattern = "%.1f" },
-
-        { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },
-        { label = "PITCH", value = deg(pose.pitch), pattern = "%+.1f" },
-        { label = "HEAD", value = deg(pose.heading), pattern = "%.1f" },
-        { label = "YRATE", value = deg(rates.yaw), pattern = "%+.1f" },
-
-        { label = "POSX", value = position.x, pattern = "%.1f" },
-        { label = "POSY", value = position.y, pattern = "%.1f" },
-        { label = "POSZ", value = position.z, pattern = "%.1f" },
-
-        { label = "VELX", value = velocity.x, pattern = "%+.1f" },
-        { label = "VELY", value = velocity.y, pattern = "%+.1f" },
-        { label = "VELZ", value = velocity.z, pattern = "%+.1f" },
-        { label = "BFWD", value = bodyVelocity.forward, pattern = "%+.1f" },
-        { label = "BRGT", value = bodyVelocity.right, pattern = "%+.1f" },
-        { label = "BDWN", value = bodyVelocity.down, pattern = "%+.1f" },
-    }
-
-    section(mon, y, "flight state", colors.black, colors.green)
-    y = y + 1
-
-    return drawMetricGroups(mon, x, y, width, limitY, items, colors.white)
-end
-
 local function scaledOffset(value, limit, radius)
     local scaled = clamp(value / limit, -1.0, 1.0)
     return math.floor(scaled * radius + (scaled >= 0 and 0.5 or -0.5))
@@ -371,6 +218,109 @@ local function drawAxisBar(mon, x, y, width, label, value, limit)
     draw.writeAt(mon, x + width - 3, y, ("%+.1f"):format(value), colors.white, colors.black, 4)
 end
 
+local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
+    if height < 1 then
+        return
+    end
+
+    local state = expectTable(telemetry.state, "telemetry.state")
+    local body = expectTable(state.body, "telemetry.state.body")
+    local pose = expectTable(body.pose, "telemetry.state.body.pose")
+    local rates = expectTable(body.rates, "telemetry.state.body.rates")
+    local rows = {
+        { label = "ROL", value = deg(pose.roll), limit = 45.0 },
+        { label = "PIT", value = deg(pose.pitch), limit = 45.0 },
+        { label = "HEAD", value = deg(pose.heading), limit = 180.0 },
+        { label = "YRAT", value = deg(rates.yaw), limit = 180.0 },
+    }
+
+    for index, row in ipairs(rows) do
+        local rowY = y + index - 1
+
+        if rowY >= y + height then
+            return
+        end
+
+        drawAxisBar(mon, x, rowY, width, row.label, row.value, row.limit)
+    end
+end
+
+local function drawPidOutputColumn(mon, x, y, width, height, rows)
+    if height < 1 then
+        return
+    end
+
+    draw.writeAt(mon, x, y, "OUTPUT", colors.lightGray, colors.black, width)
+
+    for index, row in ipairs(rows) do
+        local rowY = y + index
+
+        if rowY >= y + height then
+            return
+        end
+
+        drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
+    end
+end
+
+local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
+    if y > limitY then
+        return y
+    end
+
+    section(mon, y, "attitude pid", colors.black, colors.lightBlue)
+    y = y + 1
+
+    local target = expectTable(telemetry.target, "telemetry.target")
+    local current = expectTable(telemetry.current, "telemetry.current")
+    local err = expectTable(telemetry.error, "telemetry.error")
+    local output = expectTable(telemetry.output, "telemetry.output")
+    local commands = expectTable(output.commands, "telemetry.output.commands")
+    local pidData = expectTable(telemetry.pid, "telemetry.pid")
+    local attitudePid = expectTable(pidData.attitude, "telemetry.pid.attitude")
+    local targetAttitude = expectTable(target.attitude, "telemetry.target.attitude")
+    local currentAttitude = expectTable(current.attitude, "telemetry.current.attitude")
+    local errorAttitude = expectTable(err.attitude, "telemetry.error.attitude")
+    local targetRoll = expectTable(targetAttitude.roll, "telemetry.target.attitude.roll")
+    local targetPitch = expectTable(targetAttitude.pitch, "telemetry.target.attitude.pitch")
+    local targetYaw = expectTable(targetAttitude.yaw, "telemetry.target.attitude.yaw")
+    local currentRoll = expectTable(currentAttitude.roll, "telemetry.current.attitude.roll")
+    local currentPitch = expectTable(currentAttitude.pitch, "telemetry.current.attitude.pitch")
+    local currentYaw = expectTable(currentAttitude.yaw, "telemetry.current.attitude.yaw")
+    local errorRoll = expectTable(errorAttitude.roll, "telemetry.error.attitude.roll")
+    local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
+    local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
+    local gap = 2
+    local contentWidth = width - gap * 2
+    local stateWidth = math.max(16, math.floor(contentWidth * 0.24))
+    local outputWidth = math.max(14, math.floor(contentWidth * 0.24))
+    local pidWidth = contentWidth - stateWidth - outputWidth
+    local bodyHeight = math.min(7, limitY - y + 1)
+    local stateX = x
+    local pidX = stateX + stateWidth + gap
+    local outputX = pidX + pidWidth + gap
+    local outputRows = {
+        { label = "COL", value = commands.collective, limit = 10.0 },
+        { label = "ROL", value = commands.roll, limit = 8.0 },
+        { label = "PIT", value = commands.pitch, limit = 12.0 },
+        { label = "YAW", value = commands.yaw, limit = 8.0 },
+    }
+
+    drawAttitudeColumn(mon, stateX, y, stateWidth, bodyHeight, telemetry)
+    drawControllerHeader(mon, pidX, y, pidWidth)
+
+    if y + 1 <= limitY then drawControllerRow(mon, pidX, y + 1, pidWidth, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
+    if y + 2 <= limitY then drawControllerRow(mon, pidX, y + 2, pidWidth, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
+    if y + 3 <= limitY then drawControllerRow(mon, pidX, y + 3, pidWidth, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) end
+    if y + 4 <= limitY then drawControllerRow(mon, pidX, y + 4, pidWidth, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
+    if y + 5 <= limitY then drawControllerRow(mon, pidX, y + 5, pidWidth, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) end
+    if y + 6 <= limitY then drawControllerRow(mon, pidX, y + 6, pidWidth, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
+
+    drawPidOutputColumn(mon, outputX, y, outputWidth, bodyHeight, outputRows)
+
+    return y + bodyHeight
+end
+
 local function drawPositionMap(mon, x, y, width, height, target, current)
     if height < 1 then
         return
@@ -378,14 +328,6 @@ local function drawPositionMap(mon, x, y, width, height, target, current)
 
     if height > 2 and height % 2 == 0 then
         height = height - 1
-    end
-
-    if width < 12 or height < 3 then
-        drawAxisBar(mon, x, y, width, "X", current.x - target.x, 10.0)
-        if height >= 2 then
-            drawAxisBar(mon, x, y + 1, width, "Z", current.z - target.z, 10.0)
-        end
-        return
     end
 
     local centerX = x + math.floor(width / 2)
@@ -412,77 +354,6 @@ local function drawPositionColumn(mon, x, y, width, height, target, current)
     drawPositionMap(mon, x, y, width, height, target, current)
 end
 
-local function drawPositionPidColumn(mon, x, y, width, height, rows)
-    if height < 1 then
-        return
-    end
-
-    local header
-
-    if width >= 32 then
-        header = ("%-5s %7s %7s %7s"):format("AXIS", "TGT", "CUR", "ERR")
-    elseif width >= 24 then
-        header = ("%-4s %6s %6s %6s"):format("AX", "TGT", "CUR", "ERR")
-    else
-        header = "AX TGT/CUR/ERR"
-    end
-
-    draw.writeAt(mon, x, y, header, colors.lightGray, colors.black, width)
-
-    for index, row in ipairs(rows) do
-        local rowY = y + index
-
-        if rowY >= y + height then
-            return
-        end
-
-        local text
-
-        if width >= 32 then
-            text = ("%-5s %7s %7s %7s"):format(
-                row.label,
-                cell(row.target, "%.1f", 7),
-                cell(row.current, "%.1f", 7),
-                cell(row.err, "%+.1f", 7)
-            )
-        elseif width >= 24 then
-            text = ("%-4s %6s %6s %6s"):format(
-                row.label,
-                cell(row.target, "%.1f", 6),
-                cell(row.current, "%.1f", 6),
-                cell(row.err, "%+.1f", 6)
-            )
-        else
-            text = ("%s %s/%s/%s"):format(
-                row.label,
-                cell(row.target, "%.1f", 5),
-                cell(row.current, "%.1f", 5),
-                cell(row.err, "%+.1f", 5)
-            )
-        end
-
-        draw.writeAt(mon, x, rowY, text, colors.white, colors.black, width)
-    end
-end
-
-local function drawPositionPidOutputColumn(mon, x, y, width, height, rows)
-    if height < 1 then
-        return
-    end
-
-    draw.writeAt(mon, x, y, "PID OUTPUT", colors.lightGray, colors.black, width)
-
-    for index, row in ipairs(rows) do
-        local rowY = y + index
-
-        if rowY >= y + height then
-            return
-        end
-
-        drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
-    end
-end
-
 local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     if y > limitY then
         return y
@@ -497,6 +368,13 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     local targetWorldVelocity = expectTable(worldVelocity.target, "telemetry.positionHold.worldVelocity.target")
     local currentWorldVelocity = expectTable(worldVelocity.current, "telemetry.positionHold.worldVelocity.current")
     local err = expectTable(worldPosition.error, "telemetry.positionHold.worldPosition.error")
+    local pidData = expectTable(telemetry.pid, "telemetry.pid")
+    local positionPid = expectTable(pidData.position, "telemetry.pid.position")
+    local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
+    local positionXTerms = expectTable(positionPid.x, "telemetry.pid.position.x")
+    local positionZTerms = expectTable(positionPid.z, "telemetry.pid.position.z")
+    local velocityXTerms = expectTable(velocityPid.x, "telemetry.pid.velocity.x")
+    local velocityZTerms = expectTable(velocityPid.z, "telemetry.pid.velocity.z")
 
     section(mon, y, "position hold", colors.black, colors.pink)
     y = y + 1
@@ -515,47 +393,38 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     local outputWidth = math.max(12, math.floor(contentWidth * 0.24))
     local pidWidth = contentWidth - positionWidth - outputWidth
 
-    if width < 58 then
-        gap = 1
-        contentWidth = width - gap * 2
-        positionWidth = math.floor(contentWidth * 0.30)
-        outputWidth = math.max(10, math.floor(contentWidth * 0.24))
-        pidWidth = contentWidth - positionWidth - outputWidth
-    end
-
-    if positionWidth < 10 or pidWidth < 14 or outputWidth < 8 then
-        drawAxisBar(mon, x, y, width, "X", err.x, 10.0)
-        if y + 1 <= limitY then
-            drawAxisBar(mon, x, y + 1, width, "Z", err.z, 10.0)
-            return y + 2
-        end
-        return y + 1
-    end
-
     local rows = {
         {
             label = "XPOS",
             target = 0.0,
             current = -err.x,
             err = err.x,
+            terms = positionXTerms,
+            angularTerms = false,
         },
         {
             label = "ZPOS",
             target = 0.0,
             current = -err.z,
             err = err.z,
+            terms = positionZTerms,
+            angularTerms = false,
         },
         {
             label = "XVEL",
             target = targetWorldVelocity.x,
             current = currentWorldVelocity.x,
             err = targetWorldVelocity.x - currentWorldVelocity.x,
+            terms = velocityXTerms,
+            angularTerms = true,
         },
         {
             label = "ZVEL",
             target = targetWorldVelocity.z,
             current = currentWorldVelocity.z,
             err = targetWorldVelocity.z - currentWorldVelocity.z,
+            terms = velocityZTerms,
+            angularTerms = true,
         },
     }
     local outputRows = {
@@ -570,8 +439,31 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     local outputColumnX = pidX + pidWidth + gap
 
     drawPositionColumn(mon, positionColumnX, y, positionWidth, bodyHeight, target, currentPosition)
-    drawPositionPidColumn(mon, pidX, y, pidWidth, bodyHeight, rows)
-    drawPositionPidOutputColumn(mon, outputColumnX, y, outputWidth, bodyHeight, outputRows)
+    drawControllerHeader(mon, pidX, y, pidWidth)
+
+    for index, row in ipairs(rows) do
+        local rowY = y + index
+
+        if rowY >= y + bodyHeight then
+            break
+        end
+
+        drawControllerRow(
+            mon,
+            pidX,
+            rowY,
+            pidWidth,
+            row.label,
+            row.target,
+            row.current,
+            row.err,
+            false,
+            row.terms,
+            row.angularTerms
+        )
+    end
+
+    drawPidOutputColumn(mon, outputColumnX, y, outputWidth, bodyHeight, outputRows)
 
     y = y + bodyHeight
 
@@ -603,28 +495,7 @@ end
 
 local function drawRunning(mon, shared, telemetry)
     local w, h = mon.getSize()
-    local target = expectTable(telemetry.target, "telemetry.target")
-    local current = expectTable(telemetry.current, "telemetry.current")
-    local err = expectTable(telemetry.error, "telemetry.error")
     local output = expectTable(telemetry.output, "telemetry.output")
-    local pidData = expectTable(telemetry.pid, "telemetry.pid")
-    local verticalPid = expectTable(pidData.vertical, "telemetry.pid.vertical")
-    local attitudePid = expectTable(pidData.attitude, "telemetry.pid.attitude")
-    local targetVertical = expectTable(target.vertical, "telemetry.target.vertical")
-    local targetAttitude = expectTable(target.attitude, "telemetry.target.attitude")
-    local targetRoll = expectTable(targetAttitude.roll, "telemetry.target.attitude.roll")
-    local targetPitch = expectTable(targetAttitude.pitch, "telemetry.target.attitude.pitch")
-    local targetYaw = expectTable(targetAttitude.yaw, "telemetry.target.attitude.yaw")
-    local currentVertical = expectTable(current.vertical, "telemetry.current.vertical")
-    local currentAttitude = expectTable(current.attitude, "telemetry.current.attitude")
-    local currentRoll = expectTable(currentAttitude.roll, "telemetry.current.attitude.roll")
-    local currentPitch = expectTable(currentAttitude.pitch, "telemetry.current.attitude.pitch")
-    local currentYaw = expectTable(currentAttitude.yaw, "telemetry.current.attitude.yaw")
-    local errorVertical = expectTable(err.vertical, "telemetry.error.vertical")
-    local errorAttitude = expectTable(err.attitude, "telemetry.error.attitude")
-    local errorRoll = expectTable(errorAttitude.roll, "telemetry.error.attitude.roll")
-    local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
-    local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
     local inputTelemetry = expectTable(telemetry.input, "telemetry.input")
     local now = os.clock()
 
@@ -652,24 +523,7 @@ local function drawRunning(mon, shared, telemetry)
     local y = 4
 
     if y <= h then
-        section(mon, y, "controller", colors.black, colors.lightBlue)
-        y = y + 1
-    end
-    if y <= h then drawControllerHeader(mon, 2, y, w - 2) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ALT", targetVertical.height, currentVertical.height, errorVertical.height, false, verticalPid.height) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "VSPD", targetVertical.speed, currentVertical.speed, errorVertical.speed, false, verticalPid.speed) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) y = y + 1 end
-    if y <= h then drawControllerRow(mon, 2, y, w - 2, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) y = y + 2 end
-
-    y = drawControllerOutputs(mon, 2, y, w - 2, h, output)
-
-    if y <= h then
-        y = y + 1
-        y = drawRotorOutputs(mon, 2, y, w - 2, h - 2, output)
+        y = drawAttitudePid(mon, 2, y, w - 2, h - 2, telemetry)
     end
 
     if y <= h - 2 then
@@ -678,7 +532,8 @@ local function drawRunning(mon, shared, telemetry)
     end
 
     if y <= h - 2 then
-        y = drawFlightState(mon, 2, y, w - 2, h - 2, telemetry)
+        y = y + 1
+        y = drawRotorOutputs(mon, 2, y, w - 2, h - 2, output)
     end
 
     if h >= 3 then

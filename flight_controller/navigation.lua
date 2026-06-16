@@ -194,7 +194,7 @@ local function buildApproachLegs(waypoint, approach, config)
         elseif approach.entry ~= nil then
             addLeg(legs, "entry", approach.entry, nil, waypointRadius)
         else
-            addLeg(legs, "entry", routeStart(waypoint, approach, config), approach.heading, waypointRadius)
+            addLeg(legs, "entry", routeStart(waypoint, approach, config), nil, waypointRadius)
         end
 
         local finalPosition = copyPosition(waypoint.position)

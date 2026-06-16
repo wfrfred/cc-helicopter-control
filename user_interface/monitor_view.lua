@@ -266,6 +266,20 @@ local function drawValueRow(mon, x, y, width, label, value, pattern)
     draw.writeAt(mon, x + labelWidth + 1, y, cell(value, pattern, valueWidth), colors.white, colors.black, valueWidth)
 end
 
+local function drawValuePairRow(mon, x, y, width, left, right)
+    local gap = 2
+    local leftWidth = math.floor((width - gap) / 2)
+    local rightWidth = width - leftWidth - gap
+
+    if leftWidth < 12 or rightWidth < 12 then
+        drawValueRow(mon, x, y, width, left.label, left.value, left.pattern)
+        return
+    end
+
+    drawValueRow(mon, x, y, leftWidth, left.label, left.value, left.pattern)
+    drawValueRow(mon, x + leftWidth + gap, y, rightWidth, right.label, right.value, right.pattern)
+end
+
 local function scaledOffset(value, limit, radius)
     local scaled = clamp(value / limit, -1.0, 1.0)
     return math.floor(scaled * radius + (scaled >= 0 and 0.5 or -0.5))
@@ -281,12 +295,18 @@ local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
     local pose = expectTable(body.pose, "telemetry.state.body.pose")
     local rates = expectTable(body.rates, "telemetry.state.body.rates")
     local rows = {
-        { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },
-        { label = "PITCH", value = deg(pose.pitch), pattern = "%+.1f" },
-        { label = "HEAD", value = deg(pose.heading), pattern = "%+.1f" },
-        { label = "RRATE", value = deg(rates.roll), pattern = "%+.1f" },
-        { label = "PRATE", value = deg(rates.pitch), pattern = "%+.1f" },
-        { label = "YRATE", value = deg(rates.yaw), pattern = "%+.1f" },
+        {
+            { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },
+            { label = "RRATE", value = deg(rates.roll), pattern = "%+.1f" },
+        },
+        {
+            { label = "PITCH", value = deg(pose.pitch), pattern = "%+.1f" },
+            { label = "PRATE", value = deg(rates.pitch), pattern = "%+.1f" },
+        },
+        {
+            { label = "HEAD", value = deg(pose.heading), pattern = "%+.1f" },
+            { label = "YRATE", value = deg(rates.yaw), pattern = "%+.1f" },
+        },
     }
 
     draw.writeAt(mon, x, y, "CURRENT", colors.lightGray, colors.black, width)
@@ -298,7 +318,7 @@ local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
             return
         end
 
-        drawValueRow(mon, x, rowY, width, row.label, row.value, row.pattern)
+        drawValuePairRow(mon, x, rowY, width, row[1], row[2])
     end
 end
 
@@ -347,28 +367,36 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local errorRoll = expectTable(errorAttitude.roll, "telemetry.error.attitude.roll")
     local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
     local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
-    local bodyHeight = math.min(7, limitY - y + 1)
-    local layout = pidPanelLayout(x, width)
     local outputRows = {
         { label = "COL", value = commands.collective, limit = 10.0 },
         { label = "ROL", value = commands.roll, limit = 8.0 },
         { label = "PIT", value = commands.pitch, limit = 12.0 },
         { label = "YAW", value = commands.yaw, limit = 8.0 },
     }
+    local gap = PANEL_GAP
+    local outputWidth = math.min(OUTPUT_COLUMN_WIDTH, math.max(MIN_OUTPUT_COLUMN_WIDTH, math.floor(width * 0.24)))
+    local stateWidth = width - outputWidth - gap
+    local topHeight = math.min(5, limitY - y + 1)
 
-    drawAttitudeColumn(mon, layout.stateX, y, layout.stateWidth, bodyHeight, telemetry)
-    drawControllerHeader(mon, layout.pidX, y, layout.pidWidth)
+    drawAttitudeColumn(mon, x, y, stateWidth, topHeight, telemetry)
+    drawPidOutputColumn(mon, x + stateWidth + gap, y, outputWidth, topHeight, outputRows)
 
-    if y + 1 <= limitY then drawControllerRow(mon, layout.pidX, y + 1, layout.pidWidth, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
-    if y + 2 <= limitY then drawControllerRow(mon, layout.pidX, y + 2, layout.pidWidth, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
-    if y + 3 <= limitY then drawControllerRow(mon, layout.pidX, y + 3, layout.pidWidth, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) end
-    if y + 4 <= limitY then drawControllerRow(mon, layout.pidX, y + 4, layout.pidWidth, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
-    if y + 5 <= limitY then drawControllerRow(mon, layout.pidX, y + 5, layout.pidWidth, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) end
-    if y + 6 <= limitY then drawControllerRow(mon, layout.pidX, y + 6, layout.pidWidth, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
+    y = y + topHeight
 
-    drawPidOutputColumn(mon, layout.outputX, y, layout.outputWidth, bodyHeight, outputRows)
+    if y > limitY then
+        return y
+    end
 
-    return y + bodyHeight
+    drawControllerHeader(mon, x, y, width)
+
+    if y + 1 <= limitY then drawControllerRow(mon, x, y + 1, width, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
+    if y + 2 <= limitY then drawControllerRow(mon, x, y + 2, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
+    if y + 3 <= limitY then drawControllerRow(mon, x, y + 3, width, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) end
+    if y + 4 <= limitY then drawControllerRow(mon, x, y + 4, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
+    if y + 5 <= limitY then drawControllerRow(mon, x, y + 5, width, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) end
+    if y + 6 <= limitY then drawControllerRow(mon, x, y + 6, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
+
+    return y + math.min(7, limitY - y + 1)
 end
 
 local function drawPositionMap(mon, x, y, width, height, target, current)

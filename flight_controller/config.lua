@@ -27,9 +27,9 @@ config.hardware = {
         lower_bearing = "swivel_bearing_5",
         blade_mount = {
             [1] = 0.0,
-            [2] = math.pi / 2,
+            [2] = -math.pi / 2,
             [3] = math.pi,
-            [4] = -math.pi / 2,
+            [4] = math.pi / 2,
         },
     },
 }
@@ -61,7 +61,6 @@ config.control = {
     collective = {
         min = 0.0,
         max = 10.0,
-        feedforward_bias = 1.0,
         tilt_compensation = {
             min_factor = 0.5,
         },
@@ -69,7 +68,10 @@ config.control = {
 
     vertical = {
         target_rate = 5.0,
-        speed_feedforward_gain = 0.5,
+        feedforward = {
+            gain = 0.5,
+            bias = 1.0,
+        },
         lock = {
             speed_deadband = 0.1,
             relock_timeout = 0.6,
@@ -98,9 +100,17 @@ config.control = {
         },
 
         rate_feedforward = {
-            roll = 1.0 / math.rad(45),
-            pitch = 1.0 / math.rad(45),
-            yaw = 1.3 / math.rad(45),
+            roll = {
+                gain = 6.2,
+                bias = -0.03,
+            },
+            pitch = {
+                gain = 6.8,
+                bias = -0.33,
+            },
+            yaw = {
+                gain = 5.5,
+            },
         },
     },
 
@@ -157,7 +167,7 @@ config.control = {
             },
 
             forward = {
-                kp = 0.15,
+                kp = 0.20,
                 ki = 0.01,
                 kd = 0.0,
                 i_min = -10.0,
@@ -195,49 +205,49 @@ config.control = {
         attitude = {
             roll = {
                 angle = {
-                    kp = 3.0,
-                    ki = 0.0,
-                    kd = 0.0,
-                    i_min = -math.rad(15),
-                    i_max = math.rad(15),
+                    kp = 1.85,
+                    ki = 0.20,
+                    kd = 0.08,
+                    i_min = -math.rad(1.2),
+                    i_max = math.rad(1.2),
                     out_min = -math.rad(90),
                     out_max = math.rad(90),
                     deadband = math.rad(0.05),
                 },
 
                 rate = {
-                    kp = 2.0,
-                    ki = 0.0,
+                    kp = 1.0,
+                    ki = 1.5,
                     kd = 0.0,
-                    i_min = -2.0,
-                    i_max = 2.0,
+                    i_min = -0.15,
+                    i_max = 0.15,
                     out_min = -8.0,
                     out_max = 8.0,
-                    deadband = math.rad(0.5),
+                    deadband = math.rad(0.05),
                 },
             },
 
             pitch = {
                 angle = {
-                    kp = 3.0,
-                    ki = 0.0,
-                    kd = 0.0,
-                    i_min = -math.rad(15),
-                    i_max = math.rad(15),
+                    kp = 1.20,
+                    ki = 0.18,
+                    kd = 0.06,
+                    i_min = -math.rad(1.2),
+                    i_max = math.rad(1.2),
                     out_min = -math.rad(90),
                     out_max = math.rad(90),
-                    deadband = math.rad(0.15),
+                    deadband = math.rad(0.05),
                 },
 
                 rate = {
-                    kp = 2.2,
-                    ki = 0.0,
+                    kp = 3.5,
+                    ki = 1.4,
                     kd = 0.0,
-                    i_min = -1.5,
-                    i_max = 1.5,
+                    i_min = -0.15,
+                    i_max = 0.15,
                     out_min = -12.0,
                     out_max = 12.0,
-                    deadband = math.rad(0.5),
+                    deadband = math.rad(0.05),
                 },
             },
 

@@ -20,18 +20,18 @@ function rate_lock.new(options)
     }, Lock)
 end
 
-function Lock:update(input, current, rate, dt)
+function Lock:update(manualInput, currentValue, measuredRate, dt)
     dt = dt or 0.0
 
-    if input ~= 0 then
-        self.target = current
+    if manualInput ~= 0 then
+        self.target = currentValue
         self.wasManual = true
         self.pending = false
         self.pendingTime = 0.0
         return {
-            target = current,
+            target = currentValue,
             error = 0.0,
-            commandedRate = input * self.targetRate,
+            commandedRate = manualInput * self.targetRate,
             active = false,
             pending = false,
             state = "manual",
@@ -47,11 +47,11 @@ function Lock:update(input, current, rate, dt)
     if self.pending then
         self.pendingTime = self.pendingTime + dt
 
-        local stopped = math.abs(rate) < self.rateDeadband
+        local stopped = math.abs(measuredRate) < self.rateDeadband
         local timedOut = self.relockTimeout > 0.0 and self.pendingTime >= self.relockTimeout
 
         if stopped or timedOut then
-            self.target = current
+            self.target = currentValue
             self.pending = false
             self.pendingTime = 0.0
         else
@@ -68,7 +68,7 @@ function Lock:update(input, current, rate, dt)
 
     return {
         target = self.target,
-        error = self.error(self.target, current),
+        error = self.error(self.target, currentValue),
         commandedRate = 0.0,
         active = true,
         pending = false,

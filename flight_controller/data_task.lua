@@ -5,7 +5,7 @@ local data_task = {}
 
 local bodyAxis = config.calibration.body_axis
 
-local function buildFrame(rawPose)
+local function buildBodyFrame(rawPose)
     local q = rawPose.orientation:normalize()
 
     return {
@@ -15,14 +15,14 @@ local function buildFrame(rawPose)
     }
 end
 
-local function buildPose(rawPosition, frame)
+local function buildPose(rawPosition, bodyFrame)
     local horizontal = math.sqrt(
-        frame.forward.x * frame.forward.x
-            + frame.forward.z * frame.forward.z
+        bodyFrame.forward.x * bodyFrame.forward.x
+            + bodyFrame.forward.z * bodyFrame.forward.z
     )
-    local roll = mathx.atan2(-frame.right.y, -frame.down.y)
-    local pitch = mathx.atan2(frame.forward.y, horizontal)
-    local heading = mathx.atan2(frame.forward.x, -frame.forward.z)
+    local roll = mathx.atan2(-bodyFrame.right.y, -bodyFrame.down.y)
+    local pitch = mathx.atan2(bodyFrame.forward.y, horizontal)
+    local heading = mathx.atan2(bodyFrame.forward.x, -bodyFrame.forward.z)
 
     return {
         height = rawPosition.y,
@@ -42,7 +42,7 @@ end
 
 local function readPose()
     local rawPose = sublevel.getLogicalPose()
-    local frame = buildFrame(rawPose)
+    local bodyFrame = buildBodyFrame(rawPose)
 
     return {
         raw = {
@@ -50,32 +50,32 @@ local function readPose()
             orientation = rawPose.orientation,
         },
         body = {
-            frame = frame,
-            pose = buildPose(rawPose.position, frame),
+            frame = bodyFrame,
+            pose = buildPose(rawPose.position, bodyFrame),
         },
         time = os.clock(),
     }
 end
 
-local function readVelocity(frame)
-    local rawVelocity = sublevel.getLinearVelocity()
+local function readLinearVelocity(bodyFrame)
+    local worldVelocity = sublevel.getLinearVelocity()
 
     return {
         raw = {
-            velocity = rawVelocity,
+            velocity = worldVelocity,
         },
         body = {
-            velocity = mathx.project(rawVelocity, {
-                forward = frame.forward,
-                right = frame.right,
-                down = frame.down,
+            velocity = mathx.project(worldVelocity, {
+                forward = bodyFrame.forward,
+                right = bodyFrame.right,
+                down = bodyFrame.down,
             }),
         },
         time = os.clock(),
     }
 end
 
-local function readRates(frame)
+local function readRates()
     local rawAngularVelocity = sublevel.getAngularVelocity()
 
     return {
@@ -84,9 +84,9 @@ local function readRates(frame)
         },
         body = {
             rates = mathx.project(rawAngularVelocity, {
-                roll = frame.forward,
-                pitch = frame.right,
-                yaw = frame.down,
+                roll = bodyAxis.forward,
+                pitch = bodyAxis.right,
+                yaw = bodyAxis.down,
             }),
         },
         time = os.clock(),
@@ -105,12 +105,12 @@ end
 function data_task.run(shared)
     shared.state = makeState()
 
-    local latestFrame = nil
+    local latestBodyFrame = nil
 
     local function poseTask()
         while shared.running do
             local pose = readPose()
-            latestFrame = pose.body.frame
+            latestBodyFrame = pose.body.frame
 
             shared.state.raw.position = pose.raw.position
             shared.state.raw.orientation = pose.raw.orientation
@@ -125,12 +125,12 @@ function data_task.run(shared)
     local function angularVelocityTask()
         waitForPose(shared)
 
-        while shared.running and latestFrame == nil do
+        while shared.running and latestBodyFrame == nil do
             sleep(0)
         end
 
         while shared.running do
-            local rates = readRates(latestFrame)
+            local rates = readRates()
 
             shared.state.raw.angularVelocity = rates.raw.angularVelocity
             shared.state.body.rates = rates.body.rates
@@ -143,12 +143,12 @@ function data_task.run(shared)
     local function linearVelocityTask()
         waitForPose(shared)
 
-        while shared.running and latestFrame == nil do
+        while shared.running and latestBodyFrame == nil do
             sleep(0)
         end
 
         while shared.running do
-            local velocity = readVelocity(latestFrame)
+            local velocity = readLinearVelocity(latestBodyFrame)
 
             shared.state.raw.velocity = velocity.raw.velocity
             shared.state.body.velocity = velocity.body.velocity

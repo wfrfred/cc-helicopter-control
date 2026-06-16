@@ -480,14 +480,14 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
 
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
     local pidData = expectTable(telemetry.pid, "telemetry.pid")
-    local position = expectTable(positionHold.position, "telemetry.positionHold.position")
-    local velocity = expectTable(positionHold.velocity, "telemetry.positionHold.velocity")
+    local navigationPosition = expectTable(positionHold.navigationPosition, "telemetry.positionHold.navigationPosition")
+    local navigationVelocity = expectTable(positionHold.navigationVelocity, "telemetry.positionHold.navigationVelocity")
     local output = expectTable(positionHold.output, "telemetry.positionHold.output")
-    local target = expectTable(position.target, "telemetry.positionHold.position.target")
-    local currentPosition = expectTable(position.current, "telemetry.positionHold.position.current")
-    local targetVelocity = expectTable(velocity.target, "telemetry.positionHold.velocity.target")
-    local currentVelocity = expectTable(velocity.current, "telemetry.positionHold.velocity.current")
-    local err = expectTable(position.error, "telemetry.positionHold.position.error")
+    local target = expectTable(navigationPosition.target, "telemetry.positionHold.navigationPosition.target")
+    local currentPosition = expectTable(navigationPosition.current, "telemetry.positionHold.navigationPosition.current")
+    local targetNavigationVelocity = expectTable(navigationVelocity.target, "telemetry.positionHold.navigationVelocity.target")
+    local currentNavigationVelocity = expectTable(navigationVelocity.current, "telemetry.positionHold.navigationVelocity.current")
+    local err = expectTable(navigationPosition.error, "telemetry.positionHold.navigationPosition.error")
     local positionPid = expectTable(pidData.position, "telemetry.pid.position")
     local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
     local positionRightTerms = expectTable(positionPid.right, "telemetry.pid.position.right")
@@ -544,15 +544,15 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         },
         {
             label = "RVEL",
-            target = targetVelocity.right,
-            current = currentVelocity.right,
-            err = targetVelocity.right - currentVelocity.right,
+            target = targetNavigationVelocity.right,
+            current = currentNavigationVelocity.right,
+            err = targetNavigationVelocity.right - currentNavigationVelocity.right,
         },
         {
             label = "FVEL",
-            target = targetVelocity.forward,
-            current = currentVelocity.forward,
-            err = targetVelocity.forward - currentVelocity.forward,
+            target = targetNavigationVelocity.forward,
+            current = currentNavigationVelocity.forward,
+            err = targetNavigationVelocity.forward - currentNavigationVelocity.forward,
         },
     }
     local outputRows = {

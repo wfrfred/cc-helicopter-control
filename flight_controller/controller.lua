@@ -1,3 +1,4 @@
+local feedforward = require("lib.feedforward")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 
@@ -6,54 +7,13 @@ local controller = {}
 local Controller = {}
 Controller.__index = Controller
 
-local function linearFeedforward(gain)
-    gain = gain or 0.0
-
-    return function(input)
-        return gain * input.target
-    end
-end
-
-local function collectiveFeedforward(collective, vertical)
-    local bias = collective.feedforward_bias or 0.0
-    local gain = vertical.speed_feedforward_gain or 0.0
-
-    return function(input)
-        return bias + gain * input.target
-    end
-end
-
-local function vec(x, y, z)
-    return {
-        x = x,
-        y = y,
-        z = z,
-    }
-end
-
-local function add(a, b)
-    return vec(a.x + b.x, a.y + b.y, a.z + b.z)
-end
-
-local function scale(a, k)
-    return vec(a.x * k, a.y * k, a.z * k)
-end
-
-local function cross(a, b)
-    return vec(
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    )
-end
-
 local function attitudeVerticalFactor(roll, pitch, minFactor)
     local factor = math.cos(roll) * math.cos(pitch)
 
     return mathx.clamp(factor, minFactor, 1.0)
 end
 
-local function frameFromPose(roll, pitch, heading)
+local function bodyFrameFromPose(roll, pitch, heading)
     local sinHeading = math.sin(heading)
     local cosHeading = math.cos(heading)
     local sinPitch = math.sin(pitch)
@@ -61,39 +21,55 @@ local function frameFromPose(roll, pitch, heading)
     local sinRoll = math.sin(roll)
     local cosRoll = math.cos(roll)
 
-    local forwardHorizontal = vec(sinHeading, 0.0, -cosHeading)
-    local rightLevel = vec(cosHeading, 0.0, sinHeading)
-    local worldDown = vec(0.0, -1.0, 0.0)
-    local forward = add(
-        scale(forwardHorizontal, cosPitch),
-        scale(worldDown, -sinPitch)
-    )
-    local downLevel = cross(forward, rightLevel)
+    local forwardHorizontal = vector.new(sinHeading, 0.0, -cosHeading)
+    local rightLevel = vector.new(cosHeading, 0.0, sinHeading)
+    local worldDown = vector.new(0.0, -1.0, 0.0)
+    local forward = forwardHorizontal * cosPitch + worldDown * -sinPitch
+    local downLevel = forward:cross(rightLevel)
 
     return {
         forward = forward,
-        right = add(
-            scale(rightLevel, cosRoll),
-            scale(downLevel, sinRoll)
-        ),
-        down = add(
-            scale(rightLevel, -sinRoll),
-            scale(downLevel, cosRoll)
-        ),
+        right = rightLevel * cosRoll + downLevel * sinRoll,
+        down = rightLevel * -sinRoll + downLevel * cosRoll,
     }
 end
 
-local function attitudeError(current, target)
-    local worldError = scale(
-        add(
-            add(
-                cross(current.forward, target.forward),
-                cross(current.right, target.right)
-            ),
-            cross(current.down, target.down)
-        ),
-        0.5
+local function headingRateFromForwardChange(forward, x, z)
+    local horizontal = forward.x * forward.x + forward.z * forward.z
+
+    if horizontal < 1.0e-6 then
+        return 0.0
+    end
+
+    return (-forward.z * x + forward.x * z) / horizontal
+end
+
+local function yawRateForHeadingRate(bodyFrame, pitchRate, headingRate)
+    local forward = bodyFrame.forward
+    local pitchFactor = headingRateFromForwardChange(
+        forward,
+        -bodyFrame.down.x,
+        -bodyFrame.down.z
     )
+    local yawFactor = headingRateFromForwardChange(
+        forward,
+        bodyFrame.right.x,
+        bodyFrame.right.z
+    )
+
+    if math.abs(yawFactor) < 1.0e-6 then
+        return 0.0
+    end
+
+    return (headingRate - (pitchRate or 0.0) * pitchFactor) / yawFactor
+end
+
+local function attitudeError(current, target)
+    local worldError = (
+        current.forward:cross(target.forward)
+            + current.right:cross(target.right)
+            + current.down:cross(target.down)
+    ) * 0.5
 
     return mathx.project(worldError, {
         roll = current.forward,
@@ -144,10 +120,24 @@ function controller.new(control)
         },
     }
 
-    controllers.vertical.speed:setFeedforward(collectiveFeedforward(control.collective, control.vertical))
-    controllers.attitude.roll.rate:setFeedforward(linearFeedforward(control.attitude.rate_feedforward.roll))
-    controllers.attitude.pitch.rate:setFeedforward(linearFeedforward(control.attitude.rate_feedforward.pitch))
-    controllers.attitude.yaw.rate:setFeedforward(linearFeedforward(control.attitude.rate_feedforward.yaw))
+    controllers.vertical.speed:setFeedforward(
+        feedforward.linear(control.vertical.feedforward.gain, control.vertical.feedforward.bias)
+    )
+    controllers.attitude.roll.rate:setFeedforward(
+        feedforward.linear(
+            control.attitude.rate_feedforward.roll.gain,
+            control.attitude.rate_feedforward.roll.bias
+        )
+    )
+    controllers.attitude.pitch.rate:setFeedforward(
+        feedforward.linear(
+            control.attitude.rate_feedforward.pitch.gain,
+            control.attitude.rate_feedforward.pitch.bias
+        )
+    )
+    controllers.attitude.yaw.rate:setFeedforward(
+        feedforward.linear(control.attitude.rate_feedforward.yaw.gain)
+    )
 
     return setmetatable({
         collective = control.collective,
@@ -160,7 +150,7 @@ end
 function Controller:update(input)
     local target = input.target
     local state = input.state
-    local frame = state.frame
+    local bodyFrame = state.bodyFrame
     local pose = state.pose
     local rates = state.rates
     local vertical = state.vertical
@@ -174,7 +164,7 @@ function Controller:update(input)
     local yawRate = rates.yaw
     local dt = input.dt
     local pids = self.controllers
-    local currentFrame = frame or frameFromPose(pose.roll, pose.pitch, pose.heading)
+    local currentBodyFrame = bodyFrame or bodyFrameFromPose(pose.roll, pose.pitch, pose.heading)
 
     local targetVerticalSpeed = verticalTarget.speed
     local heightErr = verticalTarget.error
@@ -207,21 +197,21 @@ function Controller:update(input)
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
 
-    local targetYawRate = headingTarget.rate
+    local targetYawRate = yawRateForHeadingRate(currentBodyFrame, pitchRate, headingTarget.rate)
     local headingErr = headingTarget.error
     local headingActive = headingTarget.active
-    local targetHeadingForAttitude = pose.heading
+    local attitudeHeading = pose.heading
 
     if headingActive then
-        targetHeadingForAttitude = headingTarget.angle
+        attitudeHeading = headingTarget.angle
     end
 
-    local targetFrame = frameFromPose(
+    local targetBodyFrame = bodyFrameFromPose(
         attitudeTarget.roll,
         attitudeTarget.pitch,
-        targetHeadingForAttitude
+        attitudeHeading
     )
-    local bodyAttitudeError = attitudeError(currentFrame, targetFrame)
+    local bodyAttitudeError = attitudeError(currentBodyFrame, targetBodyFrame)
 
     local rollResult = updateAngleRate(
         pids.attitude.roll,

@@ -1,3 +1,4 @@
+local feedforward = require("lib.feedforward")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 
@@ -19,12 +20,6 @@ local function horizontal(right, forward)
     }
 end
 
-local function linearFeedforward(gain)
-    return function(input)
-        return gain * input.target
-    end
-end
-
 local function emptyPositionState()
     return {
         target = horizontal(0.0, 0.0),
@@ -36,8 +31,8 @@ end
 local function makeInactiveResult()
     return {
         active = false,
-        position = emptyPositionState(),
-        velocity = {
+        navigationPosition = emptyPositionState(),
+        navigationVelocity = {
             target = horizontal(0.0, 0.0),
             current = horizontal(0.0, 0.0),
             error = horizontal(0.0, 0.0),
@@ -73,8 +68,12 @@ function position_hold.new(control)
         velocityForward = pid.new(control.pid.velocity.forward),
     }
 
-    controllers.velocityRight:setFeedforward(linearFeedforward(control.position_hold.velocity_feedforward.right))
-    controllers.velocityForward:setFeedforward(linearFeedforward(control.position_hold.velocity_feedforward.forward))
+    controllers.velocityRight:setFeedforward(
+        feedforward.linear(control.position_hold.velocity_feedforward.right)
+    )
+    controllers.velocityForward:setFeedforward(
+        feedforward.linear(control.position_hold.velocity_feedforward.forward)
+    )
 
     return setmetatable({
         control = control,
@@ -86,15 +85,15 @@ function Hold:reset()
     resetAll(self.controllers)
 end
 
-function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
+function Hold:updateVelocity(targetNavigationVelocity, navigationVelocity, dt, position)
     local rightResult = self.controllers.velocityRight:update({
-        target = targetVelocity.right,
-        current = horizontalVelocity.right,
+        target = targetNavigationVelocity.right,
+        current = navigationVelocity.right,
         dt = dt,
     })
     local forwardResult = self.controllers.velocityForward:update({
-        target = targetVelocity.forward,
-        current = horizontalVelocity.forward,
+        target = targetNavigationVelocity.forward,
+        current = navigationVelocity.forward,
         dt = dt,
     })
     local outputRight = rightResult.output
@@ -103,10 +102,10 @@ function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
 
     return {
         active = true,
-        position = positionState,
-        velocity = {
-            target = targetVelocity,
-            current = horizontalVelocity,
+        navigationPosition = positionState,
+        navigationVelocity = {
+            target = targetNavigationVelocity,
+            current = navigationVelocity,
             error = horizontal(rightResult.error, forwardResult.error),
         },
         output = {
@@ -128,18 +127,18 @@ function Hold:updateVelocity(targetVelocity, horizontalVelocity, dt, position)
     }
 end
 
-function Hold:update(bodyPositionError, horizontalVelocity, dt)
+function Hold:update(navigationPositionError, navigationVelocity, dt)
     local rightResult = self.controllers.positionRight:update({
-        target = bodyPositionError.right,
+        target = navigationPositionError.right,
         current = 0.0,
         dt = dt,
-        derivative = -horizontalVelocity.right,
+        derivative = -navigationVelocity.right,
     })
     local forwardResult = self.controllers.positionForward:update({
-        target = bodyPositionError.forward,
+        target = navigationPositionError.forward,
         current = 0.0,
         dt = dt,
-        derivative = -horizontalVelocity.forward,
+        derivative = -navigationVelocity.forward,
     })
 
     return self:updateVelocity(
@@ -147,11 +146,11 @@ function Hold:update(bodyPositionError, horizontalVelocity, dt)
             right = rightResult.output,
             forward = forwardResult.output,
         },
-        horizontalVelocity,
+        navigationVelocity,
         dt,
         {
             target = horizontal(0.0, 0.0),
-            current = horizontal(-bodyPositionError.right, -bodyPositionError.forward),
+            current = horizontal(-navigationPositionError.right, -navigationPositionError.forward),
             error = horizontal(rightResult.error, forwardResult.error),
         }
     )

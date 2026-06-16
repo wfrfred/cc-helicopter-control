@@ -6,9 +6,10 @@ local STALE_TELEMETRY_DT = 0.5
 local PANEL_GAP = 2
 local STATE_COLUMN_WIDTH = 26
 local OUTPUT_COLUMN_WIDTH = 24
-local MIN_STATE_COLUMN_WIDTH = 18
-local MIN_OUTPUT_COLUMN_WIDTH = 16
-local MIN_PID_COLUMN_WIDTH = 28
+local POSITION_STATE_COLUMN_WIDTH = 18
+local POSITION_OUTPUT_COLUMN_WIDTH = 14
+local MIN_STATE_COLUMN_WIDTH = 14
+local MIN_OUTPUT_COLUMN_WIDTH = 12
 
 local function clamp(x, lo, hi)
     if x < lo then return lo end
@@ -52,45 +53,27 @@ local function section(mon, y, title, fg, bg)
     draw.writeAt(mon, 1, y, string.upper(title), fg, bg, w)
 end
 
-local function pidPanelLayout(x, width)
-    local gap = math.min(PANEL_GAP, math.max(0, math.floor((width - 3) / 3)))
-    local available = math.max(1, width - gap * 2)
+local function positionHoldLayout(x, width)
+    local gap = PANEL_GAP
     local stateWidth = math.min(
-        STATE_COLUMN_WIDTH,
-        math.max(MIN_STATE_COLUMN_WIDTH, math.floor(width * 0.30))
+        POSITION_STATE_COLUMN_WIDTH,
+        math.max(MIN_STATE_COLUMN_WIDTH, math.floor(width * 0.18))
     )
     local outputWidth = math.min(
-        OUTPUT_COLUMN_WIDTH,
-        math.max(MIN_OUTPUT_COLUMN_WIDTH, math.floor(width * 0.24))
+        POSITION_OUTPUT_COLUMN_WIDTH,
+        math.max(MIN_OUTPUT_COLUMN_WIDTH, math.floor(width * 0.14))
     )
-    local pidWidth = available - stateWidth - outputWidth
+    local pidWidth = width - stateWidth - outputWidth - gap * 2
 
-    if pidWidth < MIN_PID_COLUMN_WIDTH then
-        local need = MIN_PID_COLUMN_WIDTH - pidWidth
+    if pidWidth < 48 then
+        local need = 48 - pidWidth
         local stateReduce = math.min(need, stateWidth - MIN_STATE_COLUMN_WIDTH)
         stateWidth = stateWidth - stateReduce
         need = need - stateReduce
 
         local outputReduce = math.min(need, outputWidth - MIN_OUTPUT_COLUMN_WIDTH)
         outputWidth = outputWidth - outputReduce
-        pidWidth = available - stateWidth - outputWidth
-    end
-
-    if pidWidth < 1 then
-        stateWidth = math.max(1, math.floor(available * 0.30))
-        outputWidth = math.max(1, math.floor(available * 0.24))
-        pidWidth = available - stateWidth - outputWidth
-
-        if pidWidth < 1 then
-            local need = 1 - pidWidth
-            local outputReduce = math.min(need, outputWidth - 1)
-            outputWidth = outputWidth - outputReduce
-            need = need - outputReduce
-
-            local stateReduce = math.min(need, stateWidth - 1)
-            stateWidth = stateWidth - stateReduce
-            pidWidth = available - stateWidth - outputWidth
-        end
+        pidWidth = width - stateWidth - outputWidth - gap * 2
     end
 
     return {
@@ -120,6 +103,23 @@ local function drawOutput(mon, x, y, width, label, value, limit)
     draw.fill(mon, bx, y, bw, colors.gray)
     draw.fill(mon, bx, y, len, bg)
     draw.writeAt(mon, bx + bw + 1, y, ("%+.1f"):format(value), colors.white, colors.black, 7)
+end
+
+local function drawOutputBar(mon, x, y, width, value, limit)
+    if width < 8 then
+        draw.writeAt(mon, x, y, ("%+.1f"):format(value), colors.white, colors.black, width)
+        return
+    end
+
+    local valueWidth = math.min(6, math.max(4, width - 2))
+    local barWidth = width - valueWidth - 1
+    local pct = math.abs(clamp(value / limit, -1.0, 1.0))
+    local len = math.floor(barWidth * pct + 0.5)
+    local bg = value >= 0 and colors.blue or colors.purple
+
+    draw.fill(mon, x, y, barWidth, colors.gray)
+    draw.fill(mon, x, y, len, bg)
+    draw.writeAt(mon, x + barWidth + 1, y, ("%+.1f"):format(value), colors.white, colors.black, valueWidth)
 end
 
 local function drawCompactBar(mon, x, y, width, label, value, limit)
@@ -202,17 +202,17 @@ local function pidTableSpec(width)
     if width >= 36 then
         return {
             labels = { "AX", "TGT", "CUR", "ERR", "P", "I", "D" },
-            widths = { 4, 5, 5, 5, 3, 3, 3 },
+            widths = { 4, 5, 5, 5, 4, 4, 4 },
             valuePattern = "%.1f",
-            termPattern = "%+.0f",
+            termPattern = "%+.1f",
         }
     end
 
     return {
         labels = { "AX", "TGT", "CUR", "ERR", "P", "I", "D" },
-        widths = { 3, 4, 4, 4, 2, 2, 2 },
-        valuePattern = "%.0f",
-        termPattern = "%+.0f",
+        widths = { 3, 4, 4, 4, 4, 4, 4 },
+        valuePattern = "%.1f",
+        termPattern = "%+.1f",
     }
 end
 
@@ -365,21 +365,31 @@ local function drawAttitudeColumn(mon, x, y, width, height, telemetry)
     end
 end
 
-local function drawPidOutputColumn(mon, x, y, width, height, rows)
+local function drawPidOutputColumn(mon, x, y, width, height, rows, options)
     if height < 1 then
         return
     end
 
-    draw.writeAt(mon, x, y, "OUTPUT", colors.lightGray, colors.black, width)
+    options = options or {}
+
+    if options.header then
+        draw.writeAt(mon, x, y, "OUTPUT", colors.lightGray, colors.black, width)
+        y = y + 1
+        height = height - 1
+    end
 
     for index, row in ipairs(rows) do
-        local rowY = y + index
+        local rowY = y + index - 1
 
         if rowY >= y + height then
             return
         end
 
-        drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
+        if options.labels == false then
+            drawOutputBar(mon, x, rowY, width, row.value, row.limit)
+        else
+            drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
+        end
     end
 end
 
@@ -422,7 +432,10 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local topHeight = math.min(5, limitY - y + 1)
 
     drawAttitudeColumn(mon, x, y, stateWidth, topHeight, telemetry)
-    drawPidOutputColumn(mon, x + stateWidth + gap, y, outputWidth, topHeight, outputRows)
+    drawPidOutputColumn(mon, x + stateWidth + gap, y, outputWidth, topHeight, outputRows, {
+        header = true,
+        labels = true,
+    })
 
     y = y + topHeight
 
@@ -541,7 +554,7 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         { label = "PIT", value = deg(output.attitude.pitch or 0.0), limit = 30.0 },
     }
     local bodyHeight = math.min(5, limitY - y + 1)
-    local layout = pidPanelLayout(x, width)
+    local layout = positionHoldLayout(x, width)
 
     drawPositionColumn(mon, layout.stateX, y, layout.stateWidth, bodyHeight, target, currentPosition)
     drawControllerHeader(mon, layout.pidX, y, layout.pidWidth)
@@ -568,7 +581,9 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
         )
     end
 
-    drawPidOutputColumn(mon, layout.outputX, y, layout.outputWidth, bodyHeight, outputRows)
+    drawPidOutputColumn(mon, layout.outputX, y + 1, layout.outputWidth, bodyHeight - 1, outputRows, {
+        labels = false,
+    })
 
     y = y + bodyHeight
 

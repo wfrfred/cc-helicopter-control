@@ -136,23 +136,6 @@ function Controller:update(input)
     }
 end
 
-function Controller:updateLegacy(target, feedback, dt, externalDerivative)
-    assert(dt > 0, "pid dt must be positive")
-
-    local result = self:update({
-        target = target,
-        current = feedback,
-        dt = dt,
-        derivative = externalDerivative,
-    })
-
-    return result.output,
-        result.error,
-        result.integral,
-        result.derivative,
-        result.terms
-end
-
 function Controller:last()
     return self.last_output
 end

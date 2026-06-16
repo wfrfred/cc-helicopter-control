@@ -95,38 +95,24 @@ local positionTargetAxes = {
     z = { z = 1.0 },
 }
 
-local function navigationHorizontalAxes(heading)
-    return {
-        right = {
-            x = math.cos(heading),
-            z = math.sin(heading),
-        },
-        forward = {
-            x = math.sin(heading),
-            z = -math.cos(heading),
-        },
-    }
-end
-
 local function makePositionTarget(state)
     return mathx.project(state.raw.position, positionTargetAxes)
 end
 
-local function projectWorldHorizontalToNavigation(value, heading)
-    return mathx.project(value, navigationHorizontalAxes(heading))
-end
-
-local function projectPositionTargetErrorToNavigation(target, state)
+local function worldPositionError(target, state)
     local position = state.raw.position
 
-    return projectWorldHorizontalToNavigation({
+    return {
         x = target.x - position.x,
         z = target.z - position.z,
-    }, state.body.pose.heading)
+    }
 end
 
-local function projectWorldVelocityToNavigation(state)
-    return projectWorldHorizontalToNavigation(state.raw.velocity, state.body.pose.heading)
+local function worldHorizontalVelocity(state)
+    return {
+        x = state.raw.velocity.x,
+        z = state.raw.velocity.z,
+    }
 end
 
 local function headingRateFromAttitudeRates(bodyFrame, rates)
@@ -149,7 +135,7 @@ local function makeLateralMachine(initialState)
     return {
         mode = lateralMode.positionHold,
         positionTarget = makePositionTarget(initialState),
-        cruiseNavigationVelocity = nil,
+        cruiseWorldVelocity = nil,
         cruiseManualReleasePending = false,
         navigationTarget = nil,
     }
@@ -173,7 +159,7 @@ local function selectLateralMode(machine, controls)
         return lateralMode.navigation
     end
 
-    if machine.cruiseNavigationVelocity ~= nil then
+    if machine.cruiseWorldVelocity ~= nil then
         return lateralMode.cruise
     end
 
@@ -188,14 +174,14 @@ local function updateCruiseTarget(machine, context)
     local manualInput = manualLateralInput(context.input.controls)
 
     if context.input.event.cruiseLock then
-        machine.cruiseNavigationVelocity = projectWorldVelocityToNavigation(context.state)
+        machine.cruiseWorldVelocity = worldHorizontalVelocity(context.state)
         machine.cruiseManualReleasePending = manualInput
         context.positionHold:reset()
         context.input.event.cruiseLock = false
         return
     end
 
-    if machine.cruiseNavigationVelocity == nil then
+    if machine.cruiseWorldVelocity == nil then
         return
     end
 
@@ -207,7 +193,7 @@ local function updateCruiseTarget(machine, context)
     end
 
     if manualInput then
-        machine.cruiseNavigationVelocity = nil
+        machine.cruiseWorldVelocity = nil
     end
 end
 
@@ -225,8 +211,9 @@ end
 
 local function cruiseLateral(machine, context)
     local positionResult = context.positionHold:updateVelocity(
-        machine.cruiseNavigationVelocity,
-        projectWorldVelocityToNavigation(context.state),
+        machine.cruiseWorldVelocity,
+        worldHorizontalVelocity(context.state),
+        context.attitudeHeading,
         context.dt
     )
 
@@ -235,8 +222,9 @@ end
 
 local function positionHoldLateral(machine, context)
     local positionResult = context.positionHold:update(
-        projectPositionTargetErrorToNavigation(machine.positionTarget, context.state),
-        projectWorldVelocityToNavigation(context.state),
+        worldPositionError(machine.positionTarget, context.state),
+        worldHorizontalVelocity(context.state),
+        context.attitudeHeading,
         context.dt
     )
 
@@ -245,8 +233,9 @@ end
 
 local function navigationLateral(machine, context)
     local positionResult = context.positionHold:update(
-        projectPositionTargetErrorToNavigation(machine.navigationTarget.position, context.state),
-        projectWorldVelocityToNavigation(context.state),
+        worldPositionError(machine.navigationTarget.position, context.state),
+        worldHorizontalVelocity(context.state),
+        context.attitudeHeading,
         context.dt
     )
 
@@ -387,19 +376,25 @@ function control_task.run(shared)
         local pose = state.body.pose
         local controlState = makeControlState(state)
         local headingRate = headingRateFromAttitudeRates(controlState.bodyFrame, controlState.rates)
+        local controls = input.controls
+        local vertical = controlState.vertical
+        local verticalLock = heightLock:update(controls.climb, vertical.height, vertical.speed, dt)
+        local headingLockResult = headingLock:update(controls.heading, pose.heading, headingRate, dt)
+        local attitudeHeading = pose.heading
+
+        if headingLockResult.active then
+            attitudeHeading = headingLockResult.target
+        end
 
         local positionResult, attitudeTarget = updateLateral(lateralMachine, {
             input = input,
             state = state,
             manualAttitude = manualAttitude,
             positionHold = positionHold,
+            attitudeHeading = attitudeHeading,
             dt = dt,
         })
 
-        local controls = input.controls
-        local vertical = controlState.vertical
-        local verticalLock = heightLock:update(controls.climb, vertical.height, vertical.speed, dt)
-        local headingLockResult = headingLock:update(controls.heading, pose.heading, headingRate, dt)
         local target = makeTarget(
             attitudeTarget,
             lateralPositionTarget(lateralMachine),
@@ -466,12 +461,12 @@ function control_task.run(shared)
                         speed = controllerPids.vertical.speed:terms(),
                     },
                     position = {
-                        right = positionPids.positionRight:terms(),
-                        forward = positionPids.positionForward:terms(),
+                        x = positionPids.positionX:terms(),
+                        z = positionPids.positionZ:terms(),
                     },
                     velocity = {
-                        right = positionPids.velocityRight:terms(),
-                        forward = positionPids.velocityForward:terms(),
+                        x = positionPids.velocityX:terms(),
+                        z = positionPids.velocityZ:terms(),
                     },
                     attitude = {
                         roll = {

@@ -124,8 +124,8 @@ config.control = {
 
     position_hold = {
         velocity_feedforward = {
-            right = 0.016,
-            forward = 0.018,
+            x = 0.016,
+            z = 0.018,
         },
     },
 
@@ -155,7 +155,7 @@ config.control = {
         },
 
         position = {
-            right = {
+            x = {
                 kp = 0.15,
                 ki = 0.005,
                 kd = 0.0,
@@ -166,7 +166,7 @@ config.control = {
                 deadband = 0.05,
             },
 
-            forward = {
+            z = {
                 kp = 0.20,
                 ki = 0.01,
                 kd = 0.0,
@@ -179,7 +179,7 @@ config.control = {
         },
 
         velocity = {
-            right = {
+            x = {
                 kp = 0.030,
                 ki = 0.01,
                 kd = 0.005,
@@ -190,7 +190,7 @@ config.control = {
                 deadband = 0.05,
             },
 
-            forward = {
+            z = {
                 kp = 0.032,
                 ki = 0.01,
                 kd = 0.006,

@@ -381,17 +381,17 @@ local function drawPositionMap(mon, x, y, width, height, target, current)
     end
 
     if width < 12 or height < 3 then
-        drawAxisBar(mon, x, y, width, "R", current.right - target.right, 10.0)
+        drawAxisBar(mon, x, y, width, "X", current.x - target.x, 10.0)
         if height >= 2 then
-            drawAxisBar(mon, x, y + 1, width, "F", current.forward - target.forward, 10.0)
+            drawAxisBar(mon, x, y + 1, width, "Z", current.z - target.z, 10.0)
         end
         return
     end
 
     local centerX = x + math.floor(width / 2)
     local centerY = y + math.floor(height / 2)
-    local markX = centerX + scaledOffset(current.right - target.right, 10.0, math.floor((width - 3) / 2))
-    local markY = centerY - scaledOffset(current.forward - target.forward, 10.0, math.floor((height - 1) / 2))
+    local markX = centerX + scaledOffset(current.x - target.x, 10.0, math.floor((width - 3) / 2))
+    local markY = centerY - scaledOffset(current.z - target.z, 10.0, math.floor((height - 1) / 2))
 
     for row = 0, height - 1 do
         local lineY = y + row
@@ -479,7 +479,7 @@ local function drawPositionPidOutputColumn(mon, x, y, width, height, rows)
             return
         end
 
-        drawOutputBar(mon, x, rowY, width, row.value, row.limit)
+        drawOutput(mon, x, rowY, width, row.label, row.value, row.limit)
     end
 end
 
@@ -489,21 +489,14 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     end
 
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
-    local pidData = expectTable(telemetry.pid, "telemetry.pid")
-    local navigationPosition = expectTable(positionHold.navigationPosition, "telemetry.positionHold.navigationPosition")
-    local navigationVelocity = expectTable(positionHold.navigationVelocity, "telemetry.positionHold.navigationVelocity")
+    local worldPosition = expectTable(positionHold.worldPosition, "telemetry.positionHold.worldPosition")
+    local worldVelocity = expectTable(positionHold.worldVelocity, "telemetry.positionHold.worldVelocity")
     local output = expectTable(positionHold.output, "telemetry.positionHold.output")
-    local target = expectTable(navigationPosition.target, "telemetry.positionHold.navigationPosition.target")
-    local currentPosition = expectTable(navigationPosition.current, "telemetry.positionHold.navigationPosition.current")
-    local targetNavigationVelocity = expectTable(navigationVelocity.target, "telemetry.positionHold.navigationVelocity.target")
-    local currentNavigationVelocity = expectTable(navigationVelocity.current, "telemetry.positionHold.navigationVelocity.current")
-    local err = expectTable(navigationPosition.error, "telemetry.positionHold.navigationPosition.error")
-    local positionPid = expectTable(pidData.position, "telemetry.pid.position")
-    local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
-    local positionRightTerms = expectTable(positionPid.right, "telemetry.pid.position.right")
-    local positionForwardTerms = expectTable(positionPid.forward, "telemetry.pid.position.forward")
-    local velocityRightTerms = expectTable(velocityPid.right, "telemetry.pid.velocity.right")
-    local velocityForwardTerms = expectTable(velocityPid.forward, "telemetry.pid.velocity.forward")
+    local target = expectTable(worldPosition.target, "telemetry.positionHold.worldPosition.target")
+    local currentPosition = expectTable(worldPosition.current, "telemetry.positionHold.worldPosition.current")
+    local targetWorldVelocity = expectTable(worldVelocity.target, "telemetry.positionHold.worldVelocity.target")
+    local currentWorldVelocity = expectTable(worldVelocity.current, "telemetry.positionHold.worldVelocity.current")
+    local err = expectTable(worldPosition.error, "telemetry.positionHold.worldPosition.error")
 
     section(mon, y, "position hold", colors.black, colors.pink)
     y = y + 1
@@ -531,9 +524,9 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
     end
 
     if positionWidth < 10 or pidWidth < 14 or outputWidth < 8 then
-        drawAxisBar(mon, x, y, width, "R", err.right, 10.0)
+        drawAxisBar(mon, x, y, width, "X", err.x, 10.0)
         if y + 1 <= limitY then
-            drawAxisBar(mon, x, y + 1, width, "F", err.forward, 10.0)
+            drawAxisBar(mon, x, y + 1, width, "Z", err.z, 10.0)
             return y + 2
         end
         return y + 1
@@ -541,35 +534,35 @@ local function drawPositionHold(mon, x, y, width, limitY, telemetry)
 
     local rows = {
         {
-            label = "RPOS",
+            label = "XPOS",
             target = 0.0,
-            current = -err.right,
-            err = err.right,
+            current = -err.x,
+            err = err.x,
         },
         {
-            label = "FPOS",
+            label = "ZPOS",
             target = 0.0,
-            current = -err.forward,
-            err = err.forward,
+            current = -err.z,
+            err = err.z,
         },
         {
-            label = "RVEL",
-            target = targetNavigationVelocity.right,
-            current = currentNavigationVelocity.right,
-            err = targetNavigationVelocity.right - currentNavigationVelocity.right,
+            label = "XVEL",
+            target = targetWorldVelocity.x,
+            current = currentWorldVelocity.x,
+            err = targetWorldVelocity.x - currentWorldVelocity.x,
         },
         {
-            label = "FVEL",
-            target = targetNavigationVelocity.forward,
-            current = currentNavigationVelocity.forward,
-            err = targetNavigationVelocity.forward - currentNavigationVelocity.forward,
+            label = "ZVEL",
+            target = targetWorldVelocity.z,
+            current = currentWorldVelocity.z,
+            err = targetWorldVelocity.z - currentWorldVelocity.z,
         },
     }
     local outputRows = {
-        { value = positionRightTerms.output, limit = 20.0 },
-        { value = positionForwardTerms.output, limit = 20.0 },
-        { value = deg(output.attitude.roll), limit = 30.0 },
-        { value = deg(output.attitude.pitch), limit = 30.0 },
+        { label = "VX", value = targetWorldVelocity.x, limit = 20.0 },
+        { label = "VZ", value = targetWorldVelocity.z, limit = 20.0 },
+        { label = "ROL", value = deg(output.attitude.roll), limit = 30.0 },
+        { label = "PIT", value = deg(output.attitude.pitch), limit = 30.0 },
     }
     local bodyHeight = math.min(5, limitY - y + 1)
     local positionColumnX = x

@@ -20,6 +20,13 @@ function rate_lock.new(options)
     }, Lock)
 end
 
+function Lock:capture(currentValue)
+    self.target = currentValue
+    self.wasManual = false
+    self.pending = false
+    self.pendingTime = 0.0
+end
+
 function Lock:update(manualInput, currentValue, measuredRate, dt)
     dt = dt or 0.0
 

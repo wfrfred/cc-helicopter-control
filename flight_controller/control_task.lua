@@ -397,6 +397,12 @@ local function navigationHeadingLock(navigationResult, pose)
     }
 end
 
+local function lockedRateTarget(lock, currentValue, measuredRate)
+    lock:capture(currentValue)
+
+    return lock:update(0.0, currentValue, measuredRate, 0.0)
+end
+
 local function makeTelemetryState(state)
     return {
         raw = {
@@ -476,6 +482,7 @@ function control_task.run(shared)
         local navigationCommand = shared.navigationCommand
         shared.navigationCommand = nil
 
+        local navigationWasActive = lateralMachine.navigator:isActive()
         local positionResult, attitudeTarget, navigationResult = updateLateral(lateralMachine, {
             input = input,
             state = state,
@@ -485,14 +492,20 @@ function control_task.run(shared)
             navigationCommand = navigationCommand,
             dt = dt,
         })
+        local navigationExited = navigationWasActive and not lateralMachine.navigator:isActive()
         local navigationVertical = navigationVerticalLock(navigationResult, vertical)
         local navigationHeading = navigationHeadingLock(navigationResult, pose)
 
-        if navigationVertical ~= nil then
+        if navigationExited and controls.climb == 0.0 then
+            verticalLock = lockedRateTarget(heightLock, vertical.height, vertical.speed)
+        elseif navigationVertical ~= nil then
             verticalLock = navigationVertical
         end
 
-        if navigationHeading ~= nil then
+        if navigationExited and controls.heading == 0.0 then
+            headingLockResult = lockedRateTarget(headingLock, pose.heading, headingRate)
+            attitudeHeading = headingLockResult.target
+        elseif navigationHeading ~= nil then
             headingLockResult = navigationHeading
             attitudeHeading = headingLockResult.target
         end

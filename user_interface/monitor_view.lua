@@ -179,9 +179,9 @@ local function drawControllerHeader(mon, x, y, width)
     elseif width >= 48 then
         text = ("%-5s %6s %6s %6s %6s %6s %6s"):format("AXIS", "TGT", "CUR", "ERR", "P", "I", "D")
     elseif width >= 36 then
-        text = ("%-4s %5s %5s %5s  %s"):format("AX", "TGT", "CUR", "ERR", "P/I/D")
+        text = ("%-4s %5s %5s %5s %3s %3s %3s"):format("AX", "TGT", "CUR", "ERR", "P", "I", "D")
     else
-        text = "AX TGT CUR ERR P/I/D"
+        text = ("%-3s %4s %4s %4s %2s %2s %2s"):format("AX", "TGT", "CUR", "ERR", "P", "I", "D")
     end
 
     draw.writeAt(mon, x, y, text, colors.lightGray, colors.black, width)
@@ -229,7 +229,7 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
             cell(d, "%+.1f", 6)
         )
     elseif width >= 36 then
-        text = ("%-4s %5s %5s %5s  %s/%s/%s"):format(
+        text = ("%-4s %5s %5s %5s %3s %3s %3s"):format(
             label,
             cell(target, "%.1f", 5),
             cell(current, "%.1f", 5),
@@ -239,14 +239,14 @@ local function drawControllerRow(mon, x, y, width, label, target, current, err, 
             cell(d, "%+.0f", 3)
         )
     else
-        text = ("%s %s/%s/%s %s/%s/%s"):format(
+        text = ("%-3s %4s %4s %4s %2s %2s %2s"):format(
             label,
-            fmt(target, "%.1f"),
-            fmt(current, "%.1f"),
-            fmt(err, "%.1f"),
-            fmt(p, "%+.0f"),
-            fmt(i, "%+.0f"),
-            fmt(d, "%+.0f")
+            cell(target, "%.0f", 4),
+            cell(current, "%.0f", 4),
+            cell(err, "%.0f", 4),
+            cell(p, "%+.0f", 2),
+            cell(i, "%+.0f", 2),
+            cell(d, "%+.0f", 2)
         )
     end
 

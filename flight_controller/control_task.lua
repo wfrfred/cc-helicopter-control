@@ -215,12 +215,20 @@ local function selectLateralMode(machine, controls)
     return lateralMode.positionHold
 end
 
-local function updateNavigationCommand(machine, command, state)
+local function navigationMotion(state, headingRate)
+    return {
+        worldVelocity = worldHorizontalVelocity(state),
+        verticalSpeed = state.raw.velocity.y,
+        headingRate = headingRate,
+    }
+end
+
+local function updateNavigationCommand(machine, command, state, motion)
     if command == nil then
         return machine.navigator:state()
     end
 
-    local result = machine.navigator:command(command, state)
+    local result = machine.navigator:command(command, state, motion)
 
     if result.active then
         machine.cruiseWorldVelocity = nil
@@ -304,7 +312,7 @@ local function positionHoldLateral(machine, context)
 end
 
 local function navigationLateral(machine, context)
-    local navigationResult = machine.navigator:update(context.state, context.dt)
+    local navigationResult = machine.navigator:update(context.state, context.dt, context.navigationMotion)
 
     if not navigationResult.active then
         return position_hold.inactive(), context.manualAttitude:target(machine.mode), navigationResult
@@ -342,7 +350,12 @@ local lateralHandlers = {
 }
 
 local function updateLateral(machine, context)
-    local navigationResult = updateNavigationCommand(machine, context.navigationCommand, context.state)
+    local navigationResult = updateNavigationCommand(
+        machine,
+        context.navigationCommand,
+        context.state,
+        context.navigationMotion
+    )
 
     if cancelNavigationForManualInput(machine, context.input.controls) then
         navigationResult = machine.navigator:state()
@@ -527,6 +540,7 @@ function control_task.run(shared)
         shared.navigationCommand = nil
 
         local navigationWasActive = lateralMachine.navigator:isActive()
+        local motion = navigationMotion(state, headingRate)
         local positionResult, attitudeTarget, navigationResult = updateLateral(lateralMachine, {
             input = input,
             state = state,
@@ -534,6 +548,7 @@ function control_task.run(shared)
             positionHold = positionHold,
             attitudeHeading = attitudeHeading,
             navigationCommand = navigationCommand,
+            navigationMotion = motion,
             dt = dt,
         })
         local navigationExited = navigationWasActive and not lateralMachine.navigator:isActive()

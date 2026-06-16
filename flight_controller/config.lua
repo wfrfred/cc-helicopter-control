@@ -26,6 +26,9 @@ config.navigation = {
     climb_tolerance = 1.0,
     altitude_tolerance = 1.0,
     heading_tolerance = math.rad(5),
+    horizontal_speed_tolerance = 0.5,
+    vertical_speed_tolerance = 0.3,
+    heading_rate_tolerance = math.rad(3),
     approach_distance = 40.0,
 
     waypoints = {

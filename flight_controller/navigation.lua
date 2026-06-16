@@ -11,6 +11,9 @@ local defaults = {
     climb_tolerance = 1.0,
     altitude_tolerance = 1.0,
     heading_tolerance = math.rad(5),
+    horizontal_speed_tolerance = 0.5,
+    vertical_speed_tolerance = 0.3,
+    heading_rate_tolerance = math.rad(3),
     approach_distance = 40.0,
 }
 
@@ -54,6 +57,10 @@ local function horizontalDistance(a, b)
     local dz = b.z - a.z
 
     return math.sqrt(dx * dx + dz * dz)
+end
+
+local function horizontalSpeed(velocity)
+    return math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
 end
 
 local function headingTo(from, to)
@@ -331,20 +338,27 @@ local function advanceLeg(active, position)
     active.phase = "turn"
 end
 
-local function updatePhase(active, position, pose, config)
+local function updatePhase(active, position, pose, motion, config)
     local climbTolerance = configValue(config, "climb_tolerance")
     local altitudeTolerance = configValue(config, "altitude_tolerance")
     local headingTolerance = configValue(config, "heading_tolerance")
+    local horizontalSpeedTolerance = configValue(config, "horizontal_speed_tolerance")
+    local verticalSpeedTolerance = configValue(config, "vertical_speed_tolerance")
+    local headingRateTolerance = configValue(config, "heading_rate_tolerance")
+    local horizontalStopped = horizontalSpeed(motion.worldVelocity) <= horizontalSpeedTolerance
+    local verticalStopped = math.abs(motion.verticalSpeed) <= verticalSpeedTolerance
+    local headingStopped = math.abs(motion.headingRate) <= headingRateTolerance
 
     for _ = 1, 4 do
         if active.phase == "climb" then
-            if position.y >= active.cruiseAltitude - climbTolerance then
+            if position.y >= active.cruiseAltitude - climbTolerance and verticalStopped then
                 active.phase = "turn"
             else
                 return
             end
         elseif active.phase == "turn" then
-            if math.abs(mathx.wrapPi(legHeading(active, position) - pose.heading)) <= headingTolerance then
+            if math.abs(mathx.wrapPi(legHeading(active, position) - pose.heading)) <= headingTolerance
+                and headingStopped then
                 local leg = currentLeg(active)
                 active.phase = leg.kind == "final" and "final_approach" or "transit"
             else
@@ -353,13 +367,13 @@ local function updatePhase(active, position, pose, config)
         elseif active.phase == "transit" or active.phase == "final_approach" then
             local leg = currentLeg(active)
 
-            if horizontalDistance(position, leg.position) <= leg.radius then
+            if horizontalDistance(position, leg.position) <= leg.radius and horizontalStopped then
                 advanceLeg(active, position)
             else
                 return
             end
         elseif active.phase == "descend" then
-            if math.abs(position.y - destinationHeight(active)) <= altitudeTolerance then
+            if math.abs(position.y - destinationHeight(active)) <= altitudeTolerance and verticalStopped then
                 active.phase = "arrived"
             else
                 return
@@ -421,7 +435,7 @@ function Navigator:select(id)
     return self:state()
 end
 
-function Navigator:activate(state, id)
+function Navigator:activate(id, state, motion)
     if id ~= nil then
         self:select(id)
     end
@@ -448,12 +462,12 @@ function Navigator:activate(state, id)
     }
     self.inactiveReason = nil
 
-    return self:update(state, 0.0)
+    return self:update(state, 0.0, motion)
 end
 
-function Navigator:toggle(id, state)
+function Navigator:toggle(id, state, motion)
     if self.selected ~= nil and self.selected.id == id and self.active == nil then
-        return self:activate(state)
+        return self:activate(id, state, motion)
     end
 
     if self.active ~= nil and self.active.waypoint.id == id then
@@ -474,7 +488,7 @@ function Navigator:isActive()
     return self.active ~= nil
 end
 
-function Navigator:command(command, state)
+function Navigator:command(command, state, motion)
     assert(type(command) == "table", "navigation command must be table")
 
     if command.action == "select" then
@@ -482,11 +496,11 @@ function Navigator:command(command, state)
     end
 
     if command.action == "activate" then
-        return self:activate(state, command.waypoint)
+        return self:activate(command.waypoint, state, motion)
     end
 
     if command.action == "toggle" then
-        return self:toggle(command.waypoint, state)
+        return self:toggle(command.waypoint, state, motion)
     end
 
     if command.action == "cancel" then
@@ -496,7 +510,7 @@ function Navigator:command(command, state)
     error("unknown navigation command action: " .. tostring(command.action))
 end
 
-function Navigator:update(state, dt)
+function Navigator:update(state, dt, motion)
     if self.active == nil then
         return inactiveResult(self)
     end
@@ -504,7 +518,14 @@ function Navigator:update(state, dt)
     local position = assertPosition(state.raw.position, "state.raw.position")
     local pose = assert(type(state.body.pose) == "table" and state.body.pose, "state.body.pose must be table")
 
-    updatePhase(self.active, position, pose, self.config)
+    assert(type(motion) == "table", "navigation motion must be table")
+    assert(type(motion.worldVelocity) == "table", "navigation motion.worldVelocity must be table")
+    assert(type(motion.worldVelocity.x) == "number", "navigation motion.worldVelocity.x must be number")
+    assert(type(motion.worldVelocity.z) == "number", "navigation motion.worldVelocity.z must be number")
+    assert(type(motion.verticalSpeed) == "number", "navigation motion.verticalSpeed must be number")
+    assert(type(motion.headingRate) == "number", "navigation motion.headingRate must be number")
+
+    updatePhase(self.active, position, pose, motion, self.config)
 
     return activeResult(self.active, position, pose)
 end

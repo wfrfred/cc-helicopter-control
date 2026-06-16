@@ -32,7 +32,7 @@ config.navigation = {
         {
             id = "west_target",
             name = "West Target",
-            position = { x = -217, y = 78, z = 264 },
+            position = { x = -217, y = 81, z = 264 },
 
             approaches = {
                 {
@@ -40,13 +40,13 @@ config.navigation = {
                     name = "West Approach",
                     heading = math.rad(-90),
                     distance = 40.0,
-                    altitude = 78,
-                    finalAltitude = 78,
+                    altitude = 100,
+                    finalAltitude = 81,
                 },
             },
 
             hold = {
-                altitude = 78,
+                altitude = 81,
                 heading = math.rad(-90),
             },
         },

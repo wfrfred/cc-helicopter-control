@@ -171,48 +171,27 @@ local function drawOutputGrid(mon, x, y, width, limitY, rows)
     return rowY + 1
 end
 
-local function drawBladeOutputRow(mon, x, y, width, blades)
-    local columnWidth = math.floor((width - 3) / 4)
-
-    for index, blade in ipairs(blades) do
-        local columnX = x + (index - 1) * (columnWidth + 1)
-        drawOutput(mon, columnX, y, columnWidth, blade.label, blade.value, 15.0)
-    end
-end
-
 local function drawRotorOutputs(mon, x, y, width, limitY, output)
     local rotor = expectTable(output.rotor, "telemetry.output.rotor")
     local upper = expectTable(rotor.upper, "telemetry.output.rotor.upper")
     local lower = expectTable(rotor.lower, "telemetry.output.rotor.lower")
+    local rows = {
+        { label = "UF", value = upper[1], limit = 15.0 },
+        { label = "UR", value = upper[2], limit = 15.0 },
+        { label = "UB", value = upper[3], limit = 15.0 },
+        { label = "UL", value = upper[4], limit = 15.0 },
+        { label = "LF", value = lower[1], limit = 15.0 },
+        { label = "LR", value = lower[2], limit = 15.0 },
+        { label = "LB", value = lower[3], limit = 15.0 },
+        { label = "LL", value = lower[4], limit = 15.0 },
+    }
 
     if y > limitY then
         return y
     end
 
     section(mon, y, "blade outputs", colors.black, colors.orange)
-    y = y + 1
-
-    if y <= limitY then
-        drawBladeOutputRow(mon, x, y, width, {
-            { label = "UF", value = upper[1] },
-            { label = "UR", value = upper[2] },
-            { label = "UB", value = upper[3] },
-            { label = "UL", value = upper[4] },
-        })
-        y = y + 1
-    end
-
-    if y <= limitY then
-        drawBladeOutputRow(mon, x, y, width, {
-            { label = "LF", value = lower[1] },
-            { label = "LR", value = lower[2] },
-            { label = "LB", value = lower[3] },
-            { label = "LL", value = lower[4] },
-        })
-        y = y + 1
-    end
-
-    return y
+    return drawOutputGrid(mon, x, y + 1, width, limitY, rows)
 end
 
 local function pidTableSpec(width)

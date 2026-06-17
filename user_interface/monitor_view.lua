@@ -6,6 +6,16 @@ local STALE_TELEMETRY_DT = 0.5
 local TAB_ROW = 3
 local CONTENT_TOP = 4
 local GAP = 2
+local BG = colors.black
+local SURFACE = colors.gray
+local MUTED = colors.lightGray
+local TEXT = colors.white
+local TARGET = colors.cyan
+local ACTIVE = colors.green
+local SELECTED = colors.gray
+local PENDING = colors.orange
+local DANGER = colors.red
+local HEADER = colors.lightGray
 
 local PAGES = {
     { id = "overview", label = "OVERVIEW" },
@@ -40,6 +50,22 @@ end
 local function expectTable(value, name)
     assert(type(value) == "table", name .. " must be table")
     return value
+end
+
+local function statusColor(value)
+    if value == true or value == "active" or value == "locked" or value == "running" then
+        return ACTIVE
+    end
+
+    if value == "pending" or value == "transit" or value == "turn" or value == "climb" or value == "descend" or value == "final_approach" then
+        return PENDING
+    end
+
+    if value == "error" or value == "stale" then
+        return DANGER
+    end
+
+    return SELECTED
 end
 
 local function pageId(value)
@@ -77,7 +103,7 @@ local function section(mon, y, title, fg, bg)
         return
     end
 
-    draw.writeAt(mon, 1, y, string.upper(title), fg, bg, w)
+    draw.writeAt(mon, 1, y, string.upper(title), fg or colors.black, bg or HEADER, w)
 end
 
 local function drawFooter(mon, shared, telemetry, staleTelemetry)
@@ -96,8 +122,8 @@ local function drawFooter(mon, shared, telemetry, staleTelemetry)
         footer = footer .. " STALE"
     end
 
-    draw.writeAt(mon, 1, h - 1, footer, colors.lightGray, colors.black, w)
-    draw.writeAt(mon, 1, h, "touch tabs to switch pages", colors.white, colors.gray, w)
+    draw.writeAt(mon, 1, h - 1, footer, MUTED, BG, w)
+    draw.writeAt(mon, 1, h, "touch tabs to switch pages", TEXT, SURFACE, w)
 end
 
 local function drawValue(mon, x, y, width, label, value, pattern)
@@ -105,12 +131,12 @@ local function drawValue(mon, x, y, width, label, value, pattern)
     local valueWidth = width - labelWidth - 1
 
     if valueWidth < 4 then
-        draw.writeAt(mon, x, y, ("%s %s"):format(label, fmt(value, pattern)), colors.white, colors.black, width)
+        draw.writeAt(mon, x, y, ("%s %s"):format(label, fmt(value, pattern)), TEXT, BG, width)
         return
     end
 
-    draw.writeAt(mon, x, y, label, colors.lightGray, colors.black, labelWidth)
-    draw.writeAt(mon, x + labelWidth + 1, y, rightText(fmt(value, pattern), valueWidth), colors.white, colors.black, valueWidth)
+    draw.writeAt(mon, x, y, label, MUTED, BG, labelWidth)
+    draw.writeAt(mon, x + labelWidth + 1, y, rightText(fmt(value, pattern), valueWidth), TEXT, BG, valueWidth)
 end
 
 local function drawValueGrid(mon, x, y, width, rows)
@@ -129,7 +155,7 @@ end
 local function waypointLabel(waypoint, width)
     local position = expectTable(waypoint.position, "navigation waypoint.position")
     local name = waypoint.name or waypoint.id
-    local text = ("%s  %.0f %.0f %.0f"):format(name, position.x, position.y, position.z)
+    local text = ("%s  X%.0f Y%.0f Z%.0f"):format(name, position.x, position.y, position.z)
 
     return clip(text, width)
 end
@@ -156,18 +182,21 @@ local function drawWaypointRows(mon, shared, x, y, width, limitY, navigation)
 
         local isActive = active.id == waypoint.id
         local isSelected = selected.id == waypoint.id
-        local fg = colors.white
-        local bg = colors.black
+        local fg = TEXT
+        local bg = BG
+        local prefix = "  "
 
         if isActive then
             fg = colors.black
-            bg = colors.lime
+            bg = ACTIVE
+            prefix = "> "
         elseif isSelected then
-            fg = colors.white
-            bg = colors.gray
+            fg = TEXT
+            bg = SELECTED
+            prefix = "* "
         end
 
-        draw.writeAt(mon, x, rowY, waypointLabel(waypoint, width), fg, bg, width)
+        draw.writeAt(mon, x, rowY, prefix .. waypointLabel(waypoint, math.max(0, width - 2)), fg, bg, width)
         touch[#touch + 1] = {
             y = rowY,
             x1 = x,
@@ -180,6 +209,42 @@ local function drawWaypointRows(mon, shared, x, y, width, limitY, navigation)
     shared.monitorTouch.navRows = touch
 
     return y + #touch
+end
+
+local function horizontalDistance(a, b)
+    local dx = (b.x or 0.0) - (a.x or 0.0)
+    local dz = (b.z or 0.0) - (a.z or 0.0)
+
+    return math.sqrt(dx * dx + dz * dz)
+end
+
+local function verticalError(current, target)
+    return (target.y or target.height or 0.0) - (current.y or 0.0)
+end
+
+local function drawStatusLine(mon, x, y, width, label, value, color)
+    local labelWidth = math.min(10, math.max(4, width - 10))
+    local valueWidth = width - labelWidth - 1
+
+    if valueWidth < 4 then
+        draw.writeAt(mon, x, y, ("%s %s"):format(label, tostring(value)), TEXT, BG, width)
+        return
+    end
+
+    draw.writeAt(mon, x, y, label, MUTED, BG, labelWidth)
+    draw.writeAt(mon, x + labelWidth + 1, y, rightText(tostring(value), valueWidth), colors.black, color, valueWidth)
+end
+
+local function navPhaseLabel(navigation)
+    if navigation.active == true then
+        return tostring(navigation.phase or "active")
+    end
+
+    if navigation.selected ~= nil then
+        return "selected"
+    end
+
+    return tostring(navigation.reason or "idle")
 end
 
 local function drawOutput(mon, x, y, width, label, value, limit)
@@ -246,7 +311,7 @@ local function drawRotorOutputs(mon, x, y, width, limitY, output)
         return y
     end
 
-    section(mon, y, "blade outputs", colors.black, colors.orange)
+    section(mon, y, "blade outputs", colors.black, HEADER)
     return drawOutputGrid(mon, x, y + 1, width, limitY, rows)
 end
 
@@ -440,19 +505,19 @@ local function drawOverview(mon, x, y, width, limitY, telemetry)
     local targetPosition = expectTable(worldPosition.target, "telemetry.positionHold.worldPosition.target")
     local currentPosition = expectTable(worldPosition.current, "telemetry.positionHold.worldPosition.current")
 
-    section(mon, y, "flight state", colors.black, colors.lightBlue)
+    section(mon, y, "flight state", colors.black, HEADER)
     y = y + 1
     drawCurrentAttitude(mon, x, y, width, telemetry)
     y = y + 3
 
     if y <= limitY then
-        section(mon, y, "attitude output", colors.black, colors.blue)
+        section(mon, y, "attitude output", colors.black, TARGET)
         y = drawOutputGrid(mon, x, y + 1, width, limitY, attitudeOutputRows(telemetry))
     end
 
     if y <= limitY then
         y = y + 1
-        section(mon, y, "position hold", colors.black, colors.pink)
+        section(mon, y, "position hold", colors.black, TARGET)
         y = y + 1
 
         local mapWidth = math.min(24, math.max(12, math.floor(width * 0.25)))
@@ -492,19 +557,19 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
     local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
 
-    section(mon, y, "current attitude", colors.black, colors.lightBlue)
+    section(mon, y, "current attitude", colors.black, HEADER)
     y = y + 1
     drawCurrentAttitude(mon, x, y, width, telemetry)
     y = y + 3
 
     if y <= limitY then
-        section(mon, y, "attitude output", colors.black, colors.blue)
+        section(mon, y, "attitude output", colors.black, TARGET)
         y = drawOutputGrid(mon, x, y + 1, width, limitY, attitudeOutputRows(telemetry))
     end
 
     if y <= limitY then
         y = y + 1
-        section(mon, y, "attitude pid", colors.black, colors.lightBlue)
+        section(mon, y, "attitude pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)
         if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
@@ -532,7 +597,7 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     local positionPid = expectTable(pidData.position, "telemetry.pid.position")
     local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
 
-    section(mon, y, "position output", colors.black, colors.pink)
+    section(mon, y, "position output", colors.black, TARGET)
     y = y + 1
 
     local mapWidth = math.min(24, math.max(12, math.floor(width * 0.25)))
@@ -546,7 +611,7 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
 
     if y <= limitY then
         y = y + 1
-        section(mon, y, "position hold pid", colors.black, colors.pink)
+        section(mon, y, "position hold pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)
 
@@ -570,9 +635,33 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     local mode = telemetry.mode or {}
     local lock = telemetry.lock or {}
     local navigation = telemetry.navigation or {}
+    local navTarget = navigation.target
+    local waypoint = navigation.waypoint or navigation.selected
+    local approach = navigation.approach
+    local hdist = navTarget and navTarget.position and horizontalDistance(position, navTarget.position) or 0.0
+    local verr = navTarget and navTarget.position and verticalError(position, navTarget.position) or 0.0
+    local navColor = navigation.active and statusColor(navigation.phase) or statusColor(navPhaseLabel(navigation))
 
-    section(mon, y, "navigation", colors.black, colors.lime)
+    section(mon, y, "navigation", colors.black, navColor)
     y = y + 1
+
+    if y <= limitY then
+        local waypointName = waypoint and (waypoint.name or waypoint.id) or "-"
+        local approachName = approach and (approach.name or approach.id) or "-"
+
+        drawStatusLine(mon, x, y, math.floor((width - GAP) / 2), "STATE", navPhaseLabel(navigation), navColor)
+        drawStatusLine(mon, x + math.floor((width - GAP) / 2) + GAP, y, width - math.floor((width - GAP) / 2) - GAP, "TARGET", waypointName, navigation.active and ACTIVE or SELECTED)
+        if y + 1 <= limitY then
+            draw.writeAt(mon, x, y + 1, "approach " .. tostring(approachName), MUTED, BG, width)
+        end
+        y = y + 2
+    end
+
+    if y <= limitY then
+        section(mon, y, "current", colors.black, HEADER)
+        y = y + 1
+    end
+
     drawValueGrid(mon, x, y, width, {
         { label = "X", value = position.x, pattern = "%.1f" },
         { label = "Z", value = position.z, pattern = "%.1f" },
@@ -584,23 +673,39 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     y = y + 3
 
     if y <= limitY then
-        section(mon, y, "modes", colors.black, colors.green)
         y = y + 1
-        draw.writeAt(mon, x, y, "lateral  " .. tostring(mode.lateral), colors.white, colors.black, width)
-        if y + 1 <= limitY then draw.writeAt(mon, x, y + 1, "heading  " .. tostring(lock.heading), colors.white, colors.black, width) end
-        if y + 2 <= limitY then draw.writeAt(mon, x, y + 2, "height   " .. tostring(lock.height), colors.white, colors.black, width) end
-        if y + 3 <= limitY then draw.writeAt(mon, x, y + 3, "nav      " .. tostring(navigation.phase or "idle"), colors.white, colors.black, width) end
-        y = y + 4
-    end
+        section(mon, y, "target", colors.black, TARGET)
+        y = y + 1
 
-    if y <= limitY and navigation.approach ~= nil then
-        draw.writeAt(mon, x, y, "approach " .. tostring(navigation.approach.name or navigation.approach.id), colors.white, colors.black, width)
-        y = y + 1
+        if navTarget ~= nil and navTarget.position ~= nil then
+            drawValueGrid(mon, x, y, width, {
+                { label = "TX", value = navTarget.position.x, pattern = "%.1f" },
+                { label = "TZ", value = navTarget.position.z, pattern = "%.1f" },
+                { label = "TALT", value = navTarget.height, pattern = "%.1f" },
+                { label = "THEAD", value = deg(navTarget.heading), pattern = "%+.1f" },
+                { label = "HDIST", value = hdist, pattern = "%.1f" },
+                { label = "VERR", value = verr, pattern = "%+.1f" },
+            })
+            y = y + 3
+        else
+            draw.writeAt(mon, x, y, "no active target", MUTED, BG, width)
+            y = y + 1
+        end
     end
 
     if y <= limitY then
         y = y + 1
-        section(mon, y, "waypoints", colors.black, colors.gray)
+        section(mon, y, "locks", colors.black, HEADER)
+        y = y + 1
+        draw.writeAt(mon, x, y, "lateral " .. tostring(mode.lateral), TEXT, BG, width)
+        if y + 1 <= limitY then draw.writeAt(mon, x, y + 1, "heading " .. tostring(lock.heading), TEXT, BG, width) end
+        if y + 2 <= limitY then draw.writeAt(mon, x, y + 2, "height  " .. tostring(lock.height), TEXT, BG, width) end
+        y = y + 3
+    end
+
+    if y <= limitY then
+        y = y + 1
+        section(mon, y, "waypoints", colors.black, HEADER)
         y = drawWaypointRows(mon, shared, x, y + 1, width, limitY, navigation)
     end
 

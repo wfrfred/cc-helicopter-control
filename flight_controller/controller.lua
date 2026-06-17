@@ -34,34 +34,39 @@ local function bodyFrameFromPose(roll, pitch, heading)
     }
 end
 
-local function headingRateFromForwardChange(forward, x, z)
-    local horizontal = forward.x * forward.x + forward.z * forward.z
+-- Maps roll/pitch/heading coordinate rates to FRD body angular rates.
+local function attitudeCoordinateRatesToBodyRates(roll, pitch, rates)
+    local sinRoll = math.sin(roll)
+    local cosRoll = math.cos(roll)
+    local sinPitch = math.sin(pitch)
+    local cosPitch = math.cos(pitch)
+    local rollRate = rates.roll or 0.0
+    local pitchRate = rates.pitch or 0.0
+    local headingRate = rates.heading or 0.0
 
-    if horizontal < 1.0e-6 then
-        return 0.0
-    end
-
-    return (-forward.z * x + forward.x * z) / horizontal
+    return {
+        roll = rollRate - sinPitch * headingRate,
+        pitch = cosRoll * pitchRate + sinRoll * cosPitch * headingRate,
+        yaw = -sinRoll * pitchRate + cosRoll * cosPitch * headingRate,
+    }
 end
 
-local function yawRateForHeadingRate(bodyFrame, pitchRate, headingRate)
-    local forward = bodyFrame.forward
-    local pitchFactor = headingRateFromForwardChange(
-        forward,
-        -bodyFrame.down.x,
-        -bodyFrame.down.z
-    )
-    local yawFactor = headingRateFromForwardChange(
-        forward,
-        bodyFrame.right.x,
-        bodyFrame.right.z
-    )
+-- Inverse of attitudeCoordinateRatesToBodyRates; used for angle-loop D feedback.
+local function bodyRatesToAttitudeCoordinateRates(roll, pitch, rates)
+    local sinRoll = math.sin(roll)
+    local cosRoll = math.cos(roll)
+    local cosPitch = math.cos(pitch)
+    local pitchYaw = sinRoll * (rates.pitch or 0.0) + cosRoll * (rates.yaw or 0.0)
 
-    if math.abs(yawFactor) < 1.0e-6 then
-        return 0.0
+    if math.abs(cosPitch) < 1.0e-4 then
+        cosPitch = cosPitch >= 0.0 and 1.0e-4 or -1.0e-4
     end
 
-    return (headingRate - (pitchRate or 0.0) * pitchFactor) / yawFactor
+    return {
+        roll = (rates.roll or 0.0) + math.tan(pitch) * pitchYaw,
+        pitch = cosRoll * (rates.pitch or 0.0) - sinRoll * (rates.yaw or 0.0),
+        heading = pitchYaw / cosPitch,
+    }
 end
 
 local function attitudeError(current, target)
@@ -78,24 +83,14 @@ local function attitudeError(current, target)
     })
 end
 
-local function updateAngleRate(axis, bodyError, currentRate, dt)
-    local angle = axis.angle:update({
+local function updateAngle(axis, bodyError, errorDerivative, dt)
+    return axis.angle:update({
         target = bodyError,
         current = 0.0,
         error = bodyError,
         dt = dt,
-        derivative = -currentRate,
+        derivative = errorDerivative,
     })
-    local rate = axis.rate:update({
-        target = angle.output,
-        current = currentRate,
-        dt = dt,
-    })
-
-    return {
-        angle = angle,
-        rate = rate,
-    }
 end
 
 function controller.new(control)
@@ -197,10 +192,24 @@ function Controller:update(input)
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation
 
-    local targetYawRate = yawRateForHeadingRate(currentBodyFrame, pitchRate, headingTarget.rate)
     local headingErr = headingTarget.error
     local headingActive = headingTarget.active
     local attitudeHeading = pose.heading
+    local bodyRates = {
+        roll = rollRate,
+        pitch = pitchRate,
+        yaw = yawRate,
+    }
+    local currentCoordinateRates = bodyRatesToAttitudeCoordinateRates(
+        pose.roll,
+        pose.pitch,
+        bodyRates
+    )
+    local targetCoordinateRates = {
+        roll = 0.0,
+        pitch = 0.0,
+        heading = headingTarget.rate or 0.0,
+    }
 
     if headingActive then
         attitudeHeading = headingTarget.angle
@@ -213,38 +222,69 @@ function Controller:update(input)
     )
     local bodyAttitudeError = attitudeError(currentBodyFrame, targetBodyFrame)
 
-    local rollResult = updateAngleRate(
+    local rollAngleResult = updateAngle(
         pids.attitude.roll,
         bodyAttitudeError.roll,
-        rollRate,
+        targetCoordinateRates.roll - currentCoordinateRates.roll,
         dt
     )
-    local pitchResult = updateAngleRate(
+    local pitchAngleResult = updateAngle(
         pids.attitude.pitch,
         bodyAttitudeError.pitch,
-        pitchRate,
+        targetCoordinateRates.pitch - currentCoordinateRates.pitch,
         dt
     )
     local yawAngleResult = nil
 
     if headingActive then
-        yawAngleResult = pids.attitude.yaw.angle:update({
-            target = bodyAttitudeError.yaw,
-            current = 0.0,
-            error = bodyAttitudeError.yaw,
-            dt = dt,
-            derivative = -yawRate,
-        })
-        targetYawRate = yawAngleResult.output
+        yawAngleResult = updateAngle(
+            pids.attitude.yaw,
+            bodyAttitudeError.yaw,
+            targetCoordinateRates.heading - currentCoordinateRates.heading,
+            dt
+        )
     else
         pids.attitude.yaw.angle:reset()
     end
 
+    local correctionCoordinateRates = {
+        roll = rollAngleResult.output,
+        pitch = pitchAngleResult.output,
+        heading = yawAngleResult and yawAngleResult.output or 0.0,
+    }
+    local desiredCoordinateRates = {
+        roll = targetCoordinateRates.roll + correctionCoordinateRates.roll,
+        pitch = targetCoordinateRates.pitch + correctionCoordinateRates.pitch,
+        heading = targetCoordinateRates.heading + correctionCoordinateRates.heading,
+    }
+    local targetBodyRates = attitudeCoordinateRatesToBodyRates(
+        pose.roll,
+        pose.pitch,
+        desiredCoordinateRates
+    )
+    local rollRateResult = pids.attitude.roll.rate:update({
+        target = targetBodyRates.roll,
+        current = rollRate,
+        dt = dt,
+    })
+    local pitchRateResult = pids.attitude.pitch.rate:update({
+        target = targetBodyRates.pitch,
+        current = pitchRate,
+        dt = dt,
+    })
     local yawRateResult = pids.attitude.yaw.rate:update({
-        target = targetYawRate,
+        target = targetBodyRates.yaw,
         current = yawRate,
         dt = dt,
     })
+    local rollResult = {
+        angle = rollAngleResult,
+        rate = rollRateResult,
+    }
+    local pitchResult = {
+        angle = pitchAngleResult,
+        rate = pitchRateResult,
+    }
 
     local collective = mathx.clamp(
         tiltCompensatedCollectiveOut,
@@ -292,6 +332,13 @@ function Controller:update(input)
                     feedforward = yawRateResult.terms.ff,
                     feedback = yawRateResult.terms.raw,
                     targetRate = yawRateResult.target,
+                },
+                kinematics = {
+                    currentCoordinateRates = currentCoordinateRates,
+                    targetCoordinateRates = targetCoordinateRates,
+                    correctionCoordinateRates = correctionCoordinateRates,
+                    desiredCoordinateRates = desiredCoordinateRates,
+                    targetBodyRates = targetBodyRates,
                 },
             },
         },
@@ -402,7 +449,7 @@ function Controller:update(input)
                         current = yawAngleResult and yawAngleResult.current or 0.0,
                         error = bodyAttitudeError.yaw,
                         headingError = headingErr,
-                        output = targetYawRate,
+                        output = desiredCoordinateRates.heading,
                         active = headingActive,
                         pending = headingTarget.pending,
                         headingTarget = headingTarget.angle,

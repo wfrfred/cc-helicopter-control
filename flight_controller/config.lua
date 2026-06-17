@@ -150,12 +150,23 @@ config.control = {
         },
     },
 
-    attitude_decoupler = {
+    attitude_allocator = {
         enabled = true,
-        matrix = {
-            { 0.957, -0.023, 0.146 },
-            { 0.009, 1.000, -0.058 },
-            { -0.284, 0.005, 0.957 },
+        model = "affine_tensor",
+
+        base_matrix = {
+            { 0.956, -0.009, 0.073 },
+            { -0.037, 1.000, -0.026 },
+            { -0.313, -0.042, 0.980 },
+        },
+
+        terms = {
+            { out = "roll", attitude = "pitch", input = "yaw", gain = -1.2 },
+        },
+
+        attitude_limit_deg = {
+            roll = 30.0,
+            pitch = 25.0,
         },
     },
 

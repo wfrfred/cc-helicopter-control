@@ -1,5 +1,5 @@
 local Controller = require("controller")
-local attitude_decoupler = require("lib.attitude_decoupler")
+local attitude_allocator = require("lib.attitude_allocator")
 local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
@@ -135,25 +135,26 @@ local function finalClampCommands(commands, limits)
     }
 end
 
-local function allocateCommands(result, control)
+local function allocateCommands(result, control, pose)
     local rawCommands = copyCommands(result.commands)
-    local decoupledCommands = attitude_decoupler.apply(control.attitude_decoupler, rawCommands)
-    local finalCommands = finalClampCommands(decoupledCommands, control.output_limits)
+    local allocated = attitude_allocator.apply(control.attitude_allocator, pose, rawCommands)
+    local finalCommands = finalClampCommands(allocated.commands, control.output_limits)
     local attitude = result.output.attitude
 
     result.commands = finalCommands
     result.output.commands = finalCommands
     result.output.rawCommands = rawCommands
-    result.output.decoupledCommands = decoupledCommands
+    result.output.allocatedCommands = allocated.commands
     result.output.finalCommands = finalCommands
+    result.output.attitudeAllocator = allocated.debug
 
     attitude.roll.controllerCommand = rawCommands.roll
     attitude.pitch.controllerCommand = rawCommands.pitch
     attitude.yaw.controllerCommand = rawCommands.yaw
 
-    attitude.roll.decoupledCommand = decoupledCommands.roll
-    attitude.pitch.decoupledCommand = decoupledCommands.pitch
-    attitude.yaw.decoupledCommand = decoupledCommands.yaw
+    attitude.roll.allocatedCommand = allocated.commands.roll
+    attitude.pitch.allocatedCommand = allocated.commands.pitch
+    attitude.yaw.allocatedCommand = allocated.commands.yaw
 
     attitude.roll.command = finalCommands.roll
     attitude.pitch.command = finalCommands.pitch
@@ -582,7 +583,7 @@ function control_task.run(shared)
             dt = dt,
         })
 
-        allocateCommands(result, config.control)
+        allocateCommands(result, config.control, controlState.pose)
 
         mixer:setCommands(result.commands)
         local rotorOutput = mixer:update()

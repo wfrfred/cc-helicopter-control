@@ -75,6 +75,13 @@ shared.state = {
             down = ...,
         },
 
+        orientation = {
+            w = ...,
+            x = ...,
+            y = ...,
+            z = ...,
+        },
+
         pose = {
             height = ...,
             roll = ...,

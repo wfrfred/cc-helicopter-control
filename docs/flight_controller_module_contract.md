@@ -52,7 +52,7 @@ Raw Minecraft / Sable coordinates must be interpreted in `data_task.lua`. Other 
 
 ### 4. Controller sees body state, not raw state
 
-`controller.lua` should not know raw xyz, raw quaternion, rednet, input stale rules, rotor phase, or telemetry fields. It should receive a target and body state, then return body commands.
+`controller.lua` should not know raw xyz, raw sensor quaternion, rednet, input stale rules, rotor phase, or telemetry fields. It should receive a target and body state, including body-frame attitude quaternions, then return body commands.
 
 ### 5. Rotor sees body commands, not controller internals
 
@@ -105,6 +105,13 @@ shared.state = {
             forward = { x = 0.0, y = 0.0, z = -1.0 },
             right = { x = 1.0, y = 0.0, z = 0.0 },
             down = { x = 0.0, y = -1.0, z = 0.0 },
+        },
+
+        orientation = {
+            w = 1.0,
+            x = 0.0,
+            y = 0.0,
+            z = 0.0,
         },
 
         pose = {
@@ -356,6 +363,7 @@ sublevel.getLinearVelocity()
 sublevel.getAngularVelocity()
 config.calibration.body_axis
 lib.mathx
+lib.attitude_math
 ```
 
 ### Provides
@@ -366,6 +374,7 @@ shared.state.raw.velocity
 shared.state.raw.angularVelocity
 shared.state.raw.orientation
 
+shared.state.body.orientation
 shared.state.body.pose
 shared.state.body.velocity
 shared.state.body.rates
@@ -905,7 +914,8 @@ result = {
 local result = controller:update({
     target = target,
     state = {
-        frame = shared.state.body.frame,
+        bodyFrame = shared.state.body.frame,
+        orientation = shared.state.body.orientation,
         pose = shared.state.body.pose,
         rates = shared.state.body.rates,
         vertical = {

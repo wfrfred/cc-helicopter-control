@@ -1,5 +1,6 @@
 local Controller = require("controller")
 local attitude_allocator = require("lib.attitude_allocator")
+local attitude_math = require("lib.attitude_math")
 local mathx = require("lib.mathx")
 local rotor = require("rotor")
 local target_state = require("target_state")
@@ -46,6 +47,7 @@ local function stateReady(state)
         state.raw.position ~= nil and
         state.raw.velocity ~= nil and
         state.body.frame ~= nil and
+        state.body.orientation ~= nil and
         state.body.pose ~= nil and
         state.body.rates ~= nil and
         state.body.velocity ~= nil and
@@ -64,7 +66,8 @@ local function waitForSensors(shared)
         shared.telemetry = {
             status = "waiting_sensors",
             time = now,
-            havePose = haveState and state.body.pose ~= nil and state.body.frame ~= nil,
+            havePose = haveState and state.body.pose ~= nil and state.body.frame ~= nil
+                and state.body.orientation ~= nil,
             haveRates = haveState and state.body.rates ~= nil,
             haveVelocity = haveState and state.body.velocity ~= nil,
         }
@@ -381,6 +384,7 @@ local function makeControlState(state)
 
     return {
         bodyFrame = state.body.frame,
+        orientation = state.body.orientation,
         pose = pose,
         rates = state.body.rates,
         vertical = {
@@ -390,9 +394,21 @@ local function makeControlState(state)
     }
 end
 
-local function makeTarget(attitude, position, verticalLock, headingLockResult)
+local function makeTarget(attitude, position, verticalLock, headingLockResult, attitudeHeading)
+    local targetFrame = attitude_math.frameFromPose(
+        attitude.roll,
+        attitude.pitch,
+        attitudeHeading
+    )
+    local targetAttitude = {
+        roll = attitude.roll,
+        pitch = attitude.pitch,
+        source = attitude.source,
+        orientation = attitude_math.quaternionFromFrame(targetFrame),
+    }
+
     return {
-        attitude = attitude,
+        attitude = targetAttitude,
         position = position,
         vertical = {
             height = verticalLock.target,
@@ -574,7 +590,8 @@ function control_task.run(shared)
             attitudeTarget,
             lateralPositionTarget(lateralMachine, navigationResult),
             verticalLock,
-            headingLockResult
+            headingLockResult,
+            attitudeHeading
         )
 
         local result = controller:update({

@@ -1,4 +1,5 @@
 local mathx = require("lib.mathx")
+local attitude_math = require("lib.attitude_math")
 local config = require("config")
 
 local data_task = {}
@@ -51,6 +52,7 @@ local function readPose()
         },
         body = {
             frame = bodyFrame,
+            orientation = attitude_math.quaternionFromFrame(bodyFrame),
             pose = buildPose(rawPose.position, bodyFrame),
         },
         time = os.clock(),
@@ -115,6 +117,7 @@ function data_task.run(shared)
             shared.state.raw.position = pose.raw.position
             shared.state.raw.orientation = pose.raw.orientation
             shared.state.body.frame = pose.body.frame
+            shared.state.body.orientation = pose.body.orientation
             shared.state.body.pose = pose.body.pose
             shared.state.time.pose = pose.time
 

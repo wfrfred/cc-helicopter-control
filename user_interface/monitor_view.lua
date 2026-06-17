@@ -10,6 +10,7 @@ local BG = colors.black
 local SURFACE = colors.gray
 local MUTED = colors.lightGray
 local TEXT = colors.white
+local CURRENT = colors.lightBlue
 local TARGET = colors.cyan
 local ACTIVE = colors.green
 local SELECTED = colors.gray
@@ -505,7 +506,7 @@ local function drawOverview(mon, x, y, width, limitY, telemetry)
     local targetPosition = expectTable(worldPosition.target, "telemetry.positionHold.worldPosition.target")
     local currentPosition = expectTable(worldPosition.current, "telemetry.positionHold.worldPosition.current")
 
-    section(mon, y, "flight state", colors.black, HEADER)
+    section(mon, y, "flight state", colors.black, CURRENT)
     y = y + 1
     drawCurrentAttitude(mon, x, y, width, telemetry)
     y = y + 3
@@ -557,7 +558,7 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
     local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
 
-    section(mon, y, "current attitude", colors.black, HEADER)
+    section(mon, y, "current attitude", colors.black, CURRENT)
     y = y + 1
     drawCurrentAttitude(mon, x, y, width, telemetry)
     y = y + 3
@@ -658,7 +659,7 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     end
 
     if y <= limitY then
-        section(mon, y, "current", colors.black, HEADER)
+        section(mon, y, "current", colors.black, CURRENT)
         y = y + 1
     end
 

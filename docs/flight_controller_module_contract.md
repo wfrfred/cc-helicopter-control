@@ -46,7 +46,7 @@ control_task.lua    owns which primitive is active and why
 
 Raw Minecraft / Sable coordinates must be interpreted in `data_task.lua`. Other modules should consume the canonical structured state.
 
-`state.raw.*` is not a general control interface. It may be used by boundary code that needs raw coordinates, such as telemetry/UI and `control_task.lua` target capture. Low-level control primitives consume `state.body.*` or already-projected FRD errors.
+`state.raw.*` is not a general control interface. It may be used by boundary code that needs raw coordinates, such as telemetry/UI and `control_task.lua` target capture. Low-level control primitives consume `state.body.*`, or explicit world-frame target errors at a documented boundary such as `position_hold.lua`.
 
 `body_axis` is a calibration/install definition used by `data_task.lua` to convert raw sensor vectors to body FRD vectors. It is not a runtime flight mode parameter.
 
@@ -401,7 +401,7 @@ pose/rate conversion math
 ```text
 pilot input interpretation
 flight mode decisions
-heading-level horizontal control projection
+position target capture
 position hold
 PID control
 rotor mixing
@@ -420,7 +420,7 @@ body.velocity = mathx.project(rawVelocity, {
 })
 ```
 
-Heading-level horizontal projection is a target-selection concern in `control_task.lua`, not a base sensor-state concern.
+Heading-level horizontal projection is a position-control concern in `position_hold.lua`, not a base sensor-state concern.
 
 ---
 
@@ -584,7 +584,7 @@ heading input released:
 future navigation command active:
     lateral mode becomes navigation
     control_task owns target lifetime
-    control_task projects target/current position into FRD error with mathx.project
+    control_task passes world position error, world velocity, and target heading to position_hold
 
 future landing command active:
     vertical mode becomes landing
@@ -738,7 +738,7 @@ format telemetry snapshots
 
 ### Notes
 
-`mathx.project` is only the projection primitive. The caller still owns the semantic boundary: `data_task.lua` uses it for raw-to-body sensor projection, while `control_task.lua` uses it for target capture and heading-level horizontal projection.
+`mathx.project` is only the projection primitive. The semantic boundary stays with the owner of each transform: `data_task.lua` uses it for raw-to-body sensor projection, while `position_hold.lua` uses it for heading-level horizontal projection.
 
 ---
 
@@ -811,15 +811,18 @@ Primitive for horizontal position hold.
 
 It converts navigation heading-level FRD horizontal position error and navigation heading-level FRD horizontal velocity into attitude targets or position-control terms when lateral mode is position hold.
 
-It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions, then projects raw position targets and raw horizontal velocity into matching FRD vectors with `mathx.project`.
+It accepts world horizontal position error and world horizontal velocity, projects both into the active navigation frame, runs forward/right position and velocity loops, then returns roll/pitch attitude targets.
+
+It does not own captured raw position targets. `control_task.lua` owns target lifetime and mode transitions, then passes world error, world velocity, and the heading that defines the navigation frame.
 
 ### Depends on
 
 ```text
-bodyPositionError.forward
-bodyPositionError.right
-horizontalVelocity.forward
-horizontalVelocity.right
+worldPositionError.x
+worldPositionError.z
+worldVelocity.x
+worldVelocity.z
+attitudeHeading
 position-hold config
 dt
 ```
@@ -829,19 +832,31 @@ dt
 ```lua
 positionHoldResult = {
     active = ...,
-    position = {
+    worldPosition = {
+        target = { x = ..., z = ... },
+        current = { x = ..., z = ... },
+        error = { x = ..., z = ... },
+    },
+    navigationPosition = {
         target = { right = ..., forward = ... },
         current = { right = ..., forward = ... },
         error = { right = ..., forward = ... },
     },
-    velocity = {
+    worldVelocity = {
+        target = { x = ..., z = ... },
+        current = { x = ..., z = ... },
+        error = { x = ..., z = ... },
+    },
+    navigationVelocity = {
         target = { right = ..., forward = ... },
         current = { right = ..., forward = ... },
         error = { right = ..., forward = ... },
     },
     output = {
-        right = { value = ..., feedforward = ..., feedback = ... },
-        forward = { value = ..., feedforward = ..., feedback = ... },
+        navigationTilt = {
+            right = { value = ..., feedforward = ..., feedback = ... },
+            forward = { value = ..., feedforward = ..., feedback = ... },
+        },
         attitude = { roll = ..., pitch = ... },
     },
 }
@@ -856,7 +871,6 @@ own global lateral mode
 capture raw position targets
 read state.raw.position
 read state.raw.velocity
-read state.body.pose.heading for horizontal projection
 run final attitude PID
 run rotor mixing
 interpret raw sensor axes
@@ -864,7 +878,7 @@ interpret raw sensor axes
 
 ### Notes
 
-Heading-level horizontal projection belongs in `control_task.lua`, not in `data_task.lua` or `position_hold.lua`. Position error and horizontal velocity must be in the same projected frame before entering `position_hold.lua`.
+Heading-level horizontal projection belongs in `position_hold.lua`, not in `data_task.lua`. Position error and horizontal velocity must use the same `attitudeHeading` projection before the forward/right loops run.
 
 ---
 
@@ -1088,7 +1102,7 @@ The first phase should not change flight behavior. It should only clarify interf
 3. data_task keeps only three-axis raw/body vectors; derived speeds are computed by consumers.
 4. control_task reads shared.state instead of scattered shared.pose/shared.rollRate/shared.velocity fields.
 5. control_task owns explicit flight mode state.
-6. control_task projects raw position targets into FRD errors before position_hold consumes them.
+6. control_task computes world position error, then position_hold projects it and world velocity into the navigation frame.
 7. controller:update() receives { target, state, dt }.
 8. rotor command API changes from positional args to setCommands(commands).
 9. control_task publishes a structured telemetry snapshot directly.
@@ -1117,7 +1131,7 @@ These should be resolved before adding navigation or autoland.
 2. Should heading-level horizontal velocity be exposed by data_task? Current answer: no.
 3. Should control_task own flight mode state? Current answer: yes.
 4. Should rate_lock remain? Current answer: yes, as a primitive, not as mode owner.
-5. Should position_hold own lateral mode or raw target lifetime? Current answer: no; control_task owns mode/target lifetime, projects raw targets with mathx.project, and position_hold consumes FRD errors.
+5. Should position_hold own lateral mode or raw target lifetime? Current answer: no; control_task owns mode/target lifetime and computes world position error, while position_hold projects that error and world velocity into the navigation frame.
 6. Should rotor commands use named table fields? Current answer: yes.
 7. Should raw.position be visible outside data_task? Current answer: yes, but only for control_task target capture/projection and telemetry/UI, not for controller or position_hold.
 ```

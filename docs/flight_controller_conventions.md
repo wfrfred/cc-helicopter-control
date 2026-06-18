@@ -112,8 +112,9 @@ shared.state = {
 
 Control code consumes `shared.state.body.*`. Raw xyz data stays inside
 `data_task.lua` unless a boundary layer such as telemetry, UI, or `control_task`
-target capture needs it. Control code projects raw position targets into FRD
-error vectors before position hold consumes them.
+target capture needs it. `control_task.lua` computes world horizontal position
+error; `position_hold.lua` projects that error and world velocity into the
+active navigation frame before its forward/right loops consume them.
 
 Keep `body.velocity` limited to FRD components. Derived display fields such as
 total speed, horizontal speed, and vertical speed are computed where they are

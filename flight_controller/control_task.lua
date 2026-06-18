@@ -765,12 +765,12 @@ function control_task.run(shared)
                         speed = controllerPids.vertical.speed:terms(),
                     },
                     position = {
-                        x = positionPids.positionX:terms(),
-                        z = positionPids.positionZ:terms(),
+                        forward = positionPids.positionForward:terms(),
+                        right = positionPids.positionRight:terms(),
                     },
                     velocity = {
-                        x = positionPids.velocityX:terms(),
-                        z = positionPids.velocityZ:terms(),
+                        forward = positionPids.velocityForward:terms(),
+                        right = positionPids.velocityRight:terms(),
                     },
                     attitude = {
                         roll = {

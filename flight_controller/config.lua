@@ -192,8 +192,8 @@ config.control = {
 
     position_hold = {
         velocity_feedforward = {
-            x = 0.0185,
-            z = 0.0175,
+            forward = 0.0175,
+            right = 0.0185,
         },
     },
 
@@ -223,18 +223,7 @@ config.control = {
         },
 
         position = {
-            x = {
-                kp = 0.45,
-                ki = 0.12,
-                kd = 0.25,
-                i_min = -0.75,
-                i_max = 0.75,
-                out_min = -20.0,
-                out_max = 20.0,
-                deadband = 0.05,
-            },
-
-            z = {
+            forward = {
                 kp = 0.40,
                 ki = 0.12,
                 kd = 0.20,
@@ -244,21 +233,21 @@ config.control = {
                 out_max = 20.0,
                 deadband = 0.05,
             },
+
+            right = {
+                kp = 0.45,
+                ki = 0.12,
+                kd = 0.25,
+                i_min = -0.75,
+                i_max = 0.75,
+                out_min = -20.0,
+                out_max = 20.0,
+                deadband = 0.05,
+            },
         },
 
         velocity = {
-            x = {
-                kp = 0.055,
-                ki = 0.025,
-                kd = 0.00,
-                i_min = -0.4,
-                i_max = 0.4,
-                out_min = -math.rad(20),
-                out_max = math.rad(20),
-                deadband = 0.05,
-            },
-
-            z = {
+            forward = {
                 kp = 0.055,
                 ki = 0.020,
                 kd = 0.00,
@@ -266,6 +255,17 @@ config.control = {
                 i_max = 0.4,
                 out_min = -math.rad(30),
                 out_max = math.rad(30),
+                deadband = 0.05,
+            },
+
+            right = {
+                kp = 0.055,
+                ki = 0.025,
+                kd = 0.00,
+                i_min = -0.4,
+                i_max = 0.4,
+                out_min = -math.rad(20),
+                out_max = math.rad(20),
                 deadband = 0.05,
             },
         },

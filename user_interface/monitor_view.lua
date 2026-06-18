@@ -471,13 +471,19 @@ end
 
 local function positionOutputRows(telemetry)
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
-    local worldVelocity = expectTable(positionHold.worldVelocity, "telemetry.positionHold.worldVelocity")
+    local navigationVelocity = expectTable(
+        positionHold.navigationVelocity,
+        "telemetry.positionHold.navigationVelocity"
+    )
     local output = expectTable(positionHold.output, "telemetry.positionHold.output")
-    local targetWorldVelocity = expectTable(worldVelocity.target, "telemetry.positionHold.worldVelocity.target")
+    local targetNavigationVelocity = expectTable(
+        navigationVelocity.target,
+        "telemetry.positionHold.navigationVelocity.target"
+    )
 
     return {
-        { label = "VX", value = targetWorldVelocity.x, limit = 20.0 },
-        { label = "VZ", value = targetWorldVelocity.z, limit = 20.0 },
+        { label = "VF", value = targetNavigationVelocity.forward, limit = 20.0 },
+        { label = "VR", value = targetNavigationVelocity.right, limit = 20.0 },
         { label = "ROL", value = deg(output.attitude.roll or 0.0), limit = 30.0 },
         { label = "PIT", value = deg(output.attitude.pitch or 0.0), limit = 30.0 },
     }
@@ -610,12 +616,46 @@ end
 local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
     local worldPosition = expectTable(positionHold.worldPosition, "telemetry.positionHold.worldPosition")
-    local worldVelocity = expectTable(positionHold.worldVelocity, "telemetry.positionHold.worldVelocity")
-    local target = expectTable(worldPosition.target, "telemetry.positionHold.worldPosition.target")
-    local currentPosition = expectTable(worldPosition.current, "telemetry.positionHold.worldPosition.current")
-    local targetWorldVelocity = expectTable(worldVelocity.target, "telemetry.positionHold.worldVelocity.target")
-    local currentWorldVelocity = expectTable(worldVelocity.current, "telemetry.positionHold.worldVelocity.current")
-    local err = expectTable(worldPosition.error, "telemetry.positionHold.worldPosition.error")
+    local navigationPosition = expectTable(
+        positionHold.navigationPosition,
+        "telemetry.positionHold.navigationPosition"
+    )
+    local navigationVelocity = expectTable(
+        positionHold.navigationVelocity,
+        "telemetry.positionHold.navigationVelocity"
+    )
+    local targetWorldPosition = expectTable(
+        worldPosition.target,
+        "telemetry.positionHold.worldPosition.target"
+    )
+    local currentWorldPosition = expectTable(
+        worldPosition.current,
+        "telemetry.positionHold.worldPosition.current"
+    )
+    local targetNavigationPosition = expectTable(
+        navigationPosition.target,
+        "telemetry.positionHold.navigationPosition.target"
+    )
+    local currentNavigationPosition = expectTable(
+        navigationPosition.current,
+        "telemetry.positionHold.navigationPosition.current"
+    )
+    local errorNavigationPosition = expectTable(
+        navigationPosition.error,
+        "telemetry.positionHold.navigationPosition.error"
+    )
+    local targetNavigationVelocity = expectTable(
+        navigationVelocity.target,
+        "telemetry.positionHold.navigationVelocity.target"
+    )
+    local currentNavigationVelocity = expectTable(
+        navigationVelocity.current,
+        "telemetry.positionHold.navigationVelocity.current"
+    )
+    local errorNavigationVelocity = expectTable(
+        navigationVelocity.error,
+        "telemetry.positionHold.navigationVelocity.error"
+    )
     local pidData = expectTable(telemetry.pid, "telemetry.pid")
     local positionPid = expectTable(pidData.position, "telemetry.pid.position")
     local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
@@ -628,7 +668,7 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     local outputWidth = width - mapWidth - GAP
     local mapHeight = math.min(5, math.max(1, limitY - y + 1))
 
-    drawPositionMap(mon, x, y, mapWidth, mapHeight, target, currentPosition)
+    drawPositionMap(mon, x, y, mapWidth, mapHeight, targetWorldPosition, currentWorldPosition)
     drawOutputGrid(mon, outputX, y, outputWidth, limitY, positionOutputRows(telemetry))
     y = y + mapHeight
 
@@ -638,10 +678,66 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
         y = y + 1
         drawPidHeader(mon, x, y, width)
 
-        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "XPOS", 0.0, -err.x, err.x, false, positionPid.x, false) end
-        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "ZPOS", 0.0, -err.z, err.z, false, positionPid.z, false) end
-        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "XVEL", targetWorldVelocity.x, currentWorldVelocity.x, targetWorldVelocity.x - currentWorldVelocity.x, false, velocityPid.x, true) end
-        if y + 4 <= limitY then drawPidRow(mon, x, y + 4, width, "ZVEL", targetWorldVelocity.z, currentWorldVelocity.z, targetWorldVelocity.z - currentWorldVelocity.z, false, velocityPid.z, true) end
+        if y + 1 <= limitY then
+            drawPidRow(
+                mon,
+                x,
+                y + 1,
+                width,
+                "FPOS",
+                targetNavigationPosition.forward,
+                currentNavigationPosition.forward,
+                errorNavigationPosition.forward,
+                false,
+                positionPid.forward,
+                false
+            )
+        end
+        if y + 2 <= limitY then
+            drawPidRow(
+                mon,
+                x,
+                y + 2,
+                width,
+                "RPOS",
+                targetNavigationPosition.right,
+                currentNavigationPosition.right,
+                errorNavigationPosition.right,
+                false,
+                positionPid.right,
+                false
+            )
+        end
+        if y + 3 <= limitY then
+            drawPidRow(
+                mon,
+                x,
+                y + 3,
+                width,
+                "FVEL",
+                targetNavigationVelocity.forward,
+                currentNavigationVelocity.forward,
+                errorNavigationVelocity.forward,
+                false,
+                velocityPid.forward,
+                true
+            )
+        end
+        if y + 4 <= limitY then
+            drawPidRow(
+                mon,
+                x,
+                y + 4,
+                width,
+                "RVEL",
+                targetNavigationVelocity.right,
+                currentNavigationVelocity.right,
+                errorNavigationVelocity.right,
+                false,
+                velocityPid.right,
+                true
+            )
+        end
         y = y + 5
     end
 

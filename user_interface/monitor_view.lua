@@ -595,16 +595,13 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
 
     if y <= limitY then
         y = y + 1
-        section(mon, y, "attitude pid", colors.black, HEADER)
+        section(mon, y, "attitude rate pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)
-        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "ROL", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, true) end
-        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
-        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "PIT", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, true) end
-        if y + 4 <= limitY then drawPidRow(mon, x, y + 4, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
-        if y + 5 <= limitY then drawPidRow(mon, x, y + 5, width, "YAW", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, true) end
-        if y + 6 <= limitY then drawPidRow(mon, x, y + 6, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
-        y = y + 7
+        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
+        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
+        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
+        y = y + 4
     end
 
     return y

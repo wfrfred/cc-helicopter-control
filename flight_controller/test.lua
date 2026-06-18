@@ -1,22 +1,15 @@
 -- flight_controller/test.lua
 --
--- Existing-controller inner-rate PID benchmark.
+-- Quaternion-attitude controller benchmark.
 --
 -- Design boundary:
 --   - Reuses data_task for state estimation.
---   - Reuses controller:update() for vertical loop, attitude rate PID, output telemetry.
+--   - Reuses controller:update() for quaternion attitude outer loop, attitude rate PID, output telemetry.
 --   - Reuses attitude_allocator + rotor mixer/output path.
 --   - Does NOT reimplement controller PID math.
 --
--- Inner-loop benchmark trick:
---   For the tested axis only, replace that axis angle PID with a small fake object
---   whose update() output is the desired target body rate. This means:
---       controller:update()
---           -> existing updateAngleRate()
---           -> existing axis.rate PID
---           -> existing controller output
---           -> existing allocator/mixer
---   Non-tested axes still use the normal angle+rate loops for self-level.
+-- The logged target_rate is produced by the quaternion vector-part attitude
+-- law, then tracked by the existing body-rate PID.
 --
 -- Run from flight_controller:
 --   test
@@ -167,19 +160,22 @@ local function makeControlState(state)
     }
 end
 
-local function targetOrientation(roll, pitch, heading)
-    return attitude_math.quaternionFromFrame(
-        attitude_math.frameFromPose(roll, pitch, heading)
-    )
-end
+local function makeTarget(roll, pitch, heading, height, currentFrame)
+    local fullFrame = attitude_math.frameFromPose(roll, pitch, heading)
+    local qFull = attitude_math.quaternionFromFrame(fullFrame):normalize()
+    local redFrame = attitude_math.reducedFrameFromTargetDown(currentFrame, fullFrame)
+    local qRed = attitude_math.quaternionFromFrame(redFrame):normalize()
+    local yawPriority = mathx.clamp(control.heading.yaw_priority, 0.0, 1.0)
 
-local function makeTarget(roll, pitch, heading, height)
     return {
         attitude = {
             roll = roll,
             pitch = pitch,
             source = "benchmark_self_level",
-            orientation = targetOrientation(roll, pitch, heading),
+            orientation = qRed:slerp(qFull, yawPriority):normalize(),
+            fullOrientation = qFull,
+            reducedOrientation = qRed,
+            yawPriority = yawPriority,
         },
         vertical = {
             height = height,
@@ -220,77 +216,8 @@ local function allocateCommands(result, pose)
     return rawCommands, allocated.commands, finalCommands, allocated.debug
 end
 
--- =========================
--- Fake angle PID for inner-loop benchmark
--- =========================
-
-local FakeAnglePid = {}
-FakeAnglePid.__index = FakeAnglePid
-
-function FakeAnglePid.new()
-    return setmetatable({
-        output = 0.0,
-        lastResult = nil,
-    }, FakeAnglePid)
-end
-
-function FakeAnglePid:setOutput(output)
-    self.output = output or 0.0
-end
-
-function FakeAnglePid:update(input)
-    local result = {
-        target = input.target,
-        current = input.current,
-        error = input.error,
-        derivative = input.derivative,
-        output = self.output,
-        terms = {
-            p = 0.0,
-            i = 0.0,
-            d = 0.0,
-            raw = 0.0,
-            ff = 0.0,
-            output = self.output,
-        },
-    }
-
-    self.lastResult = result
-    return result
-end
-
-function FakeAnglePid:reset()
-    self.output = 0.0
-    self.lastResult = nil
-end
-
-function FakeAnglePid:terms()
-    return {
-        p = 0.0,
-        i = 0.0,
-        d = 0.0,
-        raw = 0.0,
-        ff = 0.0,
-        output = self.output,
-        testOverride = true,
-    }
-end
-
-local function installFakeAnglePid(controllerPids, axis, fake)
-    local original = controllerPids.attitude[axis].angle
-    controllerPids.attitude[axis].angle = fake
-    return original
-end
-
-local function restoreAnglePid(controllerPids, axis, original)
-    if original ~= nil then
-        controllerPids.attitude[axis].angle = original
-    end
-end
-
 local function resetAttitudePids(controllerPids)
     for _, axis in ipairs({ "roll", "pitch", "yaw" }) do
-        controllerPids.attitude[axis].angle:reset()
         controllerPids.attitude[axis].rate:reset()
     end
 end
@@ -502,15 +429,29 @@ local function runControlPhase(ctx, phase, caseName, testAxis, duration, targetF
                 holdHeading = pose.heading
             end
 
-            local target = makeTarget(0.0, 0.0, holdHeading, ctx.holdHeight)
+            local targetRoll = 0.0
+            local targetPitch = 0.0
+            local targetHeading = holdHeading
 
-            local forcedRate = 0.0
             if targetFunc ~= nil then
-                forcedRate = targetFunc(elapsed)
-                ctx.fakeAngle:setOutput(forcedRate)
-            else
-                ctx.fakeAngle:setOutput(0.0)
+                local command = targetFunc(elapsed)
+
+                if testAxis == "roll" then
+                    targetRoll = command
+                elseif testAxis == "pitch" then
+                    targetPitch = command
+                elseif testAxis == "yaw" then
+                    targetHeading = holdHeading + command
+                end
             end
+
+            local target = makeTarget(
+                targetRoll,
+                targetPitch,
+                targetHeading,
+                ctx.holdHeight,
+                controlState.bodyFrame
+            )
 
             local result = ctx.controller:update({
                 target = target,
@@ -555,7 +496,6 @@ end
 
 local function stabilize(ctx, label, duration)
     print(label .. "...")
-    ctx.fakeAngle:setOutput(0.0)
     runControlPhase(ctx, label, "", nil, duration, nil)
 
     if stateReady(ctx.shared.state) then
@@ -564,9 +504,6 @@ local function stabilize(ctx, label, duration)
 end
 
 local function runOneCase(ctx, axis, case)
-    local original = installFakeAnglePid(ctx.controllerPids, axis, ctx.fakeAngle)
-
-    ctx.fakeAngle:reset()
     ctx.controllerPids.attitude[axis].rate:reset()
 
     print("benchmark " .. axis .. " " .. case.name)
@@ -582,8 +519,6 @@ local function runOneCase(ctx, axis, case)
         )
     end)
 
-    restoreAnglePid(ctx.controllerPids, axis, original)
-    ctx.fakeAngle:reset()
     ctx.controllerPids.attitude[axis].rate:reset()
 
     if not ok then
@@ -633,7 +568,6 @@ local function benchmarkTask(shared)
         shared = shared,
         controller = controller,
         controllerPids = controllerPids,
-        fakeAngle = FakeAnglePid.new(),
         holdHeight = initial.height,
         holdHeading = initial.heading,
         log = assert(fs.open(TEST.log_path, "w")),

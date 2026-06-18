@@ -206,11 +206,11 @@ local function makeHeadingLock(initial)
 end
 
 local function headingLookaheadAngle(control)
-    local kp = control.pid.attitude.yaw.angle.kp
+    local tau = control.attitude.time_constant
 
-    assert(kp > 0.0, "attitude yaw angle kp must be positive for heading lookahead")
+    assert(tau > 0.0, "attitude time_constant must be positive for heading lookahead")
 
-    return control.heading.lookahead_rate / kp
+    return control.heading.lookahead_rate * tau
 end
 
 local function makeHeadingTarget(target, pose, state, active, pending)
@@ -491,17 +491,32 @@ local function makeControlState(state)
     }
 end
 
-local function makeTarget(attitude, position, verticalLock, headingLockResult, attitudeHeading)
-    local targetFrame = attitude_math.frameFromPose(
+local function makeTarget(
+    attitude,
+    position,
+    verticalLock,
+    headingLockResult,
+    attitudeHeading,
+    currentFrame
+)
+    local fullFrame = attitude_math.frameFromPose(
         attitude.roll,
         attitude.pitch,
         attitudeHeading
     )
+    local qFull = attitude_math.quaternionFromFrame(fullFrame):normalize()
+    local redFrame = attitude_math.reducedFrameFromTargetDown(currentFrame, fullFrame)
+    local qRed = attitude_math.quaternionFromFrame(redFrame):normalize()
+    local yawPriority = mathx.clamp(config.control.heading.yaw_priority, 0.0, 1.0)
+    local qMixed = qRed:slerp(qFull, yawPriority):normalize()
     local targetAttitude = {
         roll = attitude.roll,
         pitch = attitude.pitch,
         source = attitude.source,
-        orientation = attitude_math.quaternionFromFrame(targetFrame),
+        orientation = qMixed,
+        fullOrientation = qFull,
+        reducedOrientation = qRed,
+        yawPriority = yawPriority,
     }
 
     return {
@@ -681,7 +696,8 @@ function control_task.run(shared)
             lateralPositionTarget(lateralMachine, navigationResult),
             verticalLock,
             headingLockResult,
-            attitudeHeading
+            attitudeHeading,
+            controlState.bodyFrame
         )
 
         local result = controller:update({
@@ -758,15 +774,12 @@ function control_task.run(shared)
                     },
                     attitude = {
                         roll = {
-                            angle = controllerPids.attitude.roll.angle:terms(),
                             rate = controllerPids.attitude.roll.rate:terms(),
                         },
                         pitch = {
-                            angle = controllerPids.attitude.pitch.angle:terms(),
                             rate = controllerPids.attitude.pitch.rate:terms(),
                         },
                         yaw = {
-                            angle = controllerPids.attitude.yaw.angle:terms(),
                             rate = controllerPids.attitude.yaw.rate:terms(),
                         },
                     },

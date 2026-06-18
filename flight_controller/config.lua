@@ -115,6 +115,8 @@ config.control = {
     },
 
     attitude = {
+        time_constant = 0.35,
+
         home = {
             roll = 0.0,
             pitch = 0.0,
@@ -181,6 +183,7 @@ config.control = {
 
     heading = {
         lookahead_rate = math.rad(60),
+        yaw_priority = 0.35,
         lock = {
             rate_deadband = math.rad(2),
             relock_timeout = 0.6,
@@ -269,17 +272,6 @@ config.control = {
 
         attitude = {
             roll = {
-                angle = {
-                    kp = 1.80,
-                    ki = 0.18,
-                    kd = 0.05,
-                    i_min = -math.rad(1.0),
-                    i_max = math.rad(1.0),
-                    out_min = -math.rad(90),
-                    out_max = math.rad(90),
-                    deadband = math.rad(0.05),
-                },
-
                 rate = {
                     kp = 1.0,
                     ki = 1.5,
@@ -293,17 +285,6 @@ config.control = {
             },
 
             pitch = {
-                angle = {
-                    kp = 1.25,
-                    ki = 0.20,
-                    kd = 0.05,
-                    i_min = -math.rad(1.0),
-                    i_max = math.rad(1.0),
-                    out_min = -math.rad(90),
-                    out_max = math.rad(90),
-                    deadband = math.rad(0.05),
-                },
-
                 rate = {
                     kp = 3.5,
                     ki = 1.4,
@@ -317,17 +298,6 @@ config.control = {
             },
 
             yaw = {
-                angle = {
-                    kp = 0.85,
-                    ki = 0.0,
-                    kd = 0.25,
-                    i_min = -0.5,
-                    i_max = 0.5,
-                    out_min = -math.rad(60),
-                    out_max = math.rad(60),
-                    deadband = math.rad(0.05),
-                },
-
                 rate = {
                     kp = 6.5,
                     ki = 0.0,

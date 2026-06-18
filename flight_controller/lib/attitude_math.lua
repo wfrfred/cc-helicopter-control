@@ -1,3 +1,5 @@
+local mathx = require("lib.mathx")
+
 local attitude_math = {}
 
 local function atan2(y, x)
@@ -8,48 +10,22 @@ local function atan2(y, x)
     return math.atan(y, x)
 end
 
-local function normalizeQuaternion(q)
-    local norm = math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+local function quaternionApi()
+    assert(type(quaternion) == "table", "quaternion API must be loaded")
+    assert(
+        type(quaternion.fromComponents) == "function",
+        "quaternion.fromComponents must be available"
+    )
 
-    assert(norm > 0.0, "attitude quaternion norm must be positive")
-
-    return {
-        w = q.w / norm,
-        x = q.x / norm,
-        y = q.y / norm,
-        z = q.z / norm,
-    }
-end
-
-local function conjugate(q)
-    return {
-        w = q.w,
-        x = -q.x,
-        y = -q.y,
-        z = -q.z,
-    }
-end
-
-local function multiply(a, b)
-    return {
-        w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-        x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-        y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-        z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
-    }
+    return quaternion
 end
 
 local function shortest(q)
-    if q.w >= 0.0 then
+    if q.a >= 0.0 then
         return q
     end
 
-    return {
-        w = -q.w,
-        x = -q.x,
-        y = -q.y,
-        z = -q.z,
-    }
+    return -q
 end
 
 function attitude_math.frameFromPose(roll, pitch, heading)
@@ -73,6 +49,28 @@ function attitude_math.frameFromPose(roll, pitch, heading)
     }
 end
 
+function attitude_math.reducedFrameFromTargetDown(currentFrame, fullTargetFrame)
+    assert(type(currentFrame) == "table", "current attitude frame must be table")
+    assert(type(fullTargetFrame) == "table", "target attitude frame must be table")
+
+    local down = mathx.normalizeVector(fullTargetFrame.down)
+    local forward = currentFrame.forward - down * currentFrame.forward:dot(down)
+
+    if mathx.vectorLength(forward) < 1.0e-6 then
+        forward = currentFrame.right:cross(down)
+    end
+
+    forward = mathx.normalizeVector(forward)
+
+    local right = mathx.normalizeVector(down:cross(forward))
+
+    return {
+        forward = forward,
+        right = right,
+        down = down,
+    }
+end
+
 function attitude_math.quaternionFromFrame(frame)
     assert(type(frame) == "table", "attitude frame must be table")
 
@@ -86,65 +84,79 @@ function attitude_math.quaternionFromFrame(frame)
     local m21 = frame.right.z
     local m22 = frame.down.z
     local trace = m00 + m11 + m22
-    local q
+    local x
+    local y
+    local z
+    local w
 
     if trace > 0.0 then
         local s = math.sqrt(trace + 1.0) * 2.0
-        q = {
-            w = 0.25 * s,
-            x = (m21 - m12) / s,
-            y = (m02 - m20) / s,
-            z = (m10 - m01) / s,
-        }
+        w = 0.25 * s
+        x = (m21 - m12) / s
+        y = (m02 - m20) / s
+        z = (m10 - m01) / s
     elseif m00 > m11 and m00 > m22 then
         local s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
-        q = {
-            w = (m21 - m12) / s,
-            x = 0.25 * s,
-            y = (m01 + m10) / s,
-            z = (m02 + m20) / s,
-        }
+        w = (m21 - m12) / s
+        x = 0.25 * s
+        y = (m01 + m10) / s
+        z = (m02 + m20) / s
     elseif m11 > m22 then
         local s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
-        q = {
-            w = (m02 - m20) / s,
-            x = (m01 + m10) / s,
-            y = 0.25 * s,
-            z = (m12 + m21) / s,
-        }
+        w = (m02 - m20) / s
+        x = (m01 + m10) / s
+        y = 0.25 * s
+        z = (m12 + m21) / s
     else
         local s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
-        q = {
-            w = (m10 - m01) / s,
-            x = (m02 + m20) / s,
-            y = (m12 + m21) / s,
-            z = 0.25 * s,
-        }
+        w = (m10 - m01) / s
+        x = (m02 + m20) / s
+        y = (m12 + m21) / s
+        z = 0.25 * s
     end
 
-    return shortest(normalizeQuaternion(q))
+    return shortest(quaternionApi().fromComponents(x, y, z, w):normalize())
 end
 
 function attitude_math.relativeQuaternion(current, target)
     assert(type(current) == "table", "current attitude quaternion must be table")
     assert(type(target) == "table", "target attitude quaternion must be table")
 
-    return shortest(normalizeQuaternion(multiply(conjugate(current), target)))
+    local qCurrent = current:normalize()
+    local qTarget = target:normalize()
+
+    return shortest(qCurrent:conjugate() * qTarget):normalize()
+end
+
+function attitude_math.bodyRateCommand(current, target, tau)
+    assert(type(current) == "table", "current attitude quaternion must be table")
+    assert(type(target) == "table", "target attitude quaternion must be table")
+    assert(type(tau) == "number" and tau > 0.0, "attitude time_constant must be positive")
+
+    local qe = attitude_math.relativeQuaternion(current, target):normalize()
+    local gain = 2.0 / tau
+    local sign = mathx.signNonZero(qe.a)
+
+    return {
+        roll = gain * sign * qe.v.x,
+        pitch = gain * sign * qe.v.y,
+        yaw = gain * sign * qe.v.z,
+    }
 end
 
 function attitude_math.attitudeError(current, target)
     local q = attitude_math.relativeQuaternion(current, target)
-    local vectorNorm = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z)
+    local vectorNorm = mathx.vectorLength(q.v)
     local scale = 2.0
 
     if vectorNorm > 1.0e-9 then
-        scale = 2.0 * atan2(vectorNorm, q.w) / vectorNorm
+        scale = 2.0 * atan2(vectorNorm, q.a) / vectorNorm
     end
 
     return {
-        roll = q.x * scale,
-        pitch = q.y * scale,
-        yaw = q.z * scale,
+        roll = q.v.x * scale,
+        pitch = q.v.y * scale,
+        yaw = q.v.z * scale,
     }
 end
 

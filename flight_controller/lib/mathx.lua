@@ -28,6 +28,44 @@ function mathx.clamp(x, lo, hi)
     return x
 end
 
+function mathx.signNonZero(x)
+    if x < 0.0 then
+        return -1.0
+    end
+
+    return 1.0
+end
+
+function mathx.vectorLength(v)
+    if type(v.length) == "function" then
+        return v:length()
+    end
+
+    return #v
+end
+
+function mathx.normalizeVector(v)
+    local length = mathx.vectorLength(v)
+
+    assert(length > 0.0, "vector length must be positive")
+
+    if type(v.normalize) == "function" then
+        return v:normalize()
+    end
+
+    return v / length
+end
+
+function mathx.safeNormalizeVector(v, fallback)
+    if mathx.vectorLength(v) > 1.0e-6 then
+        return mathx.normalizeVector(v)
+    end
+
+    assert(fallback ~= nil, "safe normalize fallback must be set")
+
+    return mathx.normalizeVector(fallback)
+end
+
 function mathx.component(value, axis)
     return (value.x or 0.0) * (axis.x or 0.0)
         + (value.y or 0.0) * (axis.y or 0.0)

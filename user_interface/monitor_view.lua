@@ -499,6 +499,17 @@ local function drawCurrentAttitude(mon, x, y, width, telemetry)
     })
 end
 
+local function drawTargetAttitude(mon, x, y, width, telemetry)
+    local target = expectTable(telemetry.target, "telemetry.target")
+    local attitude = expectTable(target.commandedAttitude, "telemetry.target.commandedAttitude")
+
+    drawValueGrid(mon, x, y, width, {
+        { label = "TROLL", value = deg(attitude.roll), pattern = "%+.1f" },
+        { label = "TPITCH", value = deg(attitude.pitch), pattern = "%+.1f" },
+        { label = "THEAD", value = deg(attitude.heading), pattern = "%+.1f" },
+    })
+end
+
 local function drawOverview(mon, x, y, width, limitY, telemetry)
     local output = expectTable(telemetry.output, "telemetry.output")
     local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
@@ -562,6 +573,13 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     y = y + 1
     drawCurrentAttitude(mon, x, y, width, telemetry)
     y = y + 3
+
+    if y <= limitY then
+        section(mon, y, "target attitude", colors.black, TARGET)
+        y = y + 1
+        drawTargetAttitude(mon, x, y, width, telemetry)
+        y = y + 2
+    end
 
     if y <= limitY then
         section(mon, y, "attitude output", colors.black, TARGET)

@@ -165,6 +165,12 @@ local function allocateCommands(result, control, pose)
 end
 
 local function attachHeadingTelemetry(result, target, pose)
+    result.target.commandedAttitude = {
+        roll = target.attitude.roll,
+        pitch = target.attitude.pitch,
+        heading = target.heading.angle,
+        source = target.attitude.source,
+    }
     result.target.heading = target.heading
     result.current.heading = {
         angle = pose.heading,

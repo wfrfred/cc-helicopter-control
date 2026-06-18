@@ -33,14 +33,14 @@ config.navigation = {
 
     waypoints = {
         {
-            id = "west_target",
-            name = "West Target",
-            position = { x = -217, y = 81, z = 264 },
+            id = "home",
+            name = "Home",
+            position = { x = -213, y = 81, z = 264 },
 
             approaches = {
                 {
-                    id = "west",
-                    name = "West Approach",
+                    id = "home_west",
+                    name = "Home West Approach",
                     heading = math.rad(-90),
                     distance = 40.0,
                     altitude = 100,
@@ -155,13 +155,13 @@ config.control = {
         model = "affine_tensor",
 
         base_matrix = {
-            { 0.956, -0.009, 0.073 },
-            { -0.037, 1.000, -0.026 },
-            { -0.313, -0.042, 0.980 },
+            { 1.003055,  0.050525, -0.006006 },
+            { -0.039758, 1.004566, 0.015211 },
+            { -0.330290, 0.005378, 1.000567 },
         },
 
         terms = {
-            { out = "roll", attitude = "pitch", input = "yaw", gain = -1.2 },
+            { out = "roll", attitude = "pitch", input = "yaw", gain = -0.615553 },
         },
 
         attitude_limit_deg = {

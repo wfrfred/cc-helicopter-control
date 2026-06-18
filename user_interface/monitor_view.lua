@@ -501,12 +501,19 @@ end
 
 local function drawTargetAttitude(mon, x, y, width, telemetry)
     local target = expectTable(telemetry.target, "telemetry.target")
-    local attitude = expectTable(target.commandedAttitude, "telemetry.target.commandedAttitude")
+    local commanded = expectTable(target.commandedAttitude, "telemetry.target.commandedAttitude")
+    local attitude = expectTable(target.attitude, "telemetry.target.attitude")
+    local roll = expectTable(attitude.roll, "telemetry.target.attitude.roll")
+    local pitch = expectTable(attitude.pitch, "telemetry.target.attitude.pitch")
+    local yaw = expectTable(attitude.yaw, "telemetry.target.attitude.yaw")
 
     drawValueGrid(mon, x, y, width, {
-        { label = "TROLL", value = deg(attitude.roll), pattern = "%+.1f" },
-        { label = "TPITCH", value = deg(attitude.pitch), pattern = "%+.1f" },
-        { label = "THEAD", value = deg(attitude.heading), pattern = "%+.1f" },
+        { label = "ROLL", value = deg(commanded.roll), pattern = "%+.1f" },
+        { label = "RRATE", value = deg(roll.rate), pattern = "%+.1f" },
+        { label = "PITCH", value = deg(commanded.pitch), pattern = "%+.1f" },
+        { label = "PRATE", value = deg(pitch.rate), pattern = "%+.1f" },
+        { label = "HEAD", value = deg(commanded.heading), pattern = "%+.1f" },
+        { label = "YRATE", value = deg(yaw.rate), pattern = "%+.1f" },
     })
 end
 
@@ -578,7 +585,7 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
         section(mon, y, "target attitude", colors.black, TARGET)
         y = y + 1
         drawTargetAttitude(mon, x, y, width, telemetry)
-        y = y + 2
+        y = y + 3
     end
 
     if y <= limitY then

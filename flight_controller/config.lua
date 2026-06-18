@@ -115,7 +115,7 @@ config.control = {
     },
 
     attitude = {
-        time_constant = 0.35,
+        time_constant = 0.70,
 
         home = {
             roll = 0.0,
@@ -183,7 +183,7 @@ config.control = {
 
     heading = {
         lookahead_rate = math.rad(60),
-        yaw_priority = 0.35,
+        yaw_priority = 0.45,
         lock = {
             rate_deadband = math.rad(2),
             relock_timeout = 0.6,
@@ -192,8 +192,14 @@ config.control = {
 
     position_hold = {
         velocity_feedforward = {
-            forward = 0.0175,
-            right = 0.0185,
+            forward = {
+                gain_neg = 0.0200,
+                gain_pos = 0.0155,
+            },
+            right = {
+                gain_neg = 0.0165,
+                gain_pos = 0.0175,
+            },
         },
     },
 
@@ -248,24 +254,24 @@ config.control = {
 
         velocity = {
             forward = {
-                kp = 0.055,
+                kp = 0.050,
                 ki = 0.020,
+                kd = 0.00,
+                i_min = -0.4,
+                i_max = 0.4,
+                out_min = -math.rad(25),
+                out_max = math.rad(25),
+                deadband = 0.05,
+            },
+
+            right = {
+                kp = 0.070,
+                ki = 0.025,
                 kd = 0.00,
                 i_min = -0.4,
                 i_max = 0.4,
                 out_min = -math.rad(30),
                 out_max = math.rad(30),
-                deadband = 0.05,
-            },
-
-            right = {
-                kp = 0.055,
-                ki = 0.025,
-                kd = 0.00,
-                i_min = -0.4,
-                i_max = 0.4,
-                out_min = -math.rad(20),
-                out_max = math.rad(20),
                 deadband = 0.05,
             },
         },

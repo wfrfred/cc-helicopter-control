@@ -133,10 +133,16 @@ function position_hold.new(control)
     }
 
     controllers.velocityForward:setFeedforward(
-        feedforward.linear(control.position_hold.velocity_feedforward.forward)
+        feedforward.directionalLinear(
+            control.position_hold.velocity_feedforward.forward.gain_neg,
+            control.position_hold.velocity_feedforward.forward.gain_pos
+        )
     )
     controllers.velocityRight:setFeedforward(
-        feedforward.linear(control.position_hold.velocity_feedforward.right)
+        feedforward.directionalLinear(
+            control.position_hold.velocity_feedforward.right.gain_neg,
+            control.position_hold.velocity_feedforward.right.gain_pos
+        )
     )
 
     return setmetatable({

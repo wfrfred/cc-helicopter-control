@@ -92,7 +92,7 @@ local headingMode = {
 }
 
 local function manualLateralInput(controls)
-    return controls.roll ~= 0 or controls.pitch ~= 0
+    return controls.roll ~= 0 or controls.pitch ~= 0 or controls.heading ~= 0
 end
 
 local positionTargetAxes = {

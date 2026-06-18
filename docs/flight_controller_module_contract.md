@@ -540,7 +540,7 @@ separate mirror table that only copies fields back into telemetry.
 ### State-machine responsibilities
 
 ```text
-manual roll/pitch input active:
+manual roll/pitch/heading input active:
     lateral mode becomes manual
     position hold target is reset or suspended
 
@@ -553,11 +553,11 @@ caps lock pressed:
     lateral mode becomes cruise
     if roll/pitch is already active, that held input is ignored until it returns to center
 
-manual roll/pitch input while cruising:
+manual roll/pitch/heading input while cruising:
     cruise velocity target is cleared
     lateral mode becomes manual
 
-roll/pitch released and position hold enabled:
+roll/pitch/heading released and position hold enabled:
     lateral mode becomes position hold
     current position is captured if needed
 
@@ -574,6 +574,7 @@ heading input active:
     heading mode stays heading_hold
     heading lock substate becomes manual_lookahead
     A/D creates an instantaneous lookahead heading target from current heading
+    lateral position hold is suspended while the lookahead input is held
 
 heading input released:
     heading mode stays heading_hold

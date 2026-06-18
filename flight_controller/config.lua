@@ -180,7 +180,7 @@ config.control = {
     },
 
     heading = {
-        target_rate = math.rad(60),
+        lookahead_rate = math.rad(60),
         lock = {
             rate_deadband = math.rad(2),
             relock_timeout = 0.6,

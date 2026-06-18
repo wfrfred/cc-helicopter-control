@@ -164,6 +164,7 @@ target = {
         roll = 0.0,
         pitch = 0.0,
         source = "manual",
+        orientation = ...,
     },
 
     vertical = {
@@ -177,7 +178,6 @@ target = {
 
     heading = {
         angle = 0.0,
-        rate = 0.0,
         active = true,
         pending = false,
         error = 0.0,
@@ -188,7 +188,11 @@ target = {
 }
 ```
 
-The exact fields can be evolved, but the ownership should stay fixed: `control_task.lua` assembles targets; `controller.lua` consumes them.
+The exact fields can be evolved, but the ownership should stay fixed:
+`control_task.lua` assembles targets. `controller.lua` consumes only the
+controller-facing subset: attitude orientation/metadata and vertical target.
+`heading` is navigation/input telemetry and target-generation state; it is not a
+controller input.
 
 ### `commands`
 
@@ -517,7 +521,10 @@ lateralMachine = {
 }
 
 heightLock = rate_lock.new(...)
-headingLock = rate_lock.new(...)
+headingLock = {
+    target = ...,
+    pending = ...,
+}
 
 target = {
     attitude = ...,
@@ -565,7 +572,8 @@ climb input released:
 
 heading input active:
     heading mode stays heading_hold
-    heading lock substate becomes manual
+    heading lock substate becomes manual_lookahead
+    A/D creates an instantaneous lookahead heading target from current heading
 
 heading input released:
     heading mode stays heading_hold
@@ -646,7 +654,9 @@ flight-mode ownership
 
 Generic primitive for manual rate input followed by hold-target capture.
 
-This module can be used for vertical height/down hold and heading hold. It is not itself a flight-mode manager.
+This module is used for vertical height/down hold. Heading hold is owned directly
+by `control_task.lua`, because A/D is an attitude-target lookahead intent rather
+than an inner-loop rate command.
 
 ### Depends on
 
@@ -865,7 +875,12 @@ Converts target and body state into body commands.
 
 This is the stabilization/control law module. It owns PID instances and control terms, not flight modes.
 
-Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct Euler-angle subtraction. Positive pitch is around the body `right` axis and means nose up. `state.body.pose.heading` and `target.heading.angle` preserve the input-facing semantics: A/D changes the navigation heading target through `rate_lock.lua`, while controller builds a target frame from `target.attitude.roll`, `target.attitude.pitch`, and `target.heading.angle`, then projects attitude error onto the current body axes.
+Roll, pitch, and yaw angle PIDs consume body-frame attitude error, not direct
+Euler-angle subtraction. Positive pitch is around the body `right` axis and
+means nose up. Horizontal `heading` stays outside the controller: `control_task`
+uses current/target heading semantics to build `target.attitude.orientation`,
+then `controller.lua` compares that orientation with the current orientation and
+controls body roll, pitch, and yaw only.
 
 Roll, pitch, and yaw use cascaded control: an angle PID produces a target body rate, then a rate PID produces the final body command. The rate PID owns the linear feedforward for commanded rate.
 

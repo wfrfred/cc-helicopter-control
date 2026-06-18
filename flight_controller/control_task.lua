@@ -164,6 +164,16 @@ local function allocateCommands(result, control, pose)
     attitude.yaw.command = finalCommands.yaw
 end
 
+local function attachHeadingTelemetry(result, target, pose)
+    result.target.heading = target.heading
+    result.current.heading = {
+        angle = pose.heading,
+    }
+    result.error.heading = {
+        angle = target.heading.error,
+    }
+end
+
 local function headingRateFromAttitudeRates(bodyFrame, rates)
     local forward = bodyFrame.forward
     local horizontal = forward.x * forward.x + forward.z * forward.z
@@ -178,6 +188,87 @@ local function headingRateFromAttitudeRates(bodyFrame, rates)
 
     return (rates.pitch or 0.0) * fromForwardChange(-bodyFrame.down.x, -bodyFrame.down.z)
         + (rates.yaw or 0.0) * fromForwardChange(bodyFrame.right.x, bodyFrame.right.z)
+end
+
+local function makeHeadingLock(initial)
+    return {
+        target = mathx.wrapPi(initial.heading),
+        wasManual = false,
+        pending = false,
+        pendingTime = 0.0,
+    }
+end
+
+local function headingLookaheadAngle(control)
+    local kp = control.pid.attitude.yaw.angle.kp
+
+    assert(kp > 0.0, "attitude yaw angle kp must be positive for heading lookahead")
+
+    return control.heading.lookahead_rate / kp
+end
+
+local function makeHeadingTarget(target, pose, state, active, pending)
+    local angle = mathx.wrapPi(target)
+
+    return {
+        angle = angle,
+        active = active,
+        pending = pending,
+        error = mathx.wrapPi(angle - pose.heading),
+        source = state,
+    }
+end
+
+local function captureHeadingLock(lock, heading)
+    lock.target = mathx.wrapPi(heading)
+    lock.wasManual = false
+    lock.pending = false
+    lock.pendingTime = 0.0
+end
+
+local function lockedHeadingTarget(lock, pose)
+    captureHeadingLock(lock, pose.heading)
+
+    return makeHeadingTarget(lock.target, pose, "locked", true, false)
+end
+
+local function updateHeadingLock(lock, controls, pose, headingRate, dt, control)
+    if controls.heading ~= 0.0 then
+        lock.target = mathx.wrapPi(pose.heading)
+        lock.wasManual = true
+        lock.pending = false
+        lock.pendingTime = 0.0
+
+        return makeHeadingTarget(
+            pose.heading + controls.heading * headingLookaheadAngle(control),
+            pose,
+            "manual_lookahead",
+            true,
+            false
+        )
+    end
+
+    if lock.wasManual then
+        lock.pending = true
+        lock.pendingTime = 0.0
+        lock.wasManual = false
+    end
+
+    if lock.pending then
+        lock.pendingTime = lock.pendingTime + dt
+
+        local stopped = math.abs(headingRate) < control.heading.lock.rate_deadband
+        local timedOut = control.heading.lock.relock_timeout > 0.0
+            and lock.pendingTime >= control.heading.lock.relock_timeout
+
+        if stopped or timedOut then
+            captureHeadingLock(lock, pose.heading)
+        else
+            return makeHeadingTarget(pose.heading, pose, "pending", false, true)
+        end
+    end
+
+    return makeHeadingTarget(lock.target, pose, "locked", true, false)
 end
 
 local function makeLateralMachine(initialState, navigator)
@@ -419,12 +510,11 @@ local function makeTarget(attitude, position, verticalLock, headingLockResult, a
             source = verticalLock.state,
         },
         heading = {
-            angle = headingLockResult.target,
-            rate = headingLockResult.commandedRate,
+            angle = headingLockResult.angle,
             active = headingLockResult.active,
             pending = headingLockResult.pending,
             error = headingLockResult.error,
-            source = headingLockResult.state,
+            source = headingLockResult.source,
         },
     }
 end
@@ -462,12 +552,11 @@ local function navigationHeadingLock(navigationResult, pose)
     end
 
     return {
-        target = mathx.wrapPi(targetHeading),
+        angle = mathx.wrapPi(targetHeading),
         error = mathx.wrapPi(targetHeading - pose.heading),
-        commandedRate = 0.0,
         active = true,
         pending = false,
-        state = "navigation_" .. navigationResult.phase,
+        source = "navigation_" .. navigationResult.phase,
     }
 end
 
@@ -510,15 +599,7 @@ function control_task.run(shared)
         rate_deadband = config.control.vertical.lock.speed_deadband,
         relock_timeout = config.control.vertical.lock.relock_timeout,
     })
-    local headingLock = rate_lock.new({
-        initial_target = initial.heading,
-        target_rate = config.control.heading.target_rate,
-        rate_deadband = config.control.heading.lock.rate_deadband,
-        relock_timeout = config.control.heading.lock.relock_timeout,
-        error = function(target, current)
-            return mathx.wrapPi(target - current)
-        end,
-    })
+    local headingLock = makeHeadingLock(initial)
     local controller = Controller.new(config.control)
     local controllerPids = controller:pidControllers()
     local positionPids = positionHold:pidControllers()
@@ -546,12 +627,15 @@ function control_task.run(shared)
         local controls = input.controls
         local vertical = controlState.vertical
         local verticalLock = heightLock:update(controls.climb, vertical.height, vertical.speed, dt)
-        local headingLockResult = headingLock:update(controls.heading, pose.heading, headingRate, dt)
-        local attitudeHeading = pose.heading
-
-        if headingLockResult.active then
-            attitudeHeading = headingLockResult.target
-        end
+        local headingLockResult = updateHeadingLock(
+            headingLock,
+            controls,
+            pose,
+            headingRate,
+            dt,
+            config.control
+        )
+        local attitudeHeading = headingLockResult.angle
 
         local navigationCommand = shared.navigationCommand
         shared.navigationCommand = nil
@@ -579,11 +663,11 @@ function control_task.run(shared)
         end
 
         if navigationExited and controls.heading == 0.0 then
-            headingLockResult = lockedRateTarget(headingLock, pose.heading, headingRate)
-            attitudeHeading = headingLockResult.target
+            headingLockResult = lockedHeadingTarget(headingLock, pose)
+            attitudeHeading = headingLockResult.angle
         elseif navigationHeading ~= nil then
             headingLockResult = navigationHeading
-            attitudeHeading = headingLockResult.target
+            attitudeHeading = headingLockResult.angle
         end
 
         local target = makeTarget(
@@ -595,11 +679,15 @@ function control_task.run(shared)
         )
 
         local result = controller:update({
-            target = target,
+            target = {
+                attitude = target.attitude,
+                vertical = target.vertical,
+            },
             state = controlState,
             dt = dt,
         })
 
+        attachHeadingTelemetry(result, target, pose)
         allocateCommands(result, config.control, controlState.pose)
 
         mixer:setCommands(result.commands)
@@ -642,7 +730,7 @@ function control_task.run(shared)
 
                 lock = {
                     height = verticalLock.state,
-                    heading = headingLockResult.state,
+                    heading = headingLockResult.source,
                 },
 
                 state = makeTelemetryState(state),

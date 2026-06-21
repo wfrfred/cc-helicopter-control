@@ -1,0 +1,225 @@
+local navigation = require("navigation")
+local mathx = require("lib.mathx")
+
+local mode_state = {}
+
+local State = {}
+State.__index = State
+
+local modes = {
+    manual = "manual",
+    position_hold = "position_hold",
+    cruise = "cruise",
+    navigation = "navigation",
+}
+
+local function horizontalInput(input)
+    return input.manual.attitude.roll ~= 0.0
+        or input.manual.attitude.pitch ~= 0.0
+        or input.manual.heading.rate ~= 0.0
+end
+
+local function positionTarget(state)
+    return {
+        x = state.world.position.x,
+        z = state.world.position.z,
+    }
+end
+
+local function worldHorizontalVelocity(state)
+    return {
+        x = state.world.velocity.x,
+        z = state.world.velocity.z,
+    }
+end
+
+local function motion(state)
+    return {
+        worldVelocity = worldHorizontalVelocity(state),
+        verticalSpeed = state.world.velocity.y,
+        headingRate = state.navigation.heading.rate,
+    }
+end
+
+local function moveToward(x, target, rate, dt)
+    local d = target - x
+    local step = rate * dt
+
+    if math.abs(d) <= step then
+        return target
+    end
+
+    if d > 0 then
+        return x + step
+    end
+
+    return x - step
+end
+
+function mode_state.new(initialState, config)
+    return setmetatable({
+        control = config.control,
+        navigator = navigation.new(config.navigation),
+        name = modes.position_hold,
+        positionTarget = positionTarget(initialState),
+        cruiseVelocity = nil,
+        cruiseManualReleasePending = false,
+        manualRoll = config.control.attitude.home.roll,
+        manualPitch = config.control.attitude.home.pitch,
+    }, State)
+end
+
+function State:updateManualAttitude(input, dt)
+    local control = self.control
+    local roll = input.manual.attitude.roll
+    local pitch = input.manual.attitude.pitch
+
+    if roll ~= 0.0 then
+        self.manualRoll = mathx.clamp(
+            self.manualRoll + roll * control.attitude.target_rate.roll * dt,
+            -control.attitude.limit.roll,
+            control.attitude.limit.roll
+        )
+    else
+        self.manualRoll = moveToward(
+            self.manualRoll,
+            control.attitude.home.roll,
+            control.attitude.center_rate.roll,
+            dt
+        )
+    end
+
+    if pitch ~= 0.0 then
+        self.manualPitch = mathx.clamp(
+            self.manualPitch + pitch * control.attitude.target_rate.pitch * dt,
+            -control.attitude.limit.pitch,
+            control.attitude.limit.pitch
+        )
+    else
+        self.manualPitch = moveToward(
+            self.manualPitch,
+            control.attitude.home.pitch,
+            control.attitude.center_rate.pitch,
+            dt
+        )
+    end
+end
+
+local function selectMode(self, input)
+    if self.navigator:isActive() then
+        return modes.navigation
+    end
+
+    if self.cruiseVelocity ~= nil then
+        return modes.cruise
+    end
+
+    if horizontalInput(input) then
+        return modes.manual
+    end
+
+    return modes.position_hold
+end
+
+local function updateNavigationCommand(self, command, state)
+    if command == nil or command.action == nil then
+        return self.navigator:state()
+    end
+
+    local result = self.navigator:command(command, state, motion(state))
+
+    if result.active then
+        self.cruiseVelocity = nil
+    end
+
+    return result
+end
+
+local function cancelNavigationForManualInput(self, input)
+    if not self.navigator:isActive() then
+        return false
+    end
+
+    if horizontalInput(input)
+        or input.manual.velocity.up ~= 0.0
+        or input.manual.heading.rate ~= 0.0 then
+        self.navigator:cancel("manual")
+        return true
+    end
+
+    return false
+end
+
+local function updateCruise(self, input, state)
+    local manual = horizontalInput(input)
+
+    if input.event.cruiseToggle then
+        self.cruiseVelocity = worldHorizontalVelocity(state)
+        self.cruiseManualReleasePending = manual
+        return true
+    end
+
+    if self.cruiseVelocity == nil then
+        return false
+    end
+
+    if self.cruiseManualReleasePending then
+        if not manual then
+            self.cruiseManualReleasePending = false
+        end
+        return false
+    end
+
+    if manual then
+        self.cruiseVelocity = nil
+        return true
+    end
+
+    return false
+end
+
+function State:update(input)
+    local state = input.state
+    local command = input.navigationCommand
+    local dt = input.dt
+    local resetHorizontal = false
+
+    self:updateManualAttitude(input.input, dt)
+
+    local navigationResult = updateNavigationCommand(self, command, state)
+
+    if cancelNavigationForManualInput(self, input.input) then
+        navigationResult = self.navigator:state()
+    end
+
+    if updateCruise(self, input.input, state) then
+        resetHorizontal = true
+    end
+
+    local selected = selectMode(self, input.input)
+
+    if selected ~= self.name then
+        self.name = selected
+        resetHorizontal = true
+
+        if selected == modes.manual or selected == modes.position_hold then
+            self.positionTarget = positionTarget(state)
+        end
+    end
+
+    return {
+        name = self.name,
+        manualAttitude = {
+            roll = self.manualRoll,
+            pitch = self.manualPitch,
+        },
+        positionTarget = self.positionTarget,
+        cruiseVelocity = self.cruiseVelocity,
+        navigation = navigationResult,
+        reset = {
+            horizontal = resetHorizontal,
+        },
+    }
+end
+
+return mode_state

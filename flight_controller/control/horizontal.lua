@@ -2,7 +2,7 @@ local feedforward = require("lib.feedforward")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 
-local position_hold = {}
+local horizontal = {}
 
 local Hold = {}
 Hold.__index = Hold
@@ -98,8 +98,8 @@ local function makeInactiveResult()
                 },
             },
             attitude = {
-                roll = nil,
-                pitch = nil,
+                roll = 0.0,
+                pitch = 0.0,
             },
         },
     }
@@ -120,11 +120,11 @@ local function attitudeFromNavigationTilt(navigationTilt, limit)
     }
 end
 
-function position_hold.inactive()
+function horizontal.inactive()
     return makeInactiveResult()
 end
 
-function position_hold.new(control)
+function horizontal.new(control)
     local controllers = {
         positionForward = pid.new(control.pid.position.forward),
         positionRight = pid.new(control.pid.position.right),
@@ -161,7 +161,7 @@ local function updateNavigationVelocity(
     currentNavigationVelocity,
     targetWorldVelocity,
     worldVelocity,
-    attitudeHeading,
+    heading,
     dt,
     worldPosition,
     navigationPosition
@@ -177,7 +177,7 @@ local function updateNavigationVelocity(
         dt = dt,
     })
     local navigationTilt = navigationHorizontal(forwardResult.output, rightResult.output)
-    local worldTilt = projectNavigationHorizontalToWorld(navigationTilt, attitudeHeading)
+    local worldTilt = projectNavigationHorizontalToWorld(navigationTilt, heading)
     local attitude = attitudeFromNavigationTilt(navigationTilt, self.control.attitude.limit)
 
     return {
@@ -215,12 +215,12 @@ local function updateNavigationVelocity(
     }
 end
 
-function Hold:updateVelocity(targetWorldVelocity, worldVelocity, attitudeHeading, dt, position)
+function Hold:updateVelocity(targetWorldVelocity, worldVelocity, heading, dt, position)
     local targetNavigationVelocity = projectWorldHorizontalToNavigation(
         targetWorldVelocity,
-        attitudeHeading
+        heading
     )
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(worldVelocity, attitudeHeading)
+    local currentNavigationVelocity = projectWorldHorizontalToNavigation(worldVelocity, heading)
 
     return updateNavigationVelocity(
         self,
@@ -228,19 +228,19 @@ function Hold:updateVelocity(targetWorldVelocity, worldVelocity, attitudeHeading
         currentNavigationVelocity,
         targetWorldVelocity,
         worldVelocity,
-        attitudeHeading,
+        heading,
         dt,
         position,
         nil
     )
 end
 
-function Hold:update(worldPositionError, worldVelocity, attitudeHeading, dt)
+function Hold:updatePosition(worldPositionError, worldVelocity, heading, dt)
     local navigationPositionError = projectWorldHorizontalToNavigation(
         worldPositionError,
-        attitudeHeading
+        heading
     )
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(worldVelocity, attitudeHeading)
+    local currentNavigationVelocity = projectWorldHorizontalToNavigation(worldVelocity, heading)
     local forwardResult = self.controllers.positionForward:update({
         target = navigationPositionError.forward,
         current = 0.0,
@@ -256,7 +256,7 @@ function Hold:update(worldPositionError, worldVelocity, attitudeHeading, dt)
     local targetNavigationVelocity = navigationHorizontal(forwardResult.output, rightResult.output)
     local targetWorldVelocity = projectNavigationHorizontalToWorld(
         targetNavigationVelocity,
-        attitudeHeading
+        heading
     )
 
     return updateNavigationVelocity(
@@ -265,7 +265,7 @@ function Hold:update(worldPositionError, worldVelocity, attitudeHeading, dt)
         currentNavigationVelocity,
         targetWorldVelocity,
         worldVelocity,
-        attitudeHeading,
+        heading,
         dt,
         {
             target = worldHorizontal(0.0, 0.0),
@@ -287,4 +287,4 @@ function Hold:pidControllers()
     return self.controllers
 end
 
-return position_hold
+return horizontal

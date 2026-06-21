@@ -443,7 +443,7 @@ function Navigator:activate(id, state, motion)
     assert(self.selected ~= nil, "navigation activation requires a selected waypoint")
     assert(type(state) == "table", "navigation activation requires state")
 
-    local position = assertPosition(state.raw.position, "state.raw.position")
+    local position = assertPosition(state.world.position, "state.world.position")
     local pose = state.body.pose
     local approach = selectApproach(self.selected, position, self.config)
     local legs = buildApproachLegs(self.selected, approach, self.config)
@@ -515,7 +515,7 @@ function Navigator:update(state, dt, motion)
         return inactiveResult(self)
     end
 
-    local position = assertPosition(state.raw.position, "state.raw.position")
+    local position = assertPosition(state.world.position, "state.world.position")
     local pose = assert(type(state.body.pose) == "table" and state.body.pose, "state.body.pose must be table")
 
     assert(type(motion) == "table", "navigation motion must be table")

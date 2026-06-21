@@ -2,7 +2,7 @@ local mathx = require("lib.mathx")
 local attitude_math = require("lib.attitude_math")
 local config = require("config")
 
-local data_task = {}
+local sensor_task = {}
 
 local bodyAxis = config.calibration.body_axis
 
@@ -33,10 +33,31 @@ local function buildPose(rawPosition, bodyFrame)
     }
 end
 
+local function headingRateFromAngular(bodyFrame, angular)
+    local forward = bodyFrame.forward
+    local horizontal = forward.x * forward.x + forward.z * forward.z
+
+    if horizontal < 1.0e-6 then
+        return 0.0
+    end
+
+    local function fromForwardChange(x, z)
+        return (-forward.z * x + forward.x * z) / horizontal
+    end
+
+    return (angular.pitch or 0.0) * fromForwardChange(-bodyFrame.down.x, -bodyFrame.down.z)
+        + (angular.yaw or 0.0) * fromForwardChange(bodyFrame.right.x, bodyFrame.right.z)
+end
+
 local function makeState()
     return {
         raw = {},
+        world = {},
         body = {},
+        navigation = {
+            heading = {},
+            velocity = {},
+        },
         time = {},
     }
 end
@@ -44,16 +65,25 @@ end
 local function readPose()
     local rawPose = sublevel.getLogicalPose()
     local bodyFrame = buildBodyFrame(rawPose)
+    local pose = buildPose(rawPose.position, bodyFrame)
 
     return {
         raw = {
             position = rawPose.position,
             orientation = rawPose.orientation,
         },
+        world = {
+            position = rawPose.position,
+        },
         body = {
             frame = bodyFrame,
             orientation = attitude_math.quaternionFromFrame(bodyFrame),
-            pose = buildPose(rawPose.position, bodyFrame),
+            pose = pose,
+        },
+        navigation = {
+            heading = {
+                angle = pose.heading,
+            },
         },
         time = os.clock(),
     }
@@ -61,35 +91,54 @@ end
 
 local function readLinearVelocity(bodyFrame)
     local worldVelocity = sublevel.getLinearVelocity()
+    local bodyVelocity = mathx.project(worldVelocity, {
+        forward = bodyFrame.forward,
+        right = bodyFrame.right,
+        down = bodyFrame.down,
+    })
 
     return {
         raw = {
             velocity = worldVelocity,
         },
+        world = {
+            velocity = worldVelocity,
+        },
         body = {
-            velocity = mathx.project(worldVelocity, {
-                forward = bodyFrame.forward,
-                right = bodyFrame.right,
-                down = bodyFrame.down,
-            }),
+            velocity = bodyVelocity,
+        },
+        navigation = {
+            velocity = {
+                forward = bodyVelocity.forward,
+                right = bodyVelocity.right,
+                up = worldVelocity.y,
+            },
         },
         time = os.clock(),
     }
 end
 
-local function readRates()
+local function readAngularVelocity(bodyFrame)
     local rawAngularVelocity = sublevel.getAngularVelocity()
+    local angular = mathx.project(rawAngularVelocity, {
+        roll = bodyAxis.forward,
+        pitch = bodyAxis.right,
+        yaw = bodyAxis.down,
+    })
 
     return {
         raw = {
             angularVelocity = rawAngularVelocity,
         },
         body = {
-            rates = mathx.project(rawAngularVelocity, {
-                roll = bodyAxis.forward,
-                pitch = bodyAxis.right,
-                yaw = bodyAxis.down,
-            }),
+            angular = {
+                velocity = angular,
+            },
+        },
+        navigation = {
+            heading = {
+                rate = headingRateFromAngular(bodyFrame, angular),
+            },
         },
         time = os.clock(),
     }
@@ -104,7 +153,7 @@ local function waitForPose(shared)
     end
 end
 
-function data_task.run(shared)
+function sensor_task.run(shared)
     shared.state = makeState()
 
     local latestBodyFrame = nil
@@ -116,9 +165,11 @@ function data_task.run(shared)
 
             shared.state.raw.position = pose.raw.position
             shared.state.raw.orientation = pose.raw.orientation
+            shared.state.world.position = pose.world.position
             shared.state.body.frame = pose.body.frame
             shared.state.body.orientation = pose.body.orientation
             shared.state.body.pose = pose.body.pose
+            shared.state.navigation.heading.angle = pose.navigation.heading.angle
             shared.state.time.pose = pose.time
 
             sleep(0)
@@ -133,11 +184,12 @@ function data_task.run(shared)
         end
 
         while shared.running do
-            local rates = readRates()
+            local rates = readAngularVelocity(latestBodyFrame)
 
             shared.state.raw.angularVelocity = rates.raw.angularVelocity
-            shared.state.body.rates = rates.body.rates
-            shared.state.time.rates = rates.time
+            shared.state.body.angular = rates.body.angular
+            shared.state.navigation.heading.rate = rates.navigation.heading.rate
+            shared.state.time.angularVelocity = rates.time
 
             sleep(0)
         end
@@ -154,7 +206,9 @@ function data_task.run(shared)
             local velocity = readLinearVelocity(latestBodyFrame)
 
             shared.state.raw.velocity = velocity.raw.velocity
+            shared.state.world.velocity = velocity.world.velocity
             shared.state.body.velocity = velocity.body.velocity
+            shared.state.navigation.velocity = velocity.navigation.velocity
             shared.state.time.velocity = velocity.time
 
             sleep(0)
@@ -164,4 +218,4 @@ function data_task.run(shared)
     parallel.waitForAny(poseTask, angularVelocityTask, linearVelocityTask)
 end
 
-return data_task
+return sensor_task

@@ -2,218 +2,199 @@ local env = require("tools.test_env")
 env.install()
 
 local config = require("config")
-local Controller = require("controller")
-local target_state = require("target_state")
-local position_hold = require("position_hold")
-local rate_lock = require("rate_lock")
-local navigation = require("navigation")
+local Controller = require("control.controller")
+local heading_lock = require("state.heading_lock")
+local height_lock = require("state.height_lock")
+local mode_state = require("state.mode_state")
+local trajectory = require("trajectory")
 local attitude_math = require("lib.attitude_math")
-local mathx = require("lib.mathx")
+local mixer = require("hardware.mixer")
 
 local M = {}
 
-local function frame(roll, pitch, heading)
-    return attitude_math.frameFromPose(roll, pitch, heading)
-end
-
-local function targetOrientation(roll, pitch, heading)
-    return attitude_math.quaternionFromFrame(frame(roll, pitch, heading)):normalize()
-end
-
-local function controllerResult(attitude, vertical, state)
-    local orientation = targetOrientation(state.pose.roll, state.pose.pitch, state.pose.heading)
-    local target = targetOrientation(attitude.roll, attitude.pitch, vertical.heading or state.pose.heading)
-    local controller = Controller.new(config.control)
-
-    return controller:update({
-        state = {
-            bodyFrame = frame(state.pose.roll, state.pose.pitch, state.pose.heading),
-            orientation = orientation,
-            pose = state.pose,
-            rates = state.rates,
-            vertical = {
-                height = state.pose.height,
-                speed = state.verticalSpeed,
-            },
-        },
-        target = {
-            attitude = {
-                roll = attitude.roll,
-                pitch = attitude.pitch,
-                source = attitude.source,
-                orientation = target,
-                fullOrientation = target,
-                reducedOrientation = target,
-                yawPriority = 1.0,
-            },
-            vertical = {
-                height = vertical.height,
-                speed = vertical.speed,
-                active = vertical.active,
-                pending = false,
-                error = vertical.height - state.pose.height,
-                source = vertical.source,
-            },
-        },
-        dt = config.control.loop.dt,
-    })
-end
-
-local baseState = {
-    pose = {
-        roll = 0.0,
-        pitch = 0.0,
-        heading = 0.0,
-        height = 80.0,
-    },
-    rates = {
-        roll = 0.0,
-        pitch = 0.0,
-        yaw = 0.0,
-    },
-    verticalSpeed = 0.0,
-}
-
-local function manualCase(name, controls)
-    local manual = target_state.new(baseState.pose, config.control)
-    manual:update(controls, config.control.loop.dt)
-
-    local heightLock = rate_lock.new({
-        initial_target = baseState.pose.height,
-        target_rate = config.control.vertical.target_rate,
-        rate_deadband = config.control.vertical.lock.speed_deadband,
-        relock_timeout = config.control.vertical.lock.relock_timeout,
-    })
-    local vertical = heightLock:update(controls.climb, baseState.pose.height, 0.0, config.control.loop.dt)
-    local attitude = manual:target("manual")
-    local result = controllerResult(attitude, {
-        height = vertical.target,
-        speed = vertical.commandedRate,
-        active = vertical.active,
-        source = vertical.state,
-    }, baseState)
+local function baseState()
+    local frame = attitude_math.frameFromPose(0.0, 0.0, 0.0)
 
     return {
-        name = name,
-        input = controls,
-        expected = {
-            mode = "manual",
-            target = {
-                roll = attitude.roll,
-                pitch = attitude.pitch,
-                height = vertical.target,
-                verticalSpeed = vertical.commandedRate,
-                heightActive = vertical.active,
-            },
-            command = result.commands,
+        raw = {},
+        world = {
+            position = vector.new(-213.0, 80.0, 304.0),
+            velocity = vector.new(0.0, 0.0, 0.0),
         },
-    }
-end
-
-local function positionHoldCase()
-    local hold = position_hold.new(config.control)
-    local result = hold:update(
-        { x = 0.0, z = 0.0 },
-        { x = 0.0, z = 0.0 },
-        baseState.pose.heading,
-        config.control.loop.dt
-    )
-    local command = controllerResult({
-        roll = result.output.attitude.roll,
-        pitch = result.output.attitude.pitch,
-        source = "position_hold",
-    }, {
-        height = baseState.pose.height,
-        speed = 0.0,
-        active = true,
-        source = "locked",
-    }, baseState)
-
-    return {
-        name = "position_hold neutral",
-        expected = {
-            mode = "position_hold",
-            positionHoldActive = result.active,
-            target = {
-                roll = result.output.attitude.roll,
-                pitch = result.output.attitude.pitch,
+        body = {
+            frame = frame,
+            orientation = attitude_math.quaternionFromFrame(frame),
+            pose = {
+                roll = 0.0,
+                pitch = 0.0,
+                heading = 0.0,
+                height = 80.0,
             },
-            command = command.commands,
-        },
-    }
-end
-
-local function cruiseCase()
-    local hold = position_hold.new(config.control)
-    local velocity = { x = 3.0, z = -1.0 }
-    local result = hold:updateVelocity(velocity, velocity, baseState.pose.heading, config.control.loop.dt)
-
-    return {
-        name = "cruise capture",
-        expected = {
-            mode = "cruise",
-            cruiseVelocity = velocity,
-            target = {
-                roll = result.output.attitude.roll,
-                pitch = result.output.attitude.pitch,
-            },
-        },
-    }
-end
-
-local function navigationCase()
-    local navigator = navigation.new(config.navigation)
-    local result = navigator:command(
-        { action = "activate", waypoint = "home" },
-        {
-            raw = {
-                position = vector.new(-213, 90, 304),
-            },
-            body = {
-                pose = {
-                    heading = 0.0,
+            angular = {
+                velocity = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
                 },
             },
         },
-        {
-            worldVelocity = { x = 0.0, z = 0.0 },
-            verticalSpeed = 0.0,
-            headingRate = 0.0,
-        }
-    )
+        navigation = {
+            heading = {
+                angle = 0.0,
+                rate = 0.0,
+            },
+            velocity = {
+                forward = 0.0,
+                right = 0.0,
+                up = 0.0,
+            },
+        },
+        time = {
+            pose = 0.0,
+            velocity = 0.0,
+            angularVelocity = 0.0,
+        },
+    }
+end
+
+local function inputCommand(roll, pitch, climb, heading, cruiseToggle)
+    return {
+        manual = {
+            mode = "manual.attitude",
+            arm = true,
+            attitude = {
+                roll = roll,
+                pitch = pitch,
+            },
+            velocity = {
+                forward = 0.0,
+                right = 0.0,
+                up = climb,
+            },
+            heading = {
+                rate = heading,
+            },
+        },
+        navigation = {
+            action = nil,
+            waypoint = nil,
+        },
+        event = {
+            cruiseToggle = cruiseToggle == true,
+            holdCapture = false,
+        },
+    }
+end
+
+local function makeMachines(state)
+    return {
+        mode = mode_state.new(state, config),
+        height = height_lock.new({
+            initial_target = state.body.pose.height,
+            target_rate = config.control.vertical.target_rate,
+            rate_deadband = config.control.vertical.lock.speed_deadband,
+            relock_timeout = config.control.vertical.lock.relock_timeout,
+        }),
+        heading = heading_lock.new({
+            initial_heading = state.navigation.heading.angle,
+            lookahead_rate = config.control.heading.lookahead_rate,
+            time_constant = config.control.attitude.time_constant,
+            rate_deadband = config.control.heading.lock.rate_deadband,
+            relock_timeout = config.control.heading.lock.relock_timeout,
+        }),
+        trajectory = trajectory.new(),
+        controller = Controller.new(config.control),
+        mixer = mixer.new(config.hardware.rotor, config.calibration.rotor),
+    }
+end
+
+local function runCase(name, input, navigationCommand, mutateState)
+    local state = baseState()
+
+    if mutateState then
+        mutateState(state)
+    end
+
+    local machines = makeMachines(state)
+    local mode = machines.mode:update({
+        input = input,
+        state = state,
+        navigationCommand = navigationCommand,
+        dt = config.control.loop.dt,
+    })
+    local height = machines.height:update({
+        climb = input.manual.velocity.up,
+        height = state.body.pose.height,
+        verticalSpeed = state.world.velocity.y,
+        dt = config.control.loop.dt,
+    })
+    local heading = machines.heading:update({
+        headingInput = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = config.control.loop.dt,
+    })
+    local target = machines.trajectory:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = heading,
+        dt = config.control.loop.dt,
+    })
+    local command = machines.controller:update({
+        state = state,
+        target = target,
+        dt = config.control.loop.dt,
+    })
+    local rotor = machines.mixer:update({
+        commands = command,
+        phase = {
+            upper = 0.0,
+            lower = 0.0,
+        },
+    })
 
     return {
-        name = "navigation active target",
+        name = name,
+        input = input,
         expected = {
-            mode = "navigation",
-            active = result.active,
-            phase = result.phase,
-            target = {
-                x = result.target.position.x,
-                z = result.target.position.z,
-                height = result.target.height,
-                heading = mathx.wrapPi(result.target.heading),
-            },
+            mode = mode.name,
+            height = height,
+            heading = heading,
+            target = target,
+            command = command,
+            rotor = rotor,
         },
     }
 end
 
 function M.cases()
     return {
-        manualCase("manual neutral", { roll = 0.0, pitch = 0.0, heading = 0.0, climb = 0.0 }),
-        manualCase("manual roll positive", { roll = 1.0, pitch = 0.0, heading = 0.0, climb = 0.0 }),
-        manualCase("manual pitch positive", { roll = 0.0, pitch = 1.0, heading = 0.0, climb = 0.0 }),
-        manualCase("manual climb positive", { roll = 0.0, pitch = 0.0, heading = 0.0, climb = 1.0 }),
-        manualCase("manual heading positive", { roll = 0.0, pitch = 0.0, heading = 1.0, climb = 0.0 }),
-        positionHoldCase(),
-        cruiseCase(),
-        navigationCase(),
+        runCase("manual neutral", inputCommand(0.0, 0.0, 0.0, 0.0)),
+        runCase("manual roll positive", inputCommand(1.0, 0.0, 0.0, 0.0)),
+        runCase("manual pitch positive", inputCommand(0.0, 1.0, 0.0, 0.0)),
+        runCase("manual climb positive", inputCommand(0.0, 0.0, 1.0, 0.0)),
+        runCase("manual heading positive", inputCommand(0.0, 0.0, 0.0, 1.0)),
+        runCase("position_hold neutral", inputCommand(0.0, 0.0, 0.0, 0.0)),
+        runCase("cruise capture", inputCommand(0.0, 0.0, 0.0, 0.0, true), nil, function(state)
+            state.world.velocity = vector.new(3.0, 0.0, -1.0)
+        end),
+        runCase(
+            "navigation active target",
+            inputCommand(0.0, 0.0, 0.0, 0.0),
+            { action = "activate", waypoint = "home" },
+            function(state)
+                state.world.position = vector.new(-213.0, 90.0, 304.0)
+                state.body.pose.height = 90.0
+            end
+        ),
         {
             name = "input stale zero input behavior",
             inputAge = config.control.input.stale_dt + 0.1,
             expected = {
                 stale = true,
-                controls = { roll = 0.0, pitch = 0.0, heading = 0.0, climb = 0.0 },
+                manual = inputCommand(0.0, 0.0, 0.0, 0.0).manual,
             },
         },
     }

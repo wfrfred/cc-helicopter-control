@@ -20,10 +20,10 @@ term.clear()
 term.setCursorPos(1, 1)
 print("startup: flight controller")
 
-local data_task = require("data_task")
-local input_task = require("input_task")
-local control_task = require("control_task")
-local telemetry_task = require("telemetry_task")
+local sensor_task = require("tasks.sensor_task")
+local input_task = require("tasks.input_task")
+local control_task = require("tasks.control_task")
+local telemetry_task = require("tasks.telemetry_task")
 
 assert(sublevel, "CC:Sable sublevel API not found")
 
@@ -40,7 +40,7 @@ local shared = {
 
 parallel.waitForAny(
     function()
-        data_task.run(shared)
+        sensor_task.run(shared)
     end,
     function()
         input_task.run(shared)

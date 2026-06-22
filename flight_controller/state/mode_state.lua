@@ -122,10 +122,10 @@ local function selectMode(self, input)
     return modes.position_hold
 end
 
-local function updateNavigationCommand(self, command, state)
+local function updateNavigationCommand(self, command, state, dt)
     if command == nil or command.action == nil then
         if self.navigator:isActive() then
-            return self.navigator:update(state, 0.0, motion(state))
+            return self.navigator:update(state, dt, motion(state))
         end
 
         return self.navigator:state()
@@ -135,6 +135,10 @@ local function updateNavigationCommand(self, command, state)
 
     if result.active then
         self.cruiseVelocity = nil
+
+        if result.target == nil then
+            result = self.navigator:update(state, dt, motion(state))
+        end
     end
 
     return result
@@ -195,7 +199,7 @@ function State:update(input)
 
     self:updateManualAttitude(input.input, dt)
 
-    local navigationResult = updateNavigationCommand(self, command, state)
+    local navigationResult = updateNavigationCommand(self, command, state, dt)
 
     if cancelNavigationForManualInput(self, input.input) then
         navigationResult = self.navigator:state()

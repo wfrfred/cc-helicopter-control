@@ -2,7 +2,9 @@ local env = require("tools.test_env")
 env.install()
 
 local baseline = require("tools.fixtures.control_baseline")
+local attitude_math = require("lib.attitude_math")
 local config = require("config")
+local Controller = require("control.controller")
 local flight_state = require("state.flight_state")
 local heading_lock = require("state.heading_lock")
 local height_lock = require("state.height_lock")
@@ -34,6 +36,29 @@ local function checkTable(path, value)
             checkTable(childPath, child)
         end
     end
+end
+
+local function assertEquivalent(path, expected, actual)
+    if type(expected) == "number" then
+        assertNumber(path, actual)
+        assert(math.abs(actual - expected) <= 1.0e-6, path .. " expected " .. expected .. " got " .. actual)
+        return
+    end
+
+    if type(expected) == "table" then
+        assert(type(actual) == "table", path .. " must be table")
+
+        for key, child in pairs(expected) do
+            assertEquivalent(path .. "." .. tostring(key), child, actual[key])
+        end
+
+        return
+    end
+
+    assert(
+        actual == expected,
+        path .. " expected " .. tostring(expected) .. " got " .. tostring(actual)
+    )
 end
 
 local seen = {}
@@ -105,6 +130,250 @@ local function canonicalState()
             angularVelocity = 1.0,
         },
     }
+end
+
+local function runtimeState()
+    local frame = attitude_math.frameFromPose(0.0, 0.0, 0.0)
+
+    return {
+        raw = {
+            position = vector.new(-213.0, 80.0, 304.0),
+            velocity = vector.new(0.0, 0.0, 0.0),
+            angularVelocity = vector.new(0.0, 0.0, 0.0),
+        },
+        world = {
+            position = vector.new(-213.0, 80.0, 304.0),
+            velocity = vector.new(0.0, 0.0, 0.0),
+        },
+        body = {
+            frame = frame,
+            orientation = attitude_math.quaternionFromFrame(frame),
+            pose = {
+                roll = 0.0,
+                pitch = 0.0,
+                heading = 0.0,
+                height = 80.0,
+            },
+            angular = {
+                velocity = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+            },
+        },
+        navigation = {
+            heading = {
+                angle = 0.0,
+                rate = 0.0,
+            },
+            velocity = {
+                forward = 0.0,
+                right = 0.0,
+                up = 0.0,
+            },
+        },
+        time = {
+            pose = 1.0,
+            velocity = 1.0,
+            angularVelocity = 1.0,
+        },
+    }
+end
+
+local function canonicalInputFromAxes(axes, cruiseToggle)
+    axes = axes or {}
+
+    return {
+        manual = {
+            mode = "manual.attitude",
+            arm = true,
+            attitude = {
+                roll = axes.roll or 0.0,
+                pitch = axes.pitch or 0.0,
+            },
+            velocity = {
+                forward = 0.0,
+                right = 0.0,
+                up = axes.climb or 0.0,
+            },
+            heading = {
+                rate = axes.heading or 0.0,
+            },
+        },
+        navigation = {
+            action = nil,
+            waypoint = nil,
+        },
+        event = {
+            cruiseToggle = cruiseToggle == true,
+            holdCapture = false,
+        },
+    }
+end
+
+local function axesFromInput(input)
+    return {
+        roll = input.manual.attitude.roll,
+        pitch = input.manual.attitude.pitch,
+        climb = input.manual.velocity.up,
+        heading = input.manual.heading.rate,
+    }
+end
+
+local function makeRuntimeMachines(state)
+    return {
+        mode = mode_state.new(state, config),
+        height = height_lock.new({
+            initial_target = state.body.pose.height,
+            target_rate = config.control.vertical.target_rate,
+            rate_deadband = config.control.vertical.lock.speed_deadband,
+            relock_timeout = config.control.vertical.lock.relock_timeout,
+        }),
+        heading = heading_lock.new({
+            initial_heading = state.navigation.heading.angle,
+            lookahead_rate = config.control.heading.lookahead_rate,
+            time_constant = config.control.attitude.time_constant,
+            rate_deadband = config.control.heading.lock.rate_deadband,
+            relock_timeout = config.control.heading.lock.relock_timeout,
+        }),
+        trajectory = trajectory.new(),
+        controller = Controller.new(config.control),
+    }
+end
+
+local function runCurrentBaselineCase(case)
+    if case.name == "input stale zero input behavior" then
+        local input = input_protocol.defaultInput()
+
+        return {
+            stale = true,
+            manualAxes = axesFromInput(input),
+        }
+    end
+
+    local state = runtimeState()
+    local input = canonicalInputFromAxes(case.input)
+    local navigationCommand = nil
+    local forceManual = case.expected.mode == "manual"
+
+    if case.name == "cruise capture" then
+        state.raw.velocity = vector.new(3.0, 0.0, -1.0)
+        state.world.velocity = state.raw.velocity
+        input.event.cruiseToggle = true
+    elseif case.name == "navigation active target" then
+        state.raw.position = vector.new(-213.0, 90.0, 304.0)
+        state.world.position = state.raw.position
+        state.body.pose.height = 90.0
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        }
+    end
+
+    local machines = makeRuntimeMachines(state)
+    local mode = nil
+
+    if forceManual then
+        machines.mode:updateManualAttitude(input, config.control.loop.dt)
+        mode = {
+            name = "manual",
+            manualAttitude = {
+                roll = machines.mode.manualRoll,
+                pitch = machines.mode.manualPitch,
+            },
+            positionTarget = nil,
+            cruiseVelocity = nil,
+            navigation = {
+                active = false,
+                phase = "idle",
+                target = nil,
+            },
+            reset = {
+                horizontal = false,
+            },
+        }
+    else
+        mode = machines.mode:update({
+            input = input,
+            state = state,
+            navigationCommand = navigationCommand,
+            dt = config.control.loop.dt,
+        })
+    end
+    local height = machines.height:update({
+        climb = input.manual.velocity.up,
+        height = state.body.pose.height,
+        verticalSpeed = state.world.velocity.y,
+        dt = config.control.loop.dt,
+    })
+    local heading = machines.heading:update({
+        headingInput = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = config.control.loop.dt,
+    })
+    local target = machines.trajectory:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = heading,
+        dt = config.control.loop.dt,
+    })
+    local command, details = machines.controller:update({
+        state = state,
+        target = target,
+        dt = config.control.loop.dt,
+    })
+
+    if case.name == "position_hold neutral" then
+        return {
+            mode = mode.name,
+            positionHoldActive = details.positionHold.active,
+            target = details.positionHold.output.attitude,
+        }
+    end
+
+    if case.name == "cruise capture" then
+        return {
+            mode = mode.name,
+            cruiseVelocity = mode.cruiseVelocity,
+            target = details.positionHold.output.attitude,
+        }
+    end
+
+    if case.name == "navigation active target" then
+        return {
+            mode = mode.name,
+            active = mode.navigation.active,
+            phase = mode.navigation.phase,
+            target = {
+                x = target.world.position.x,
+                z = target.world.position.z,
+                height = target.vertical.height,
+                heading = target.heading.angle,
+            },
+        }
+    end
+
+    return {
+        mode = mode.name,
+        target = {
+            roll = target.attitude.roll,
+            pitch = target.attitude.pitch,
+            height = target.vertical.height,
+            verticalSpeed = target.vertical.speed,
+            heightActive = target.vertical.active,
+        },
+        command = command,
+    }
+end
+
+local function checkFrozenBaseline()
+    for _, case in ipairs(baseline.cases()) do
+        assertEquivalent(case.name .. ".expected", case.expected, runCurrentBaselineCase(case))
+    end
 end
 
 local function assertOldRuntimeModuleRemoved(name)
@@ -317,6 +586,103 @@ local function checkActiveNavigationKeepsTarget()
     assert(nextMode.navigation.active == true, "navigation should remain active without a new command")
     assert(type(nextMode.navigation.target) == "table", "active navigation should keep a target every tick")
     assert(type(nextMode.navigation.target.position) == "table", "active navigation target should include position")
+end
+
+local function checkActiveNavigationSelectKeepsTarget()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.position = vector.new(-213.0, 90.0, 304.0)
+    state.body.pose.height = 90.0
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    local selected = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "select",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    assert(selected.name == "navigation", "active selected navigation should remain selected")
+    assert(selected.navigation.active == true, "active selected navigation should remain active")
+    assert(type(selected.navigation.target) == "table", "active selected navigation should keep a target")
+    assert(type(selected.navigation.target.position) == "table", "active selected navigation target should include position")
+end
+
+local function checkActiveNavigationUpdateReceivesDt()
+    local originalNavigation = package.loaded["navigation"]
+    local originalModeState = package.loaded["state.mode_state"]
+    local observedDt = nil
+    local fakeNavigator = nil
+
+    local ok, err = pcall(function()
+        package.loaded["state.mode_state"] = nil
+        package.loaded["navigation"] = {
+            new = function()
+                fakeNavigator = {
+                    isActive = function()
+                        return true
+                    end,
+                    update = function(_, _, dt)
+                        observedDt = dt
+
+                        return {
+                            active = true,
+                            phase = "climb",
+                            target = {
+                                position = {
+                                    x = 0.0,
+                                    z = 0.0,
+                                },
+                                height = 80.0,
+                                heading = 0.0,
+                            },
+                        }
+                    end,
+                    state = function()
+                        return {
+                            active = true,
+                            phase = "climb",
+                            target = nil,
+                        }
+                    end,
+                    command = function()
+                        error("unexpected navigation command")
+                    end,
+                }
+
+                return fakeNavigator
+            end,
+        }
+
+        local fakeModeState = require("state.mode_state")
+        local machine = fakeModeState.new(runtimeState(), config)
+        machine:update({
+            input = input_protocol.defaultInput(),
+            state = runtimeState(),
+            navigationCommand = nil,
+            dt = 0.123,
+        })
+    end)
+
+    package.loaded["navigation"] = originalNavigation
+    package.loaded["state.mode_state"] = originalModeState
+
+    assert(ok, err)
+    assert(math.abs(observedDt - 0.123) < 1.0e-9, "active navigation update should receive real dt")
 end
 
 local function checkCruiseToggleOneShot()
@@ -885,12 +1251,15 @@ local function checkMixerFormula()
     assert(math.abs(output.blades.lower[1] - 14.0) < 1.0e-9, "lower blade formula changed")
 end
 
+checkFrozenBaseline()
 checkProtocolDecode()
 checkFlightState()
 checkTrajectoryNavigationOverride()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
 checkActiveNavigationKeepsTarget()
+checkActiveNavigationSelectKeepsTarget()
+checkActiveNavigationUpdateReceivesDt()
 checkCruiseToggleOneShot()
 checkNavigationExitRelockTargets()
 checkNavigationExitRelockTrajectory()

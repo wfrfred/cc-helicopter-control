@@ -7,7 +7,7 @@ local height_lock = require("state.height_lock")
 local mixer_module = require("hardware.mixer")
 local mode_state = require("state.mode_state")
 local rotor_phase = require("hardware.rotor_phase")
-local telemetry_terms = require("telemetry.terms")
+local telemetryTerms = require("telemetry.terms")
 local trajectory = require("trajectory")
 local input_protocol = require("protocol.input")
 
@@ -64,7 +64,7 @@ end
 
 local function publishWaiting(shared, flight, state, now)
     shared.telemetryTime = now
-    shared.telemetry = telemetry_terms.waiting({
+    shared.telemetry = telemetryTerms.waiting({
         flight = flight,
         state = state,
         now = now,
@@ -73,7 +73,7 @@ end
 
 local function publishRunning(shared, input)
     shared.telemetryTime = input.now
-    shared.telemetry = telemetry_terms.running(input)
+    shared.telemetry = telemetryTerms.running(input)
 end
 
 local function makeInitialMachines(initialState)
@@ -170,11 +170,12 @@ function control_task.run(shared)
                 heading = heading,
                 dt = dt,
             })
-            local command, details = machines.controller:update({
+            local command = machines.controller:update({
                 state = state,
                 target = target,
                 dt = dt,
             })
+            local controlTerms = machines.controller:terms()
             local rotorOutput = machines.mixer:update({
                 commands = command,
                 phase = machines.phase:read(),
@@ -183,7 +184,7 @@ function control_task.run(shared)
             machines.actuator:send(rotorOutput)
 
             shared.commands = command
-            shared.controlDetails = details
+            shared.controlTerms = controlTerms
 
             telemetryTimer = telemetryTimer + dt
             if telemetryTimer >= config.control.loop.telemetry_dt then
@@ -203,7 +204,7 @@ function control_task.run(shared)
                     heading = heading,
                     target = target,
                     command = command,
-                    details = details,
+                    control = controlTerms,
                     rotor = rotorOutput.blades,
                 })
             end

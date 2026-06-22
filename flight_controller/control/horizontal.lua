@@ -148,11 +148,32 @@ function horizontal.new(control)
     return setmetatable({
         control = control,
         controllers = controllers,
+        lastTerms = makeInactiveResult(),
     }, Hold)
 end
 
 function Hold:reset()
     resetAll(self.controllers)
+end
+
+local function attachTerms(self, result)
+    result.terms = {
+        position = {
+            forward = self.controllers.positionForward:terms(),
+            right = self.controllers.positionRight:terms(),
+        },
+        velocity = {
+            forward = self.controllers.velocityForward:terms(),
+            right = self.controllers.velocityRight:terms(),
+        },
+    }
+    self.lastTerms = result
+
+    return result
+end
+
+function Hold:inactive()
+    return attachTerms(self, makeInactiveResult())
 end
 
 local function updateNavigationVelocity(
@@ -180,7 +201,7 @@ local function updateNavigationVelocity(
     local worldTilt = projectNavigationHorizontalToWorld(navigationTilt, heading)
     local attitude = attitudeFromNavigationTilt(navigationTilt, self.control.attitude.limit)
 
-    return {
+    return attachTerms(self, {
         active = true,
         worldPosition = worldPosition or emptyWorldState(),
         navigationPosition = navigationPosition or emptyNavigationState(),
@@ -212,7 +233,7 @@ local function updateNavigationVelocity(
             },
             attitude = attitude,
         },
-    }
+    })
 end
 
 function Hold:updateVelocity(targetWorldVelocity, worldVelocity, heading, dt, position)
@@ -285,6 +306,10 @@ end
 
 function Hold:pidControllers()
     return self.controllers
+end
+
+function Hold:terms()
+    return self.lastTerms
 end
 
 return horizontal

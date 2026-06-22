@@ -119,6 +119,7 @@ function controller.new(control)
         attitude = control.attitude,
         horizontal = horizontal_control.new(control),
         controllers = controllers,
+        lastTerms = {},
     }, Controller)
 end
 
@@ -145,7 +146,7 @@ local function horizontalTarget(self, state, target, dt)
         )
     end
 
-    return horizontal_control.inactive()
+    return self.horizontal:inactive()
 end
 
 local function desiredAttitude(self, state, target, horizontalResult)
@@ -236,59 +237,42 @@ function Controller:update(input)
     }
     local allocated = attitude_allocator.apply(self.control.attitude_allocator, pose, copyCommands(rawCommands))
     local commands = finalClampCommands(allocated.commands, self.control.output_limits)
-    local details = {
-        output = {
-            commands = commands,
-            rawCommands = rawCommands,
-            allocatedCommands = allocated.commands,
-            finalCommands = commands,
-            attitudeAllocator = allocated.debug,
-            collective = {
-                command = commands.collective,
-                feedforward = verticalSpeedResult.terms.ff,
-                feedback = verticalSpeedResult.terms.raw,
-                uncompensated = collectiveOut,
+    self.lastTerms = {
+        horizontal = horizontalResult,
+        vertical = {
+            target = {
+                height = verticalTarget.height,
+                speed = targetVerticalSpeed,
+                active = verticalTarget.active,
+                pending = verticalTarget.pending,
+            },
+            current = {
+                height = pose.height,
+                speed = state.world.velocity.y,
+            },
+            error = {
+                height = heightErr,
+                speed = verticalSpeedResult.error,
+            },
+            terms = {
+                height = pids.vertical.height:terms(),
+                speed = pids.vertical.speed:terms(),
                 tilt = {
                     compensation = tiltCompensation,
                     verticalFactor = tiltVerticalFactor,
-                },
-            },
-            attitude = {
-                roll = {
-                    command = commands.roll,
-                    feedforward = rollRateResult.terms.ff,
-                    feedback = rollRateResult.terms.raw,
-                    targetRate = targetRates.roll,
-                    angleRate = targetRates.roll,
-                    controllerCommand = rawCommands.roll,
-                    allocatedCommand = allocated.commands.roll,
-                },
-                pitch = {
-                    command = commands.pitch,
-                    feedforward = pitchRateResult.terms.ff,
-                    feedback = pitchRateResult.terms.raw,
-                    targetRate = targetRates.pitch,
-                    angleRate = targetRates.pitch,
-                    controllerCommand = rawCommands.pitch,
-                    allocatedCommand = allocated.commands.pitch,
-                },
-                yaw = {
-                    command = commands.yaw,
-                    feedforward = yawRateResult.terms.ff,
-                    feedback = yawRateResult.terms.raw,
-                    targetRate = targetRates.yaw,
-                    angleRate = targetRates.yaw,
-                    controllerCommand = rawCommands.yaw,
-                    allocatedCommand = allocated.commands.yaw,
+                    uncompensated = collectiveOut,
+                    output = tiltCompensatedCollectiveOut,
                 },
             },
         },
-        target = {
-            vertical = {
-                height = verticalTarget.height,
-                speed = targetVerticalSpeed,
+        attitude = {
+            commanded = {
+                roll = attitude.roll,
+                pitch = attitude.pitch,
+                heading = target.heading.angle,
+                source = attitude.source,
             },
-            attitude = {
+            target = {
                 orientation = attitudeTarget.orientation,
                 fullOrientation = attitudeTarget.fullOrientation,
                 reducedOrientation = attitudeTarget.reducedOrientation,
@@ -303,20 +287,7 @@ function Controller:update(input)
                     rate = targetRates.yaw,
                 },
             },
-            commandedAttitude = {
-                roll = attitude.roll,
-                pitch = attitude.pitch,
-                heading = target.heading.angle,
-                source = attitude.source,
-            },
-            heading = target.heading,
-        },
-        current = {
-            vertical = {
-                height = pose.height,
-                speed = state.world.velocity.y,
-            },
-            attitude = {
+            current = {
                 roll = {
                     rate = rates.roll,
                 },
@@ -326,17 +297,11 @@ function Controller:update(input)
                 yaw = {
                     rate = rates.yaw,
                 },
+                heading = {
+                    angle = state.navigation.heading.angle,
+                },
             },
-            heading = {
-                angle = state.navigation.heading.angle,
-            },
-        },
-        error = {
-            vertical = {
-                height = heightErr,
-                speed = verticalSpeedResult.error,
-            },
-            attitude = {
+            error = {
                 roll = {
                     angle = bodyAttitudeError.roll,
                     rate = rollRateResult.error,
@@ -349,63 +314,11 @@ function Controller:update(input)
                     angle = bodyAttitudeError.yaw,
                     rate = yawRateResult.error,
                 },
-            },
-            heading = {
-                angle = target.heading.error,
-            },
-        },
-        terms = {
-            vertical = {
-                height = {
-                    result = heightResult,
-                    target = verticalTarget.height,
-                    current = pose.height,
-                    error = heightErr,
-                    output = targetVerticalSpeed,
-                    lockActive = verticalTarget.active,
-                    lockPending = verticalTarget.pending,
-                },
-                speed = {
-                    result = verticalSpeedResult,
-                    tiltCompensation = tiltCompensation,
-                    tiltVerticalFactor = tiltVerticalFactor,
-                    uncompensated = collectiveOut,
-                    output = tiltCompensatedCollectiveOut,
+                heading = {
+                    angle = target.heading.error,
                 },
             },
-            attitude = {
-                roll = {
-                    rate = rollRateResult,
-                    targetRate = targetRates.roll,
-                    attitudeError = bodyAttitudeError.roll,
-                },
-                pitch = {
-                    rate = pitchRateResult,
-                    targetRate = targetRates.pitch,
-                    attitudeError = bodyAttitudeError.pitch,
-                },
-                yaw = {
-                    rate = yawRateResult,
-                    targetRate = targetRates.yaw,
-                    attitudeError = bodyAttitudeError.yaw,
-                },
-            },
-        },
-        positionHold = horizontalResult,
-        pid = {
-            vertical = {
-                height = pids.vertical.height:terms(),
-                speed = pids.vertical.speed:terms(),
-            },
-            position = {
-                forward = self.horizontal:pidControllers().positionForward:terms(),
-                right = self.horizontal:pidControllers().positionRight:terms(),
-            },
-            velocity = {
-                forward = self.horizontal:pidControllers().velocityForward:terms(),
-                right = self.horizontal:pidControllers().velocityRight:terms(),
-            },
-            attitude = {
+            terms = {
                 roll = {
                     rate = pids.attitude.roll.rate:terms(),
                 },
@@ -417,9 +330,18 @@ function Controller:update(input)
                 },
             },
         },
+        allocation = {
+            rawCommands = rawCommands,
+            allocatedCommands = allocated.commands,
+            debug = allocated.debug,
+        },
     }
 
-    return commands, details
+    return commands
+end
+
+function Controller:terms()
+    return self.lastTerms
 end
 
 return controller

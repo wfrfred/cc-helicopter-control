@@ -13,7 +13,7 @@ local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
 local monitor_view = require("monitor_view")
 local sensor_task = require("tasks.sensor_task")
-local telemetry_terms = require("telemetry.terms")
+local telemetryTerms = require("telemetry.terms")
 local trajectory = require("trajectory")
 
 local function assertNumber(path, value)
@@ -321,17 +321,18 @@ local function runCurrentBaselineCase(case)
         heading = heading,
         dt = config.control.loop.dt,
     })
-    local command, details = machines.controller:update({
+    local command = machines.controller:update({
         state = state,
         target = target,
         dt = config.control.loop.dt,
     })
+    local controlTerms = machines.controller:terms()
 
     if case.name == "position_hold neutral" then
         return {
             mode = mode.name,
-            positionHoldActive = details.positionHold.active,
-            target = details.positionHold.output.attitude,
+            horizontalActive = controlTerms.horizontal.active,
+            target = controlTerms.horizontal.output.attitude,
         }
     end
 
@@ -339,7 +340,7 @@ local function runCurrentBaselineCase(case)
         return {
             mode = mode.name,
             cruiseVelocity = mode.cruiseVelocity,
-            target = details.positionHold.output.attitude,
+            target = controlTerms.horizontal.output.attitude,
         }
     end
 
@@ -839,7 +840,7 @@ local function checkNavigationExitRelockTrajectory()
 end
 
 local function checkTelemetryPreservesConsumedCruiseEvent()
-    local telemetry = telemetry_terms.running({
+    local telemetry = telemetryTerms.running({
         now = 1.0,
         dt = config.control.loop.dt,
         input = input_protocol.defaultInput(),
@@ -875,19 +876,19 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
             pitch = 0.0,
             yaw = 0.0,
         },
-        details = {
-            output = {},
-            current = {},
-            error = {},
-            terms = {},
-            pid = {},
-            positionHold = {},
-        },
+        control = {},
         rotor = {},
     })
 
     assert(telemetry.input.event.cruiseToggle == true, "telemetry should preserve consumed cruise event")
     assert(type(telemetry.state.body.angular.velocity) == "table", "telemetry should expose angular velocity")
+    assert(type(telemetry.control) == "table", "telemetry should expose control terms")
+    assert(telemetry["out" .. "put"] == nil, "old output diagnostics should not be exposed")
+    assert(telemetry["cur" .. "rent"] == nil, "old current diagnostics should not be exposed")
+    assert(telemetry["er" .. "ror"] == nil, "old error diagnostics should not be exposed")
+    assert(telemetry["ter" .. "ms"] == nil, "old terms diagnostics should not be exposed")
+    assert(telemetry["p" .. "id"] == nil, "old pid diagnostics should not be exposed")
+    assert(telemetry["tar" .. "get"] == nil, "old controller target diagnostics should not be exposed")
 end
 
 local function pidTerms()
@@ -1003,36 +1004,166 @@ local function canonicalTelemetry()
         },
         heading = {
             source = "locked",
+            angle = 0.0,
+            error = 0.0,
         },
         state = state,
-        output = {
-            commands = {
-                collective = 1.0,
-                roll = 0.0,
-                pitch = 0.0,
-                yaw = 0.0,
-            },
-        },
-        target = {
-            commandedAttitude = {
-                roll = 0.0,
-                pitch = 0.0,
-                heading = 0.0,
-                source = "position_hold",
+        control = {
+            vertical = {
+                target = {
+                    height = 80.0,
+                    speed = 0.0,
+                    active = true,
+                    pending = false,
+                },
+                current = {
+                    height = 80.0,
+                    speed = 0.0,
+                },
+                error = {
+                    height = 0.0,
+                    speed = 0.0,
+                },
+                terms = {
+                    height = pidTerms(),
+                    speed = pidTerms(),
+                    tilt = {
+                        compensation = 1.0,
+                        verticalFactor = 1.0,
+                        uncompensated = 1.0,
+                        output = 1.0,
+                    },
+                },
             },
             attitude = {
-                roll = axisRate(),
-                pitch = axisRate(),
-                yaw = axisRate(),
+                commanded = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    heading = 0.0,
+                    source = "position_hold",
+                },
+                target = {
+                    roll = axisRate(),
+                    pitch = axisRate(),
+                    yaw = axisRate(),
+                },
+                current = {
+                    roll = axisRate(),
+                    pitch = axisRate(),
+                    yaw = axisRate(),
+                    heading = {
+                        angle = 0.0,
+                    },
+                },
+                error = {
+                    roll = {
+                        angle = 0.0,
+                        rate = 0.0,
+                    },
+                    pitch = {
+                        angle = 0.0,
+                        rate = 0.0,
+                    },
+                    yaw = {
+                        angle = 0.0,
+                        rate = 0.0,
+                    },
+                    heading = {
+                        angle = 0.0,
+                    },
+                },
+                terms = {
+                    roll = {
+                        rate = pidTerms(),
+                    },
+                    pitch = {
+                        rate = pidTerms(),
+                    },
+                    yaw = {
+                        rate = pidTerms(),
+                    },
+                },
             },
-            heading = {
-                angle = 0.0,
-                error = 0.0,
+            horizontal = {
+                active = true,
+                worldPosition = {
+                    target = {
+                        x = -213.0,
+                        z = 304.0,
+                    },
+                    current = {
+                        x = -213.0,
+                        z = 304.0,
+                    },
+                    error = {
+                        x = 0.0,
+                        z = 0.0,
+                    },
+                },
+                navigationPosition = {
+                    target = positionAxis(),
+                    current = positionAxis(),
+                    error = positionAxis(),
+                },
+                worldVelocity = {
+                    target = {
+                        x = 0.0,
+                        z = 0.0,
+                    },
+                    current = {
+                        x = 0.0,
+                        z = 0.0,
+                    },
+                    error = {
+                        x = 0.0,
+                        z = 0.0,
+                    },
+                },
+                navigationVelocity = {
+                    target = positionAxis(),
+                    current = positionAxis(),
+                    error = positionAxis(),
+                },
+                output = {
+                    attitude = {
+                        roll = 0.0,
+                        pitch = 0.0,
+                    },
+                },
+                terms = {
+                    position = {
+                        forward = pidTerms(),
+                        right = pidTerms(),
+                    },
+                    velocity = {
+                        forward = pidTerms(),
+                        right = pidTerms(),
+                    },
+                },
             },
-            navigation = {
-                active = false,
-                phase = "idle",
-                selected = {
+            allocation = {
+                rawCommands = {},
+                allocatedCommands = {},
+                debug = {},
+            },
+        },
+        navigation = {
+            active = false,
+            phase = "idle",
+            selected = {
+                id = "home",
+                name = "Home",
+                position = {
+                    x = -213.0,
+                    y = 81.0,
+                    z = 264.0,
+                },
+            },
+            waypoint = nil,
+            approach = nil,
+            target = nil,
+            waypoints = {
+                {
                     id = "home",
                     name = "Home",
                     position = {
@@ -1041,127 +1172,9 @@ local function canonicalTelemetry()
                         z = 264.0,
                     },
                 },
-                waypoint = nil,
-                approach = nil,
-                target = nil,
-                waypoints = {
-                    {
-                        id = "home",
-                        name = "Home",
-                        position = {
-                            x = -213.0,
-                            y = 81.0,
-                            z = 264.0,
-                        },
-                    },
-                },
-                reason = "selected",
             },
+            reason = "selected",
         },
-        current = {
-            attitude = {
-                roll = axisRate(),
-                pitch = axisRate(),
-                yaw = axisRate(),
-            },
-            vertical = {
-                height = 80.0,
-                speed = 0.0,
-            },
-        },
-        error = {
-            attitude = {
-                roll = {
-                    angle = 0.0,
-                    rate = 0.0,
-                },
-                pitch = {
-                    angle = 0.0,
-                    rate = 0.0,
-                },
-                yaw = {
-                    angle = 0.0,
-                    rate = 0.0,
-                },
-            },
-            vertical = {
-                height = 0.0,
-                speed = 0.0,
-            },
-        },
-        terms = {},
-        pid = {
-            vertical = {
-                height = pidTerms(),
-                speed = pidTerms(),
-            },
-            position = {
-                forward = pidTerms(),
-                right = pidTerms(),
-            },
-            velocity = {
-                forward = pidTerms(),
-                right = pidTerms(),
-            },
-            attitude = {
-                roll = {
-                    rate = pidTerms(),
-                },
-                pitch = {
-                    rate = pidTerms(),
-                },
-                yaw = {
-                    rate = pidTerms(),
-                },
-            },
-        },
-        positionHold = {
-            worldPosition = {
-                target = {
-                    x = -213.0,
-                    z = 304.0,
-                },
-                current = {
-                    x = -213.0,
-                    z = 304.0,
-                },
-                error = {
-                    x = 0.0,
-                    z = 0.0,
-                },
-            },
-            navigationPosition = {
-                target = positionAxis(),
-                current = positionAxis(),
-                error = positionAxis(),
-            },
-            worldVelocity = {
-                target = {
-                    x = 0.0,
-                    z = 0.0,
-                },
-                current = {
-                    x = 0.0,
-                    z = 0.0,
-                },
-                error = {
-                    x = 0.0,
-                    z = 0.0,
-                },
-            },
-            navigationVelocity = {
-                target = positionAxis(),
-                current = positionAxis(),
-                error = positionAxis(),
-            },
-            output = {
-                attitude = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                },
-            },
-        },
-        navigation = nil,
         command = {
             collective = 1.0,
             roll = 0.0,
@@ -1202,8 +1215,8 @@ local function checkUiTelemetryBoundary()
     shared.telemetry.navigation = {
         active = true,
         phase = "climb",
-        selected = shared.telemetry.target.navigation.selected,
-        waypoint = shared.telemetry.target.navigation.selected,
+        selected = shared.telemetry.navigation.selected,
+        waypoint = shared.telemetry.navigation.selected,
         approach = nil,
         target = {
             position = {
@@ -1214,7 +1227,7 @@ local function checkUiTelemetryBoundary()
             height = 97.0,
             heading = 0.0,
         },
-        waypoints = shared.telemetry.target.navigation.waypoints,
+        waypoints = shared.telemetry.navigation.waypoints,
     }
     shared.monitorPage = "nav"
     monitor_view.draw(mon, shared)
@@ -1251,6 +1264,74 @@ local function checkMixerFormula()
     assert(math.abs(output.blades.lower[1] - 14.0) < 1.0e-9, "lower blade formula changed")
 end
 
+local function checkControllerTerms()
+    local state = runtimeState()
+    local machines = makeRuntimeMachines(state)
+    local input = canonicalInputFromAxes({
+        roll = 1.0,
+        pitch = 0.0,
+        climb = 0.0,
+        heading = 0.0,
+    })
+    local mode = {
+        name = "manual",
+        manualAttitude = {
+            roll = 0.039269908169872414,
+            pitch = 0.0,
+        },
+        navigation = {
+            active = false,
+            phase = "idle",
+            target = nil,
+        },
+        reset = {
+            horizontal = false,
+        },
+    }
+    local height = machines.height:update({
+        climb = input.manual.velocity.up,
+        height = state.body.pose.height,
+        verticalSpeed = state.world.velocity.y,
+        dt = config.control.loop.dt,
+    })
+    local heading = machines.heading:update({
+        headingInput = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = config.control.loop.dt,
+    })
+    local target = machines.trajectory:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = heading,
+        dt = config.control.loop.dt,
+    })
+    local command, oldDetails = machines.controller:update({
+        state = state,
+        target = target,
+        dt = config.control.loop.dt,
+    })
+    local terms = machines.controller:terms()
+
+    assert(oldDetails == nil, "controller update should return command only")
+    assert(type(command.collective) == "number", "controller command should contain collective")
+    assert(type(terms.horizontal) == "table", "controller terms should include horizontal")
+    assert(type(terms.vertical) == "table", "controller terms should include vertical")
+    assert(type(terms.attitude) == "table", "controller terms should include attitude")
+    assert(type(terms.allocation) == "table", "controller terms should include allocation")
+    assert(terms.output == nil, "controller terms should not duplicate final command under output")
+    assert(terms.allocation["final" .. "Commands"] == nil, "controller terms should not duplicate final command")
+    assert(type(terms.allocation.rawCommands) == "table", "allocation terms should include raw commands")
+    assert(type(terms.allocation.allocatedCommands) == "table", "allocation terms should include allocated commands")
+    assert(type(terms.allocation.debug) == "table", "allocation terms should include allocator debug")
+    assert(type(terms.horizontal.terms.position.forward.output) == "number", "horizontal should own position pid terms")
+    assert(type(terms.vertical.terms.height.output) == "number", "vertical should own height pid terms")
+    assert(type(terms.attitude.terms.roll.rate.output) == "number", "attitude should own rate pid terms")
+    assert(math.abs(terms.allocation.rawCommands.roll - terms.attitude.terms.roll.rate.output) < 1.0e-6, "rate pid output should match raw roll command")
+end
+
 checkFrozenBaseline()
 checkProtocolDecode()
 checkFlightState()
@@ -1266,6 +1347,7 @@ checkNavigationExitRelockTrajectory()
 checkTelemetryPreservesConsumedCruiseEvent()
 checkUiTelemetryBoundary()
 checkMixerFormula()
+checkControllerTerms()
 
 assertOldRuntimeModuleRemoved("control_task")
 assertOldRuntimeModuleRemoved("input_task")

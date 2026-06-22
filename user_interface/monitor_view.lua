@@ -458,8 +458,7 @@ local function drawPositionMap(mon, x, y, width, height, target, current)
 end
 
 local function attitudeOutputRows(telemetry)
-    local output = expectTable(telemetry.output, "telemetry.output")
-    local commands = expectTable(output.commands, "telemetry.output.commands")
+    local commands = expectTable(telemetry.command, "telemetry.command")
 
     return {
         { label = "COL", value = commands.collective, limit = 10.0 },
@@ -470,15 +469,16 @@ local function attitudeOutputRows(telemetry)
 end
 
 local function positionOutputRows(telemetry)
-    local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
+    local control = expectTable(telemetry.control, "telemetry.control")
+    local horizontal = expectTable(control.horizontal, "telemetry.control.horizontal")
     local navigationVelocity = expectTable(
-        positionHold.navigationVelocity,
-        "telemetry.positionHold.navigationVelocity"
+        horizontal.navigationVelocity,
+        "telemetry.control.horizontal.navigationVelocity"
     )
-    local output = expectTable(positionHold.output, "telemetry.positionHold.output")
+    local output = expectTable(horizontal.output, "telemetry.control.horizontal.output")
     local targetNavigationVelocity = expectTable(
         navigationVelocity.target,
-        "telemetry.positionHold.navigationVelocity.target"
+        "telemetry.control.horizontal.navigationVelocity.target"
     )
 
     return {
@@ -507,12 +507,13 @@ local function drawCurrentAttitude(mon, x, y, width, telemetry)
 end
 
 local function drawTargetAttitude(mon, x, y, width, telemetry)
-    local target = expectTable(telemetry.target, "telemetry.target")
-    local commanded = expectTable(target.commandedAttitude, "telemetry.target.commandedAttitude")
-    local attitude = expectTable(target.attitude, "telemetry.target.attitude")
-    local roll = expectTable(attitude.roll, "telemetry.target.attitude.roll")
-    local pitch = expectTable(attitude.pitch, "telemetry.target.attitude.pitch")
-    local yaw = expectTable(attitude.yaw, "telemetry.target.attitude.yaw")
+    local control = expectTable(telemetry.control, "telemetry.control")
+    local attitude = expectTable(control.attitude, "telemetry.control.attitude")
+    local commanded = expectTable(attitude.commanded, "telemetry.control.attitude.commanded")
+    local target = expectTable(attitude.target, "telemetry.control.attitude.target")
+    local roll = expectTable(target.roll, "telemetry.control.attitude.target.roll")
+    local pitch = expectTable(target.pitch, "telemetry.control.attitude.target.pitch")
+    local yaw = expectTable(target.yaw, "telemetry.control.attitude.target.yaw")
 
     drawValueGrid(mon, x, y, width, {
         { label = "ROLL", value = deg(commanded.roll), pattern = "%+.1f" },
@@ -525,11 +526,11 @@ local function drawTargetAttitude(mon, x, y, width, telemetry)
 end
 
 local function drawOverview(mon, x, y, width, limitY, telemetry)
-    local output = expectTable(telemetry.output, "telemetry.output")
-    local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
-    local worldPosition = expectTable(positionHold.worldPosition, "telemetry.positionHold.worldPosition")
-    local targetPosition = expectTable(worldPosition.target, "telemetry.positionHold.worldPosition.target")
-    local currentPosition = expectTable(worldPosition.current, "telemetry.positionHold.worldPosition.current")
+    local control = expectTable(telemetry.control, "telemetry.control")
+    local horizontal = expectTable(control.horizontal, "telemetry.control.horizontal")
+    local worldPosition = expectTable(horizontal.worldPosition, "telemetry.control.horizontal.worldPosition")
+    local targetPosition = expectTable(worldPosition.target, "telemetry.control.horizontal.worldPosition.target")
+    local currentPosition = expectTable(worldPosition.current, "telemetry.control.horizontal.worldPosition.current")
 
     section(mon, y, "flight state", colors.black, CURRENT)
     y = y + 1
@@ -565,23 +566,21 @@ local function drawOverview(mon, x, y, width, limitY, telemetry)
 end
 
 local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
-    local target = expectTable(telemetry.target, "telemetry.target")
-    local current = expectTable(telemetry.current, "telemetry.current")
-    local err = expectTable(telemetry.error, "telemetry.error")
-    local pidData = expectTable(telemetry.pid, "telemetry.pid")
-    local attitudePid = expectTable(pidData.attitude, "telemetry.pid.attitude")
-    local targetAttitude = expectTable(target.attitude, "telemetry.target.attitude")
-    local currentAttitude = expectTable(current.attitude, "telemetry.current.attitude")
-    local errorAttitude = expectTable(err.attitude, "telemetry.error.attitude")
-    local targetRoll = expectTable(targetAttitude.roll, "telemetry.target.attitude.roll")
-    local targetPitch = expectTable(targetAttitude.pitch, "telemetry.target.attitude.pitch")
-    local targetYaw = expectTable(targetAttitude.yaw, "telemetry.target.attitude.yaw")
-    local currentRoll = expectTable(currentAttitude.roll, "telemetry.current.attitude.roll")
-    local currentPitch = expectTable(currentAttitude.pitch, "telemetry.current.attitude.pitch")
-    local currentYaw = expectTable(currentAttitude.yaw, "telemetry.current.attitude.yaw")
-    local errorRoll = expectTable(errorAttitude.roll, "telemetry.error.attitude.roll")
-    local errorPitch = expectTable(errorAttitude.pitch, "telemetry.error.attitude.pitch")
-    local errorYaw = expectTable(errorAttitude.yaw, "telemetry.error.attitude.yaw")
+    local control = expectTable(telemetry.control, "telemetry.control")
+    local attitude = expectTable(control.attitude, "telemetry.control.attitude")
+    local targetAttitude = expectTable(attitude.target, "telemetry.control.attitude.target")
+    local currentAttitude = expectTable(attitude.current, "telemetry.control.attitude.current")
+    local errorAttitude = expectTable(attitude.error, "telemetry.control.attitude.error")
+    local attitudeTerms = expectTable(attitude.terms, "telemetry.control.attitude.terms")
+    local targetRoll = expectTable(targetAttitude.roll, "telemetry.control.attitude.target.roll")
+    local targetPitch = expectTable(targetAttitude.pitch, "telemetry.control.attitude.target.pitch")
+    local targetYaw = expectTable(targetAttitude.yaw, "telemetry.control.attitude.target.yaw")
+    local currentRoll = expectTable(currentAttitude.roll, "telemetry.control.attitude.current.roll")
+    local currentPitch = expectTable(currentAttitude.pitch, "telemetry.control.attitude.current.pitch")
+    local currentYaw = expectTable(currentAttitude.yaw, "telemetry.control.attitude.current.yaw")
+    local errorRoll = expectTable(errorAttitude.roll, "telemetry.control.attitude.error.roll")
+    local errorPitch = expectTable(errorAttitude.pitch, "telemetry.control.attitude.error.pitch")
+    local errorYaw = expectTable(errorAttitude.yaw, "telemetry.control.attitude.error.yaw")
 
     section(mon, y, "current attitude", colors.black, CURRENT)
     y = y + 1
@@ -605,9 +604,9 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
         section(mon, y, "attitude rate pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)
-        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
-        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
-        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
+        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudeTerms.roll.rate, false) end
+        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudeTerms.pitch.rate, false) end
+        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudeTerms.yaw.rate, false) end
         y = y + 4
     end
 
@@ -615,51 +614,52 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
 end
 
 local function drawPositionPid(mon, x, y, width, limitY, telemetry)
-    local positionHold = expectTable(telemetry.positionHold, "telemetry.positionHold")
-    local worldPosition = expectTable(positionHold.worldPosition, "telemetry.positionHold.worldPosition")
+    local control = expectTable(telemetry.control, "telemetry.control")
+    local horizontal = expectTable(control.horizontal, "telemetry.control.horizontal")
+    local worldPosition = expectTable(horizontal.worldPosition, "telemetry.control.horizontal.worldPosition")
     local navigationPosition = expectTable(
-        positionHold.navigationPosition,
-        "telemetry.positionHold.navigationPosition"
+        horizontal.navigationPosition,
+        "telemetry.control.horizontal.navigationPosition"
     )
     local navigationVelocity = expectTable(
-        positionHold.navigationVelocity,
-        "telemetry.positionHold.navigationVelocity"
+        horizontal.navigationVelocity,
+        "telemetry.control.horizontal.navigationVelocity"
     )
     local targetWorldPosition = expectTable(
         worldPosition.target,
-        "telemetry.positionHold.worldPosition.target"
+        "telemetry.control.horizontal.worldPosition.target"
     )
     local currentWorldPosition = expectTable(
         worldPosition.current,
-        "telemetry.positionHold.worldPosition.current"
+        "telemetry.control.horizontal.worldPosition.current"
     )
     local targetNavigationPosition = expectTable(
         navigationPosition.target,
-        "telemetry.positionHold.navigationPosition.target"
+        "telemetry.control.horizontal.navigationPosition.target"
     )
     local currentNavigationPosition = expectTable(
         navigationPosition.current,
-        "telemetry.positionHold.navigationPosition.current"
+        "telemetry.control.horizontal.navigationPosition.current"
     )
     local errorNavigationPosition = expectTable(
         navigationPosition.error,
-        "telemetry.positionHold.navigationPosition.error"
+        "telemetry.control.horizontal.navigationPosition.error"
     )
     local targetNavigationVelocity = expectTable(
         navigationVelocity.target,
-        "telemetry.positionHold.navigationVelocity.target"
+        "telemetry.control.horizontal.navigationVelocity.target"
     )
     local currentNavigationVelocity = expectTable(
         navigationVelocity.current,
-        "telemetry.positionHold.navigationVelocity.current"
+        "telemetry.control.horizontal.navigationVelocity.current"
     )
     local errorNavigationVelocity = expectTable(
         navigationVelocity.error,
-        "telemetry.positionHold.navigationVelocity.error"
+        "telemetry.control.horizontal.navigationVelocity.error"
     )
-    local pidData = expectTable(telemetry.pid, "telemetry.pid")
-    local positionPid = expectTable(pidData.position, "telemetry.pid.position")
-    local velocityPid = expectTable(pidData.velocity, "telemetry.pid.velocity")
+    local horizontalTerms = expectTable(horizontal.terms, "telemetry.control.horizontal.terms")
+    local positionPid = expectTable(horizontalTerms.position, "telemetry.control.horizontal.terms.position")
+    local velocityPid = expectTable(horizontalTerms.velocity, "telemetry.control.horizontal.terms.velocity")
 
     section(mon, y, "position output", colors.black, TARGET)
     y = y + 1
@@ -750,8 +750,7 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     local raw = expectTable(state.raw, "telemetry.state.raw")
     local position = expectTable(raw.position, "telemetry.state.raw.position")
     local velocity = expectTable(raw.velocity, "telemetry.state.raw.velocity")
-    local target = expectTable(telemetry.target, "telemetry.target")
-    local heading = expectTable(target.heading, "telemetry.target.heading")
+    local heading = expectTable(telemetry.heading, "telemetry.heading")
     local mode = telemetry.mode or {}
     local lock = telemetry.lock or {}
     local navigation = telemetry.navigation or {}

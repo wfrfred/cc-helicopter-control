@@ -1,3 +1,5 @@
+local mathx = require("lib.mathx")
+
 local trajectory = {}
 
 local Generator = {}
@@ -58,7 +60,7 @@ local function navigationHeading(navigation, currentHeading, fallback)
         rate = 0.0,
         active = true,
         pending = false,
-        error = targetHeading - currentHeading,
+        error = mathx.wrapPi(targetHeading - currentHeading),
         source = "navigation_" .. navigation.phase,
     }
 end

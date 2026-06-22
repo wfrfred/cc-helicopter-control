@@ -5,7 +5,9 @@ local baseline = require("tools.fixtures.control_baseline")
 local config = require("config")
 local flight_state = require("state.flight_state")
 local input_protocol = require("protocol.input")
+local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
+local sensor_task = require("tasks.sensor_task")
 local trajectory = require("trajectory")
 
 local function assertNumber(path, value)
@@ -201,6 +203,93 @@ local function checkTrajectoryNavigationOverride()
     assert(target.heading.source == "navigation_climb", "navigation heading source should include phase")
 end
 
+local function checkNavigationHeadingWrap()
+    local state = canonicalState()
+
+    state.navigation.heading.angle = 3.0
+
+    local target = trajectory.new():update({
+        mode = {
+            name = "navigation",
+            manualAttitude = {
+                roll = 0.0,
+                pitch = 0.0,
+            },
+            reset = {
+                horizontal = false,
+            },
+            navigation = {
+                active = true,
+                phase = "turn",
+                target = {
+                    position = {
+                        x = 0.0,
+                        z = 0.0,
+                    },
+                    heading = -3.0,
+                },
+            },
+        },
+        input = input_protocol.defaultInput(),
+        state = state,
+        height = {
+            target = 80.0,
+            speed = 0.0,
+            active = true,
+            pending = false,
+            error = 0.0,
+            source = "locked",
+        },
+        heading = {
+            angle = 3.0,
+            rate = 0.0,
+            active = true,
+            pending = false,
+            error = 0.0,
+            source = "locked",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    assert(math.abs(target.heading.error) < 1.0, "navigation heading error should wrap")
+end
+
+local function checkNavigationVelocityFrame()
+    local velocity = sensor_task.navigationVelocity(vector.new(1.0, 2.0, 0.0), math.pi / 2)
+
+    assert(math.abs(velocity.forward - 1.0) < 1.0e-9, "navigation forward velocity should be heading-aligned")
+    assert(math.abs(velocity.right) < 1.0e-9, "navigation right velocity should be heading-aligned")
+    assert(math.abs(velocity.up - 2.0) < 1.0e-9, "navigation up velocity should be world y")
+end
+
+local function checkCruiseToggleOneShot()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.velocity = vector.new(3.0, 0.0, -1.0)
+    input.event.cruiseToggle = true
+
+    local first = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    state.world.velocity = vector.new(9.0, 0.0, 9.0)
+
+    local second = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    assert(first.cruiseVelocity.x == 3.0, "first cruise toggle should capture velocity")
+    assert(second.cruiseVelocity.x == 3.0, "held cruise toggle should not recapture velocity")
+end
+
 local function checkMixerFormula()
     local mix = mixer.new(config.hardware.rotor, config.calibration.rotor)
     local output = mix:update({
@@ -225,6 +314,9 @@ end
 checkProtocolDecode()
 checkFlightState()
 checkTrajectoryNavigationOverride()
+checkNavigationHeadingWrap()
+checkNavigationVelocityFrame()
+checkCruiseToggleOneShot()
 checkMixerFormula()
 
 assertOldRuntimeModuleRemoved("control_task")

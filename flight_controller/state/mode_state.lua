@@ -64,6 +64,7 @@ function mode_state.new(initialState, config)
         positionTarget = positionTarget(initialState),
         cruiseVelocity = nil,
         cruiseManualReleasePending = false,
+        cruiseToggleHeld = false,
         manualRoll = config.control.attitude.home.roll,
         manualPitch = config.control.attitude.home.pitch,
     }, State)
@@ -152,8 +153,11 @@ end
 
 local function updateCruise(self, input, state)
     local manual = horizontalInput(input)
+    local cruiseToggle = input.event.cruiseToggle and not self.cruiseToggleHeld
 
-    if input.event.cruiseToggle then
+    self.cruiseToggleHeld = input.event.cruiseToggle == true
+
+    if cruiseToggle then
         self.cruiseVelocity = worldHorizontalVelocity(state)
         self.cruiseManualReleasePending = manual
         return true

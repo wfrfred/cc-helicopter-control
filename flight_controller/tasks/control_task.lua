@@ -38,6 +38,12 @@ local function takeNavigationCommand(shared)
     return command
 end
 
+local function consumeCruiseToggle(shared, input)
+    if shared.input == input then
+        shared.input.event.cruiseToggle = false
+    end
+end
+
 local function sleepLoop(loopStart)
     local elapsed = os.clock() - loopStart
     local remain = config.control.loop.dt - elapsed
@@ -124,6 +130,7 @@ function control_task.run(shared)
                 navigationCommand = navigationCommand,
                 dt = dt,
             })
+            consumeCruiseToggle(shared, input)
             local height = machines.height:update({
                 climb = input.manual.velocity.up,
                 height = state.body.pose.height,

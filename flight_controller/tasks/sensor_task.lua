@@ -49,6 +49,23 @@ local function headingRateFromAngular(bodyFrame, angular)
         + (angular.yaw or 0.0) * fromForwardChange(bodyFrame.right.x, bodyFrame.right.z)
 end
 
+function sensor_task.navigationVelocity(worldVelocity, heading)
+    local right = {
+        x = math.cos(heading),
+        z = math.sin(heading),
+    }
+    local forward = {
+        x = math.sin(heading),
+        z = -math.cos(heading),
+    }
+
+    return {
+        forward = worldVelocity.x * forward.x + worldVelocity.z * forward.z,
+        right = worldVelocity.x * right.x + worldVelocity.z * right.z,
+        up = worldVelocity.y,
+    }
+end
+
 local function makeState()
     return {
         raw = {},
@@ -89,7 +106,7 @@ local function readPose()
     }
 end
 
-local function readLinearVelocity(bodyFrame)
+local function readLinearVelocity(bodyFrame, heading)
     local worldVelocity = sublevel.getLinearVelocity()
     local bodyVelocity = mathx.project(worldVelocity, {
         forward = bodyFrame.forward,
@@ -108,11 +125,7 @@ local function readLinearVelocity(bodyFrame)
             velocity = bodyVelocity,
         },
         navigation = {
-            velocity = {
-                forward = bodyVelocity.forward,
-                right = bodyVelocity.right,
-                up = worldVelocity.y,
-            },
+            velocity = sensor_task.navigationVelocity(worldVelocity, heading),
         },
         time = os.clock(),
     }
@@ -203,7 +216,7 @@ function sensor_task.run(shared)
         end
 
         while shared.running do
-            local velocity = readLinearVelocity(latestBodyFrame)
+            local velocity = readLinearVelocity(latestBodyFrame, shared.state.navigation.heading.angle)
 
             shared.state.raw.velocity = velocity.raw.velocity
             shared.state.world.velocity = velocity.world.velocity

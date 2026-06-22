@@ -19,23 +19,13 @@ local function horizontalInput(input)
         or input.manual.heading.rate ~= 0.0
 end
 
-local function positionTarget(state)
-    return {
-        x = state.world.position.x,
-        z = state.world.position.z,
-    }
-end
-
-local function worldHorizontalVelocity(state)
-    return {
-        x = state.world.velocity.x,
-        z = state.world.velocity.z,
-    }
+local function horizontalVector(value)
+    return vector.new(value.x, 0.0, value.z)
 end
 
 local function motion(state)
     return {
-        worldVelocity = worldHorizontalVelocity(state),
+        worldVelocity = horizontalVector(state.world.velocity),
         verticalSpeed = state.world.velocity.y,
         headingRate = state.navigation.heading.rate,
     }
@@ -61,7 +51,7 @@ function mode_state.new(initialState, config)
         control = config.control,
         navigator = navigation.new(config.navigation),
         name = modes.position_hold,
-        positionTarget = positionTarget(initialState),
+        positionTarget = horizontalVector(initialState.world.position),
         cruiseVelocity = nil,
         cruiseManualReleasePending = false,
         cruiseToggleHeld = false,
@@ -166,7 +156,7 @@ local function updateCruise(self, input, state)
     self.cruiseToggleHeld = input.event.cruiseToggle == true
 
     if cruiseToggle then
-        self.cruiseVelocity = worldHorizontalVelocity(state)
+        self.cruiseVelocity = horizontalVector(state.world.velocity)
         self.cruiseManualReleasePending = manual
         return true
     end
@@ -217,7 +207,7 @@ function State:update(input)
         resetHorizontal = true
 
         if selected == modes.manual or selected == modes.position_hold then
-            self.positionTarget = positionTarget(state)
+            self.positionTarget = horizontalVector(state.world.position)
         end
     end
 

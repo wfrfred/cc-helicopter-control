@@ -711,6 +711,8 @@ local function checkCruiseToggleOneShot()
     })
 
     assert(first.cruiseVelocity.x == 3.0, "first cruise toggle should capture velocity")
+    assert(first.cruiseVelocity.y == 0.0, "cruise toggle should capture horizontal velocity")
+    assert(type(first.cruiseVelocity.length) == "function", "cruise velocity should be runtime vector")
     assert(second.cruiseVelocity.x == 3.0, "held cruise toggle should not recapture velocity")
 end
 

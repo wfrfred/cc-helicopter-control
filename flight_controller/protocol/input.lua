@@ -17,12 +17,16 @@ local function axis(value)
 end
 
 local function navigationCommand(command)
-
     if command == nil then
         return nil
     end
 
     assert(type(command) == "table", "navigation command must be table")
+
+    if command.action == nil then
+        return nil
+    end
+
     assert(type(command.action) == "string", "navigation command action must be string")
 
     if command.action == "cancel" then

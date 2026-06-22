@@ -114,6 +114,10 @@ local function assertOldRuntimeModuleRemoved(name)
 end
 
 local function checkProtocolDecode()
+    local idle = input_protocol.decode(input_protocol.defaultInput())
+
+    assert(idle.navigation.action == nil, "nil navigation action should decode as no command")
+
     local input = input_protocol.decode({
         manual = {
             mode = "manual.attitude",

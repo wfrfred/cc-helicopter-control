@@ -237,8 +237,7 @@ local function makeRuntimeMachines(state)
         }),
         heading = heading_lock.new({
             initial_heading = state.navigation.heading.angle,
-            lookahead_rate = config.control.heading.lookahead_rate,
-            lookahead_time_constant = config.control.heading.lookahead_time_constant,
+            target_rate = config.control.heading.target_rate,
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
@@ -313,7 +312,7 @@ local function runCurrentBaselineCase(case)
         dt = config.control.loop.dt,
     })
     local heading = machines.heading:update({
-        headingInput = input.manual.heading.rate,
+        headingRateInput = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -565,6 +564,97 @@ local function checkNavigationVelocityFrame()
     assert(math.abs(velocity.up - 2.0) < 1.0e-9, "navigation up velocity should be world y")
 end
 
+local function checkEulerHeadingRateKinematics()
+    local roll = 0.35
+    local pitch = -0.42
+    local heading = 0.80
+    local headingRate = 0.70
+    local frame = attitude_math.frameFromPose(roll, pitch, heading)
+    local bodyRates = attitude_math.bodyRatesFromEulerRates(roll, pitch, {
+        heading = headingRate,
+    })
+    local projectedHeadingRate = sensor_task.headingRateFromAngular(frame, bodyRates)
+
+    assertClose("heading rate kinematics", projectedHeadingRate, headingRate)
+end
+
+local function checkManualHeadingFeedforwardUsesCurrentPose()
+    local state = runtimeState()
+    local machines = makeRuntimeMachines(state)
+    local input = canonicalInputFromAxes({
+        roll = 0.0,
+        pitch = 0.0,
+        climb = 0.0,
+        heading = 1.0,
+    })
+    local mode = {
+        name = "manual",
+        manualAttitude = {
+            roll = -0.10,
+            pitch = 0.30,
+        },
+        navigation = {
+            active = false,
+            phase = "idle",
+            target = nil,
+        },
+        reset = {
+            horizontal = false,
+        },
+    }
+
+    state.body.pose.roll = 0.25
+    state.body.pose.pitch = -0.20
+
+    local height = machines.height:update({
+        climb = input.manual.velocity.up,
+        height = state.body.pose.height,
+        verticalSpeed = state.world.velocity.y,
+        dt = config.control.loop.dt,
+    })
+    local heading = machines.heading:update({
+        headingRateInput = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = config.control.loop.dt,
+    })
+    local target = machines.targets:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = heading,
+        dt = config.control.loop.dt,
+    })
+    local expected = attitude_math.bodyRatesFromEulerRates(
+        state.body.pose.roll,
+        state.body.pose.pitch,
+        {
+            heading = config.control.heading.target_rate,
+        }
+    )
+    local targetPoseRates = attitude_math.bodyRatesFromEulerRates(
+        mode.manualAttitude.roll,
+        mode.manualAttitude.pitch,
+        {
+            heading = config.control.heading.target_rate,
+        }
+    )
+
+    assert(target.heading.source == "manual", "manual heading should use rate target source")
+    assert(target.heading.active == false, "manual heading should not report locked heading")
+    assertClose("manual heading target angle", target.heading.angle, state.navigation.heading.angle)
+    assertClose("manual heading target rate", target.heading.rate, config.control.heading.target_rate)
+    assertClose("manual heading target error", target.heading.error, 0.0)
+    assertClose("manual heading roll feedforward", target.attitude.feedforward.angle.roll, expected.roll)
+    assertClose("manual heading pitch feedforward", target.attitude.feedforward.angle.pitch, expected.pitch)
+    assertClose("manual heading yaw feedforward", target.attitude.feedforward.angle.yaw, expected.yaw)
+    assert(
+        math.abs(target.attitude.feedforward.angle.roll - targetPoseRates.roll) > 1.0e-6,
+        "manual heading feedforward should use current pose, not target attitude"
+    )
+end
+
 local function checkActiveNavigationKeepsTarget()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
@@ -731,8 +821,7 @@ local function checkNavigationExitRelockTargets()
     })
     local heading = heading_lock.new({
         initial_heading = 0.0,
-        lookahead_rate = config.control.heading.lookahead_rate,
-        lookahead_time_constant = config.control.heading.lookahead_time_constant,
+        target_rate = config.control.heading.target_rate,
         rate_deadband = config.control.heading.lock.rate_deadband,
     })
 
@@ -743,7 +832,7 @@ local function checkNavigationExitRelockTargets()
         dt = config.control.loop.dt,
     })
     heading:update({
-        headingInput = 0.0,
+        headingRateInput = 0.0,
         heading = 0.0,
         headingRate = 0.0,
         dt = config.control.loop.dt,
@@ -771,8 +860,7 @@ local function checkNavigationExitRelockTarget()
     })
     local heading = heading_lock.new({
         initial_heading = 0.0,
-        lookahead_rate = config.control.heading.lookahead_rate,
-        lookahead_time_constant = config.control.heading.lookahead_time_constant,
+        target_rate = config.control.heading.target_rate,
         rate_deadband = config.control.heading.lock.rate_deadband,
         relock_timeout = config.control.heading.lock.relock_timeout,
     })
@@ -814,7 +902,7 @@ local function checkNavigationExitRelockTarget()
         dt = config.control.loop.dt,
     })
     local headingTarget = heading:update({
-        headingInput = input.manual.heading.rate,
+        headingRateInput = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -1332,7 +1420,7 @@ local function checkControllerTerms()
         dt = config.control.loop.dt,
     })
     local heading = machines.heading:update({
-        headingInput = input.manual.heading.rate,
+        headingRateInput = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -1374,7 +1462,7 @@ local function checkControllerTerms()
     assert(type(terms.horizontal.terms.position.forward.output) == "number", "horizontal should own position pid terms")
     assert(type(terms.vertical.terms.height.output) == "number", "vertical should own height pid terms")
     assert(config.control.attitude.time_constant == nil, "attitude time_constant should be removed")
-    assert(config.control.heading.lookahead_time_constant == 0.70, "heading should own lookahead time constant")
+    assertClose("heading target rate", config.control.heading.target_rate, math.rad(60))
     assert(type(config.control.pid.attitude.roll.angle) == "table", "roll angle pid config should exist")
     assert(type(config.control.pid.attitude.pitch.angle) == "table", "pitch angle pid config should exist")
     assert(type(config.control.pid.attitude.yaw.angle) == "table", "yaw angle pid config should exist")
@@ -1428,7 +1516,7 @@ local function checkAttitudeExternalFeedforward()
         dt = config.control.loop.dt,
     })
     local heading = machines.heading:update({
-        headingInput = input.manual.heading.rate,
+        headingRateInput = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -1477,6 +1565,8 @@ checkFlightState()
 checkModeTargetNavigationOverride()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
+checkEulerHeadingRateKinematics()
+checkManualHeadingFeedforwardUsesCurrentPose()
 checkActiveNavigationKeepsTarget()
 checkActiveNavigationSelectKeepsTarget()
 checkActiveNavigationUpdateReceivesDt()

@@ -56,6 +56,22 @@ function attitude_math.frameFromPose(roll, pitch, heading)
     }
 end
 
+function attitude_math.bodyRatesFromEulerRates(roll, pitch, rates)
+    local rollRate = rates.roll or 0.0
+    local pitchRate = rates.pitch or 0.0
+    local headingRate = rates.heading or 0.0
+    local sinRoll = math.sin(roll)
+    local cosRoll = math.cos(roll)
+    local sinPitch = math.sin(pitch)
+    local cosPitch = math.cos(pitch)
+
+    return {
+        roll = rollRate - sinPitch * headingRate,
+        pitch = cosRoll * pitchRate + sinRoll * cosPitch * headingRate,
+        yaw = -sinRoll * pitchRate + cosRoll * cosPitch * headingRate,
+    }
+end
+
 function attitude_math.reducedFrameFromTargetDown(currentFrame, fullTargetFrame)
     assert(type(currentFrame) == "table", "current attitude frame must be table")
     assert(type(fullTargetFrame) == "table", "target attitude frame must be table")

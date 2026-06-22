@@ -31,7 +31,7 @@ local function buildPose(rawPosition, bodyFrame)
     }
 end
 
-local function headingRateFromAngular(bodyFrame, angular)
+function sensor_task.headingRateFromAngular(bodyFrame, angular)
     local forward = bodyFrame.forward
     local forwardHorizontal = vector.new(forward.x, 0.0, forward.z)
     local horizontal = forwardHorizontal:dot(forwardHorizontal)
@@ -144,7 +144,7 @@ local function readAngularVelocity(bodyFrame)
         },
         navigation = {
             heading = {
-                rate = headingRateFromAngular(bodyFrame, angular),
+                rate = sensor_task.headingRateFromAngular(bodyFrame, angular),
             },
         },
         time = os.clock(),

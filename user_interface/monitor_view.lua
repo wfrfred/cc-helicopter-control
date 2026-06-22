@@ -220,7 +220,7 @@ local function horizontalDistance(a, b)
 end
 
 local function verticalError(current, target)
-    return (target.y or target.height or 0.0) - (current.y or 0.0)
+    return (target.height or target.y or 0.0) - (current.y or 0.0)
 end
 
 local function drawStatusLine(mon, x, y, width, label, value, color)
@@ -759,7 +759,7 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     local waypoint = navigation.waypoint or navigation.selected
     local approach = navigation.approach
     local hdist = navTarget and navTarget.position and horizontalDistance(position, navTarget.position) or 0.0
-    local verr = navTarget and navTarget.position and verticalError(position, navTarget.position) or 0.0
+    local verr = navTarget and verticalError(position, navTarget) or 0.0
     local navColor = navigation.active and statusColor(navigation.phase) or statusColor(navPhaseLabel(navigation))
 
     section(mon, y, "navigation", colors.black, navColor)

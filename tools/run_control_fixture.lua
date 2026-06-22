@@ -384,6 +384,94 @@ local function checkNavigationExitRelockTargets()
     assert(math.abs(headingTarget.error) < 1.0e-9, "navigation exit heading relock should have zero initial error")
 end
 
+local function checkNavigationExitRelockTrajectory()
+    local state = canonicalState()
+    local modes = mode_state.new(state, config)
+    local height = height_lock.new({
+        initial_target = 80.0,
+        target_rate = config.control.vertical.target_rate,
+        rate_deadband = config.control.vertical.lock.speed_deadband,
+        relock_timeout = config.control.vertical.lock.relock_timeout,
+    })
+    local heading = heading_lock.new({
+        initial_heading = 0.0,
+        lookahead_rate = config.control.heading.lookahead_rate,
+        time_constant = config.control.attitude.time_constant,
+        rate_deadband = config.control.heading.lock.rate_deadband,
+        relock_timeout = config.control.heading.lock.relock_timeout,
+    })
+    local generator = trajectory.new()
+    local input = input_protocol.defaultInput()
+
+    state.world.position = vector.new(-213.0, 90.0, 304.0)
+    state.raw.position = state.world.position
+    state.body.pose.height = 90.0
+
+    modes:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    state.world.position = vector.new(-213.0, 97.0, 304.0)
+    state.raw.position = state.world.position
+    state.body.pose.height = 97.0
+    state.navigation.heading.angle = 1.25
+
+    local mode = modes:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "toggle",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+    local heightTarget = height:update({
+        climb = input.manual.velocity.up,
+        height = state.body.pose.height,
+        verticalSpeed = state.world.velocity.y,
+        dt = config.control.loop.dt,
+    })
+    local headingTarget = heading:update({
+        headingInput = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = config.control.loop.dt,
+    })
+
+    assert(mode.transition.navigationExited == true, "mode state should report navigation exit edge")
+
+    if mode.transition.navigationExited and input.manual.velocity.up == 0.0 then
+        heightTarget = height:lockedTarget(state.body.pose.height)
+    end
+
+    if mode.transition.navigationExited and input.manual.heading.rate == 0.0 then
+        headingTarget = heading:lockedTarget(state.navigation.heading.angle)
+    end
+
+    local target = generator:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = heightTarget,
+        heading = headingTarget,
+        dt = config.control.loop.dt,
+    })
+
+    assert(mode.name == "position_hold", "navigation toggle exit should return to position_hold")
+    assert(target.vertical.height == 97.0, "navigation exit should relock target height to current height")
+    assert(target.vertical.source == "locked", "navigation exit height target should use lock source")
+    assert(target.vertical.error == 0.0, "navigation exit height target should start with zero error")
+    assert(math.abs(target.heading.angle - 1.25) < 1.0e-9, "navigation exit should relock target heading to current heading")
+    assert(target.heading.source == "locked", "navigation exit heading target should use lock source")
+    assert(math.abs(target.heading.error) < 1.0e-9, "navigation exit heading target should start with zero error")
+end
+
 local function checkTelemetryPreservesConsumedCruiseEvent()
     local telemetry = telemetry_terms.running({
         now = 1.0,
@@ -459,17 +547,44 @@ local function positionAxis()
 end
 
 local function fakeMonitor(width, height)
-    return {
-        getSize = function()
-            return width, height
-        end,
-        setTextColor = function() end,
-        setBackgroundColor = function() end,
-        clear = function() end,
-        setCursorPos = function() end,
-        write = function() end,
-        blit = function() end,
+    local monitor = {
+        writes = {},
+        cursor = {
+            x = 1,
+            y = 1,
+        },
     }
+
+    function monitor.getSize()
+        return width, height
+    end
+
+    function monitor.setTextColor() end
+    function monitor.setBackgroundColor() end
+    function monitor.clear() end
+
+    function monitor.setCursorPos(x, y)
+        monitor.cursor.x = x
+        monitor.cursor.y = y
+    end
+
+    function monitor.write(text)
+        monitor.writes[#monitor.writes + 1] = {
+            x = monitor.cursor.x,
+            y = monitor.cursor.y,
+            text = text,
+        }
+    end
+
+    function monitor.blit(text)
+        monitor.writes[#monitor.writes + 1] = {
+            x = monitor.cursor.x,
+            y = monitor.cursor.y,
+            text = text,
+        }
+    end
+
+    return monitor
 end
 
 local function canonicalTelemetry()
@@ -717,6 +832,36 @@ local function checkUiTelemetryBoundary()
         shared.monitorPage = page
         monitor_view.draw(mon, shared)
     end
+
+    shared.telemetry.navigation = {
+        active = true,
+        phase = "climb",
+        selected = shared.telemetry.target.navigation.selected,
+        waypoint = shared.telemetry.target.navigation.selected,
+        approach = nil,
+        target = {
+            position = {
+                x = -213.0,
+                y = 81.0,
+                z = 264.0,
+            },
+            height = 97.0,
+            heading = 0.0,
+        },
+        waypoints = shared.telemetry.target.navigation.waypoints,
+    }
+    shared.monitorPage = "nav"
+    monitor_view.draw(mon, shared)
+
+    local sawVerticalError = false
+
+    for _, write in ipairs(mon.writes) do
+        if write.text:find("%+17%.0", 1, false) ~= nil then
+            sawVerticalError = true
+        end
+    end
+
+    assert(sawVerticalError, "navigation page vertical error should use target height")
 end
 
 local function checkMixerFormula()
@@ -748,6 +893,7 @@ checkNavigationVelocityFrame()
 checkActiveNavigationKeepsTarget()
 checkCruiseToggleOneShot()
 checkNavigationExitRelockTargets()
+checkNavigationExitRelockTrajectory()
 checkTelemetryPreservesConsumedCruiseEvent()
 checkUiTelemetryBoundary()
 checkMixerFormula()

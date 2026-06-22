@@ -106,7 +106,6 @@ function control_task.run(shared)
     local lastLoopTime = os.clock() - config.control.loop.dt
     local telemetryTimer = 0.0
     local flightMachine = flight_state.new()
-    local navigationWasActive = false
 
     while shared.running do
         local loopStart = os.clock()
@@ -139,7 +138,7 @@ function control_task.run(shared)
                 navigationCommand = navigationCommand,
                 dt = dt,
             })
-            local navigationExited = navigationWasActive and not mode.navigation.active
+            local navigationExited = mode.transition.navigationExited
 
             consumeCruiseToggle(shared, input)
             local height = machines.height:update({
@@ -162,8 +161,6 @@ function control_task.run(shared)
             if navigationExited and input.manual.heading.rate == 0.0 then
                 heading = machines.heading:lockedTarget(state.navigation.heading.angle)
             end
-
-            navigationWasActive = mode.navigation.active
 
             local target = machines.trajectory:update({
                 mode = mode,

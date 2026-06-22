@@ -191,6 +191,7 @@ function State:update(input)
     local command = input.navigationCommand
     local dt = input.dt
     local resetHorizontal = false
+    local navigationWasActive = self.navigator:isActive()
 
     self:updateManualAttitude(input.input, dt)
 
@@ -205,6 +206,7 @@ function State:update(input)
     end
 
     local selected = selectMode(self, input.input)
+    local navigationExited = navigationWasActive and not self.navigator:isActive()
 
     if selected ~= self.name then
         self.name = selected
@@ -226,6 +228,9 @@ function State:update(input)
         navigation = navigationResult,
         reset = {
             horizontal = resetHorizontal,
+        },
+        transition = {
+            navigationExited = navigationExited,
         },
     }
 end

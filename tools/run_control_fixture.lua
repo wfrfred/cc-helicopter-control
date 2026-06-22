@@ -9,12 +9,12 @@ local flight_state = require("state.flight_state")
 local heading_lock = require("state.heading_lock")
 local height_lock = require("state.height_lock")
 local input_protocol = require("protocol.input")
+local mode_targets = require("modes.target")
 local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
 local monitor_view = require("monitor_view")
 local sensor_task = require("tasks.sensor_task")
 local telemetryTerms = require("telemetry.terms")
-local trajectory = require("trajectory")
 
 local function assertNumber(path, value)
     assert(type(value) == "number", path .. " must be number")
@@ -242,7 +242,7 @@ local function makeRuntimeMachines(state)
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
-        trajectory = trajectory.new(),
+        targets = mode_targets.new(),
         controller = Controller.new(config.control),
     }
 end
@@ -318,7 +318,7 @@ local function runCurrentBaselineCase(case)
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
     })
-    local target = machines.trajectory:update({
+    local target = machines.targets:update({
         mode = mode,
         input = input,
         state = state,
@@ -450,8 +450,8 @@ local function checkFlightState()
     assert(stale.reason == "input_stale_zeroed", "stale input should be reported")
 end
 
-local function checkTrajectoryNavigationOverride()
-    local target = trajectory.new():update({
+local function checkModeTargetNavigationOverride()
+    local target = mode_targets.new():update({
         mode = {
             name = "navigation",
             manualAttitude = {
@@ -495,7 +495,7 @@ local function checkTrajectoryNavigationOverride()
         dt = config.control.loop.dt,
     })
 
-    assert(target.source == "navigation", "trajectory should keep navigation source")
+    assert(target.source == "navigation", "mode target should keep navigation source")
     assert(target.world.position.x == 10.0, "navigation should set horizontal target x")
     assert(target.world.position.z == -20.0, "navigation should set horizontal target z")
     assert(target.vertical.height == 120.0, "navigation should override height")
@@ -509,7 +509,7 @@ local function checkNavigationHeadingWrap()
 
     state.navigation.heading.angle = 3.0
 
-    local target = trajectory.new():update({
+    local target = mode_targets.new():update({
         mode = {
             name = "navigation",
             manualAttitude = {
@@ -758,7 +758,7 @@ local function checkNavigationExitRelockTargets()
     assert(math.abs(headingTarget.error) < 1.0e-9, "navigation exit heading relock should have zero initial error")
 end
 
-local function checkNavigationExitRelockTrajectory()
+local function checkNavigationExitRelockTarget()
     local state = canonicalState()
     local modes = mode_state.new(state, config)
     local height = height_lock.new({
@@ -774,7 +774,7 @@ local function checkNavigationExitRelockTrajectory()
         rate_deadband = config.control.heading.lock.rate_deadband,
         relock_timeout = config.control.heading.lock.relock_timeout,
     })
-    local generator = trajectory.new()
+    local generator = mode_targets.new()
     local input = input_protocol.defaultInput()
 
     state.world.position = vector.new(-213.0, 90.0, 304.0)
@@ -1323,7 +1323,7 @@ local function checkControllerTerms()
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
     })
-    local target = machines.trajectory:update({
+    local target = machines.targets:update({
         mode = mode,
         input = input,
         state = state,
@@ -1386,7 +1386,7 @@ end
 checkFrozenBaseline()
 checkProtocolDecode()
 checkFlightState()
-checkTrajectoryNavigationOverride()
+checkModeTargetNavigationOverride()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
 checkActiveNavigationKeepsTarget()
@@ -1394,7 +1394,7 @@ checkActiveNavigationSelectKeepsTarget()
 checkActiveNavigationUpdateReceivesDt()
 checkCruiseToggleOneShot()
 checkNavigationExitRelockTargets()
-checkNavigationExitRelockTrajectory()
+checkNavigationExitRelockTarget()
 checkTelemetryPreservesConsumedCruiseEvent()
 checkUiTelemetryBoundary()
 checkMixerFormula()
@@ -1405,5 +1405,6 @@ assertOldRuntimeModuleRemoved("input_task")
 assertOldRuntimeModuleRemoved("data_task")
 assertOldRuntimeModuleRemoved("rotor")
 assertOldRuntimeModuleRemoved("target_state")
+assertOldRuntimeModuleRemoved("trajectory")
 
 print("control fixtures ok")

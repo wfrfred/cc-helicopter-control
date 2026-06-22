@@ -5,10 +5,10 @@ local flight_state = require("state.flight_state")
 local heading_lock = require("state.heading_lock")
 local height_lock = require("state.height_lock")
 local mixer_module = require("hardware.mixer")
+local mode_targets = require("modes.target")
 local mode_state = require("state.mode_state")
 local rotor_phase = require("hardware.rotor_phase")
 local telemetryTerms = require("telemetry.terms")
-local trajectory = require("trajectory")
 local input_protocol = require("protocol.input")
 
 local control_task = {}
@@ -93,7 +93,7 @@ local function makeInitialMachines(initialState)
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
-        trajectory = trajectory.new(),
+        targets = mode_targets.new(),
         controller = Controller.new(config.control),
         mixer = mixer_module.new(config.hardware.rotor, config.calibration.rotor),
         phase = rotor_phase.new(config.hardware.rotor),
@@ -162,7 +162,7 @@ function control_task.run(shared)
                 heading = machines.heading:lockedTarget(state.navigation.heading.angle)
             end
 
-            local target = machines.trajectory:update({
+            local target = machines.targets:update({
                 mode = mode,
                 input = input,
                 state = state,

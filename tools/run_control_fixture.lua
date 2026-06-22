@@ -237,12 +237,10 @@ local function makeRuntimeMachines(state)
         }),
         heading = heading_lock.new({
             initial_heading = state.navigation.heading.angle,
-            lookahead_rate = config.control.heading.lookahead_rate,
-            lookahead_time_constant = config.control.heading.lookahead_time_constant,
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
-        trajectory = trajectory.new(),
+        trajectory = trajectory.new(config.control.heading),
         controller = Controller.new(config.control),
     }
 end
@@ -313,7 +311,7 @@ local function runCurrentBaselineCase(case)
         dt = config.control.loop.dt,
     })
     local heading = machines.heading:update({
-        headingInput = input.manual.heading.rate,
+        manualRate = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -451,7 +449,7 @@ local function checkFlightState()
 end
 
 local function checkTrajectoryNavigationOverride()
-    local target = trajectory.new():update({
+    local target = trajectory.new(config.control.heading):update({
         mode = {
             name = "navigation",
             manualAttitude = {
@@ -509,7 +507,7 @@ local function checkNavigationHeadingWrap()
 
     state.navigation.heading.angle = 3.0
 
-    local target = trajectory.new():update({
+    local target = trajectory.new(config.control.heading):update({
         mode = {
             name = "navigation",
             manualAttitude = {
@@ -553,6 +551,77 @@ local function checkNavigationHeadingWrap()
     })
 
     assert(math.abs(target.heading.error) < 1.0, "navigation heading error should wrap")
+end
+
+local function checkManualHeadingTrajectory()
+    local state = canonicalState()
+    local lock = heading_lock.new({
+        initial_heading = state.navigation.heading.angle,
+        rate_deadband = config.control.heading.lock.rate_deadband,
+        relock_timeout = config.control.heading.lock.relock_timeout,
+    })
+    local generator = trajectory.new(config.control.heading)
+    local input = input_protocol.defaultInput()
+    local dt = 0.25
+
+    input.manual.heading.rate = 0.5
+
+    local lockTarget = lock:update({
+        manualRate = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = dt,
+    })
+
+    assert(lockTarget.source == "manual", "heading lock should only report manual state")
+    assert(lockTarget.active == false, "manual heading lock state should not be locked")
+    assert(math.abs(lockTarget.angle - state.navigation.heading.angle) < 1.0e-9, "heading lock should not calculate manual target")
+
+    local mode = {
+        name = "manual",
+        manualAttitude = {
+            roll = 0.0,
+            pitch = 0.0,
+        },
+        reset = {
+            horizontal = false,
+        },
+        navigation = {
+            active = false,
+            phase = "idle",
+            target = nil,
+        },
+    }
+    local height = {
+        target = state.body.pose.height,
+        speed = 0.0,
+        active = true,
+        pending = false,
+        error = 0.0,
+        source = "locked",
+    }
+    local first = generator:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = lockTarget,
+        dt = dt,
+    })
+    local second = generator:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = lockTarget,
+        dt = dt,
+    })
+    local expectedStep = input.manual.heading.rate * config.control.heading.manual_rate * dt
+
+    assertClose("manual heading first angle", first.heading.angle, expectedStep)
+    assertClose("manual heading second angle", second.heading.angle, expectedStep * 2.0)
+    assertClose("manual heading rate", first.heading.rate, input.manual.heading.rate * config.control.heading.manual_rate)
+    assert(first.heading.source == "manual_trajectory", "trajectory should own manual heading source")
 end
 
 local function checkNavigationVelocityFrame()
@@ -729,8 +798,6 @@ local function checkNavigationExitRelockTargets()
     })
     local heading = heading_lock.new({
         initial_heading = 0.0,
-        lookahead_rate = config.control.heading.lookahead_rate,
-        lookahead_time_constant = config.control.heading.lookahead_time_constant,
         rate_deadband = config.control.heading.lock.rate_deadband,
     })
 
@@ -741,7 +808,7 @@ local function checkNavigationExitRelockTargets()
         dt = config.control.loop.dt,
     })
     heading:update({
-        headingInput = 0.0,
+        manualRate = 0.0,
         heading = 0.0,
         headingRate = 0.0,
         dt = config.control.loop.dt,
@@ -769,12 +836,10 @@ local function checkNavigationExitRelockTrajectory()
     })
     local heading = heading_lock.new({
         initial_heading = 0.0,
-        lookahead_rate = config.control.heading.lookahead_rate,
-        lookahead_time_constant = config.control.heading.lookahead_time_constant,
         rate_deadband = config.control.heading.lock.rate_deadband,
         relock_timeout = config.control.heading.lock.relock_timeout,
     })
-    local generator = trajectory.new()
+    local generator = trajectory.new(config.control.heading)
     local input = input_protocol.defaultInput()
 
     state.world.position = vector.new(-213.0, 90.0, 304.0)
@@ -812,7 +877,7 @@ local function checkNavigationExitRelockTrajectory()
         dt = config.control.loop.dt,
     })
     local headingTarget = heading:update({
-        headingInput = input.manual.heading.rate,
+        manualRate = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -866,11 +931,22 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
         mode = {
             name = "cruise",
         },
+        lock = {
+            height = {
+                source = "locked",
+            },
+            heading = {
+                source = "locked",
+            },
+        },
         height = {
-            source = "locked",
+            source = "cruise",
+            height = 81.0,
         },
         heading = {
-            source = "locked",
+            source = "manual_trajectory",
+            angle = 0.25,
+            rate = 0.5,
         },
         target = {
             navigation = {
@@ -888,6 +964,8 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
     })
 
     assert(telemetry.input.event.cruiseToggle == true, "telemetry should preserve consumed cruise event")
+    assert(telemetry.lock.heading == "locked", "telemetry lock should keep heading lock state")
+    assert(telemetry.heading.source == "manual_trajectory", "telemetry heading should expose trajectory heading")
     assert(type(telemetry.state.body.angular.velocity) == "table", "telemetry should expose angular velocity")
     assert(type(telemetry.control) == "table", "telemetry should expose control terms")
     assert(telemetry["out" .. "put"] == nil, "old output diagnostics should not be exposed")
@@ -1318,7 +1396,7 @@ local function checkControllerTerms()
         dt = config.control.loop.dt,
     })
     local heading = machines.heading:update({
-        headingInput = input.manual.heading.rate,
+        manualRate = input.manual.heading.rate,
         heading = state.navigation.heading.angle,
         headingRate = state.navigation.heading.rate,
         dt = config.control.loop.dt,
@@ -1360,7 +1438,7 @@ local function checkControllerTerms()
     assert(type(terms.horizontal.terms.position.forward.output) == "number", "horizontal should own position pid terms")
     assert(type(terms.vertical.terms.height.output) == "number", "vertical should own height pid terms")
     assert(config.control.attitude.time_constant == nil, "attitude time_constant should be removed")
-    assert(config.control.heading.lookahead_time_constant == 0.70, "heading should own lookahead time constant")
+    assertClose("heading manual rate", config.control.heading.manual_rate, math.rad(60))
     assert(type(config.control.pid.attitude.roll.angle) == "table", "roll angle pid config should exist")
     assert(type(config.control.pid.attitude.pitch.angle) == "table", "pitch angle pid config should exist")
     assert(type(config.control.pid.attitude.yaw.angle) == "table", "yaw angle pid config should exist")
@@ -1388,6 +1466,7 @@ checkProtocolDecode()
 checkFlightState()
 checkTrajectoryNavigationOverride()
 checkNavigationHeadingWrap()
+checkManualHeadingTrajectory()
 checkNavigationVelocityFrame()
 checkActiveNavigationKeepsTarget()
 checkActiveNavigationSelectKeepsTarget()

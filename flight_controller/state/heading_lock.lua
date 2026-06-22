@@ -21,8 +21,6 @@ end
 function heading_lock.new(options)
     return setmetatable({
         target = mathx.wrapPi(options.initial_heading),
-        lookaheadRate = options.lookahead_rate,
-        lookaheadTimeConstant = options.lookahead_time_constant,
         rateDeadband = options.rate_deadband,
         relockTimeout = options.relock_timeout or 0.0,
         wasManual = false,
@@ -45,25 +43,18 @@ function Lock:lockedTarget(heading)
 end
 
 function Lock:update(input)
-    local headingInput = input.headingInput or 0.0
+    local manualRate = input.manualRate or 0.0
     local heading = input.heading
     local headingRate = input.headingRate or 0.0
     local dt = input.dt or 0.0
 
-    if headingInput ~= 0.0 then
+    if manualRate ~= 0.0 then
         self.target = mathx.wrapPi(heading)
         self.wasManual = true
         self.pending = false
         self.pendingTime = 0.0
 
-        return makeTarget(
-            heading + headingInput * self.lookaheadRate * self.lookaheadTimeConstant,
-            heading,
-            headingInput,
-            true,
-            false,
-            "manual_lookahead"
-        )
+        return makeTarget(heading, heading, 0.0, false, false, "manual")
     end
 
     if self.wasManual then

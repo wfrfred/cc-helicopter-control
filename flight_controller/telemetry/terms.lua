@@ -63,8 +63,8 @@ function terms.running(input)
         flight = input.flight,
         mode = input.mode,
         lock = {
-            height = input.height.source,
-            heading = input.heading.source,
+            height = input.lock.height.source,
+            heading = input.lock.heading.source,
         },
         height = input.height,
         heading = input.heading,

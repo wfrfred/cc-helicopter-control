@@ -120,10 +120,6 @@ local function attitudeFromNavigationTilt(navigationTilt, limit)
     }
 end
 
-function horizontal.inactive()
-    return makeInactiveResult()
-end
-
 function horizontal.new(control)
     local controllers = {
         positionForward = pid.new(control.pid.position.forward),

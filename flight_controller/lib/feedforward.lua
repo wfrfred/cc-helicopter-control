@@ -15,9 +15,11 @@ function feedforward.directionalLinear(gain_neg, gain_pos, bias_neg, bias_pos)
             return feedforward.linear(gain_neg, bias_neg)(input)
         end
 
-        if input.target >= 0.0 then
+        if input.target > 0.0 then
             return feedforward.linear(gain_pos, bias_pos)(input)
         end
+
+        return 0.0
     end
 end
 

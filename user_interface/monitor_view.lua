@@ -601,6 +601,17 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
 
     if y <= limitY then
         y = y + 1
+        section(mon, y, "attitude angle pid", colors.black, HEADER)
+        y = y + 1
+        drawPidHeader(mon, x, y, width)
+        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RANG", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudeTerms.roll.angle, false) end
+        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PANG", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudeTerms.pitch.angle, false) end
+        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YANG", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudeTerms.yaw.angle, false) end
+        y = y + 4
+    end
+
+    if y <= limitY then
+        y = y + 1
         section(mon, y, "attitude rate pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)

@@ -909,6 +909,7 @@ end
 
 local function axisRate()
     return {
+        angle = 0.0,
         rate = 0.0,
     }
 end
@@ -1081,12 +1082,15 @@ local function canonicalTelemetry()
                 },
                 terms = {
                     roll = {
+                        angle = pidTerms(),
                         rate = pidTerms(),
                     },
                     pitch = {
+                        angle = pidTerms(),
                         rate = pidTerms(),
                     },
                     yaw = {
+                        angle = pidTerms(),
                         rate = pidTerms(),
                     },
                 },
@@ -1245,14 +1249,19 @@ local function checkUiTelemetryBoundary()
     shared.monitorPage = "nav"
     monitor_view.draw(mon, shared)
 
+    local sawAnglePid = false
     local sawVerticalError = false
 
     for _, write in ipairs(mon.writes) do
+        if write.text:find("RANG", 1, true) ~= nil then
+            sawAnglePid = true
+        end
         if write.text:find("%+17%.0", 1, false) ~= nil then
             sawVerticalError = true
         end
     end
 
+    assert(sawAnglePid, "attitude page should show angle PID rows")
     assert(sawVerticalError, "navigation page vertical error should use target height")
 end
 

@@ -279,13 +279,10 @@ local function runCurrentBaselineCase(case)
     local mode = nil
 
     if forceManual then
-        machines.mode:updateManualAttitude(input, config.control.loop.dt)
+        machines.mode.manual:update(input, config.control.loop.dt)
         mode = {
             name = "manual",
-            manualAttitude = {
-                roll = machines.mode.manualRoll,
-                pitch = machines.mode.manualPitch,
-            },
+            manualAttitude = machines.mode.manual:snapshot(),
             positionTarget = nil,
             cruiseVelocity = nil,
             navigation = {
@@ -723,11 +720,13 @@ end
 local function checkActiveNavigationUpdateReceivesDt()
     local originalNavigation = package.loaded["navigation"]
     local originalModeState = package.loaded["state.mode_state"]
+    local originalModesNavigation = package.loaded["modes.navigation"]
     local observedDt = nil
     local fakeNavigator = nil
 
     local ok, err = pcall(function()
         package.loaded["state.mode_state"] = nil
+        package.loaded["modes.navigation"] = nil
         package.loaded["navigation"] = {
             new = function()
                 fakeNavigator = {
@@ -777,6 +776,7 @@ local function checkActiveNavigationUpdateReceivesDt()
     end)
 
     package.loaded["navigation"] = originalNavigation
+    package.loaded["modes.navigation"] = originalModesNavigation
     package.loaded["state.mode_state"] = originalModeState
 
     assert(ok, err)

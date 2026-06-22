@@ -1,7 +1,75 @@
 local common = require("modes.common")
 local mathx = require("lib.mathx")
+local navigation_runtime = require("navigation")
 
 local navigation = {}
+
+local Navigation = {}
+Navigation.__index = Navigation
+
+local function horizontalVector(value)
+    return vector.new(value.x, 0.0, value.z)
+end
+
+local function motion(state)
+    return {
+        worldVelocity = horizontalVector(state.world.velocity),
+        verticalSpeed = state.world.velocity.y,
+        headingRate = state.navigation.heading.rate,
+    }
+end
+
+function navigation.new(config)
+    return setmetatable({
+        navigator = navigation_runtime.new(config),
+    }, Navigation)
+end
+
+function Navigation:isActive()
+    return self.navigator:isActive()
+end
+
+function Navigation:clear()
+    self.navigator:cancel("manual")
+end
+
+function Navigation:state()
+    return self.navigator:state()
+end
+
+function Navigation:update(command, state, dt)
+    if command == nil or command.action == nil then
+        if self.navigator:isActive() then
+            return self.navigator:update(state, dt, motion(state))
+        end
+
+        return self.navigator:state()
+    end
+
+    local result = self.navigator:command(command, state, motion(state))
+
+    if result.active and result.target == nil then
+        result = self.navigator:update(state, dt, motion(state))
+    end
+
+    return result
+end
+
+function Navigation:cancelForManualInput(input)
+    if not self.navigator:isActive() then
+        return false
+    end
+
+    if input.manual.attitude.roll ~= 0.0
+        or input.manual.attitude.pitch ~= 0.0
+        or input.manual.velocity.up ~= 0.0
+        or input.manual.heading.rate ~= 0.0 then
+        self.navigator:cancel("manual")
+        return true
+    end
+
+    return false
+end
 
 local function navigationVertical(nav, currentHeight, fallback)
     if not nav.active or nav.target == nil or nav.target.height == nil then

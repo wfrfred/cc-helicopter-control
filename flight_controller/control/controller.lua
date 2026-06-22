@@ -73,6 +73,7 @@ function Controller:update(input)
     local attitudeCommands = self.attitude:update({
         state = state,
         commanded = desiredAttitude(target, horizontal),
+        feedforward = target.attitude.feedforward,
         heading = target.heading.angle,
         headingError = target.heading.error,
         dt = input.dt,

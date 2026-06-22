@@ -8,6 +8,14 @@ local attitude = {}
 local Attitude = {}
 Attitude.__index = Attitude
 
+local function feedforwardValue(feedforward, layer, axis)
+    if type(feedforward) ~= "table" or type(feedforward[layer]) ~= "table" then
+        return 0.0
+    end
+
+    return feedforward[layer][axis] or 0.0
+end
+
 local function updateAngle(axisAnglePid, targetAngle, currentRate, dt)
     return axisAnglePid:update({
         target = targetAngle,
@@ -86,10 +94,17 @@ end
 function Attitude:update(input)
     local state = input.state
     local commanded = input.commanded
+    local externalFeedforward = input.feedforward or {}
     local heading = input.heading
     local headingError = input.headingError
     local dt = input.dt
     local rates = state.body.angular.velocity
+    local rollAngleFf = feedforwardValue(externalFeedforward, "angle", "roll")
+    local pitchAngleFf = feedforwardValue(externalFeedforward, "angle", "pitch")
+    local yawAngleFf = feedforwardValue(externalFeedforward, "angle", "yaw")
+    local rollRateFf = feedforwardValue(externalFeedforward, "rate", "roll")
+    local pitchRateFf = feedforwardValue(externalFeedforward, "rate", "pitch")
+    local yawRateFf = feedforwardValue(externalFeedforward, "rate", "yaw")
     local attitudeTarget = targetOrientation(
         self.control,
         state.body.frame,
@@ -118,24 +133,30 @@ function Attitude:update(input)
         rates.yaw,
         dt
     )
+    local rollRateTarget = rollAngleResult.output + rollAngleFf
+    local pitchRateTarget = pitchAngleResult.output + pitchAngleFf
+    local yawRateTarget = yawAngleResult.output + yawAngleFf
     local rollRateResult = updateRate(
         self.controllers.roll.rate,
-        rollAngleResult.output,
+        rollRateTarget,
         rates.roll,
         dt
     )
     local pitchRateResult = updateRate(
         self.controllers.pitch.rate,
-        pitchAngleResult.output,
+        pitchRateTarget,
         rates.pitch,
         dt
     )
     local yawRateResult = updateRate(
         self.controllers.yaw.rate,
-        yawAngleResult.output,
+        yawRateTarget,
         rates.yaw,
         dt
     )
+    local rollCommand = rollRateResult.output + rollRateFf
+    local pitchCommand = pitchRateResult.output + pitchRateFf
+    local yawCommand = yawRateResult.output + yawRateFf
 
     self.lastTerms = {
         commanded = {
@@ -151,15 +172,15 @@ function Attitude:update(input)
             yawPriority = attitudeTarget.yawPriority,
             roll = {
                 angle = rollAngleResult.target,
-                rate = rollRateResult.target,
+                rate = rollRateTarget,
             },
             pitch = {
                 angle = pitchAngleResult.target,
-                rate = pitchRateResult.target,
+                rate = pitchRateTarget,
             },
             yaw = {
                 angle = yawAngleResult.target,
-                rate = yawRateResult.target,
+                rate = yawRateTarget,
             },
         },
         current = {
@@ -210,12 +231,24 @@ function Attitude:update(input)
                 rate = self.controllers.yaw.rate:terms(),
             },
         },
+        feedforward = {
+            angle = {
+                roll = rollAngleFf,
+                pitch = pitchAngleFf,
+                yaw = yawAngleFf,
+            },
+            rate = {
+                roll = rollRateFf,
+                pitch = pitchRateFf,
+                yaw = yawRateFf,
+            },
+        },
     }
 
     return {
-        roll = rollRateResult.output,
-        pitch = pitchRateResult.output,
-        yaw = yawRateResult.output,
+        roll = rollCommand,
+        pitch = pitchCommand,
+        yaw = yawCommand,
     }
 end
 

@@ -1,5 +1,13 @@
 local common = {}
 
+local function zeroAxes()
+    return {
+        roll = 0.0,
+        pitch = 0.0,
+        yaw = 0.0,
+    }
+end
+
 function common.verticalFromLock(lock)
     return {
         height = lock.target,
@@ -28,6 +36,10 @@ function common.base(input)
         attitude = {
             roll = nil,
             pitch = nil,
+            feedforward = {
+                angle = zeroAxes(),
+                rate = zeroAxes(),
+            },
         },
         world = {
             position = nil,

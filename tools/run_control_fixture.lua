@@ -498,6 +498,8 @@ local function checkModeTargetNavigationOverride()
     assert(target.source == "navigation", "mode target should keep navigation source")
     assert(target.world.position.x == 10.0, "navigation should set horizontal target x")
     assert(target.world.position.z == -20.0, "navigation should set horizontal target z")
+    assert(target.attitude.feedforward.angle.roll == 0.0, "mode target should default roll angle feedforward")
+    assert(target.attitude.feedforward.rate.yaw == 0.0, "mode target should default yaw rate feedforward")
     assert(target.vertical.height == 120.0, "navigation should override height")
     assert(target.vertical.source == "navigation_climb", "navigation height source should include phase")
     assert(target.heading.angle == 0.75, "navigation should override heading")
@@ -1094,6 +1096,18 @@ local function canonicalTelemetry()
                         rate = pidTerms(),
                     },
                 },
+                feedforward = {
+                    angle = {
+                        roll = 0.0,
+                        pitch = 0.0,
+                        yaw = 0.0,
+                    },
+                    rate = {
+                        roll = 0.0,
+                        pitch = 0.0,
+                        yaw = 0.0,
+                    },
+                },
             },
             horizontal = {
                 active = true,
@@ -1383,6 +1397,80 @@ local function checkControllerTerms()
     assert(math.abs(terms.allocation.rawCommands.roll - terms.attitude.terms.roll.rate.output) < 1.0e-6, "rate pid output should match raw roll command")
 end
 
+local function checkAttitudeExternalFeedforward()
+    local state = runtimeState()
+    local machines = makeRuntimeMachines(state)
+    local input = canonicalInputFromAxes({
+        roll = 0.0,
+        pitch = 0.0,
+        climb = 0.0,
+        heading = 0.0,
+    })
+    local mode = {
+        name = "manual",
+        manualAttitude = {
+            roll = 0.0,
+            pitch = 0.0,
+        },
+        navigation = {
+            active = false,
+            phase = "idle",
+            target = nil,
+        },
+        reset = {
+            horizontal = false,
+        },
+    }
+    local height = machines.height:update({
+        climb = input.manual.velocity.up,
+        height = state.body.pose.height,
+        verticalSpeed = state.world.velocity.y,
+        dt = config.control.loop.dt,
+    })
+    local heading = machines.heading:update({
+        headingInput = input.manual.heading.rate,
+        heading = state.navigation.heading.angle,
+        headingRate = state.navigation.heading.rate,
+        dt = config.control.loop.dt,
+    })
+    local target = machines.targets:update({
+        mode = mode,
+        input = input,
+        state = state,
+        height = height,
+        heading = heading,
+        dt = config.control.loop.dt,
+    })
+
+    target.attitude.feedforward.angle.roll = 0.25
+    target.attitude.feedforward.angle.pitch = -0.50
+    target.attitude.feedforward.angle.yaw = 0.75
+    target.attitude.feedforward.rate.roll = 0.125
+    target.attitude.feedforward.rate.pitch = -0.250
+    target.attitude.feedforward.rate.yaw = 0.375
+
+    machines.controller:update({
+        state = state,
+        target = target,
+        dt = config.control.loop.dt,
+    })
+
+    local terms = machines.controller:terms()
+
+    assertClose("roll angle feedforward term", terms.attitude.feedforward.angle.roll, 0.25)
+    assertClose("pitch angle feedforward term", terms.attitude.feedforward.angle.pitch, -0.50)
+    assertClose("yaw angle feedforward term", terms.attitude.feedforward.angle.yaw, 0.75)
+    assertClose("roll rate feedforward term", terms.attitude.feedforward.rate.roll, 0.125)
+    assertClose("pitch rate feedforward term", terms.attitude.feedforward.rate.pitch, -0.250)
+    assertClose("yaw rate feedforward term", terms.attitude.feedforward.rate.yaw, 0.375)
+    assertClose("roll rate target feedforward", terms.attitude.target.roll.rate, terms.attitude.terms.roll.angle.output + 0.25)
+    assertClose("pitch rate target feedforward", terms.attitude.target.pitch.rate, terms.attitude.terms.pitch.angle.output - 0.50)
+    assertClose("yaw rate target feedforward", terms.attitude.target.yaw.rate, terms.attitude.terms.yaw.angle.output + 0.75)
+    assertClose("roll command feedforward", terms.allocation.rawCommands.roll, terms.attitude.terms.roll.rate.output + 0.125)
+    assertClose("pitch command feedforward", terms.allocation.rawCommands.pitch, terms.attitude.terms.pitch.rate.output - 0.250)
+    assertClose("yaw command feedforward", terms.allocation.rawCommands.yaw, terms.attitude.terms.yaw.rate.output + 0.375)
+end
+
 checkFrozenBaseline()
 checkProtocolDecode()
 checkFlightState()
@@ -1399,6 +1487,7 @@ checkTelemetryPreservesConsumedCruiseEvent()
 checkUiTelemetryBoundary()
 checkMixerFormula()
 checkControllerTerms()
+checkAttitudeExternalFeedforward()
 
 assertOldRuntimeModuleRemoved("control_task")
 assertOldRuntimeModuleRemoved("input_task")

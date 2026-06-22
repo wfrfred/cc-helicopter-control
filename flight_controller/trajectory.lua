@@ -5,14 +5,8 @@ local trajectory = {}
 local Generator = {}
 Generator.__index = Generator
 
-function trajectory.new(heading)
-    assert(type(heading) == "table", "trajectory heading config must be table")
-    assert(type(heading.manual_rate) == "number", "trajectory heading.manual_rate must be number")
-
-    return setmetatable({
-        headingManualRate = heading.manual_rate,
-        manualHeading = nil,
-    }, Generator)
+function trajectory.new()
+    return setmetatable({}, Generator)
 end
 
 local function verticalFromLock(lock)
@@ -71,36 +65,9 @@ local function navigationHeading(navigation, currentHeading, fallback)
     }
 end
 
-local function manualHeading(self, command, currentHeading, dt)
-    local manualRateInput = command.manual.heading.rate or 0.0
-
-    if manualRateInput == 0.0 then
-        self.manualHeading = nil
-        return nil
-    end
-
-    local rate = manualRateInput * self.headingManualRate
-
-    if self.manualHeading == nil then
-        self.manualHeading = currentHeading
-    end
-
-    self.manualHeading = mathx.wrapPi(self.manualHeading + rate * dt)
-
-    return {
-        angle = self.manualHeading,
-        rate = rate,
-        active = true,
-        pending = false,
-        error = mathx.wrapPi(self.manualHeading - currentHeading),
-        source = "manual_trajectory",
-    }
-end
-
 function Generator:update(input)
     local mode = input.mode
     local state = input.state
-    local command = input.input
     local vertical = verticalFromLock(input.height)
     local heading = headingFromLock(input.heading)
     local source = mode.name
@@ -128,12 +95,6 @@ function Generator:update(input)
 
         vertical = navigationVertical(mode.navigation, state.body.pose.height, vertical)
         heading = navigationHeading(mode.navigation, state.navigation.heading.angle, heading)
-    end
-
-    local manual = manualHeading(self, command, state.navigation.heading.angle, input.dt)
-
-    if manual ~= nil then
-        heading = manual
     end
 
     return {

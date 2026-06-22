@@ -180,7 +180,8 @@ config.control = {
     },
 
     heading = {
-        manual_rate = math.rad(60),
+        lookahead_rate = math.rad(60),
+        lookahead_time_constant = 0.70,
         yaw_priority = 0.45,
         lock = {
             rate_deadband = math.rad(2),

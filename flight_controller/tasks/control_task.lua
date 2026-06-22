@@ -88,10 +88,12 @@ local function makeInitialMachines(initialState)
         }),
         heading = heading_lock.new({
             initial_heading = initialState.navigation.heading.angle,
+            lookahead_rate = config.control.heading.lookahead_rate,
+            lookahead_time_constant = config.control.heading.lookahead_time_constant,
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
-        trajectory = trajectory.new(config.control.heading),
+        trajectory = trajectory.new(),
         controller = Controller.new(config.control),
         mixer = mixer_module.new(config.hardware.rotor, config.calibration.rotor),
         phase = rotor_phase.new(config.hardware.rotor),
@@ -146,7 +148,7 @@ function control_task.run(shared)
                 dt = dt,
             })
             local heading = machines.heading:update({
-                manualRate = input.manual.heading.rate,
+                headingInput = input.manual.heading.rate,
                 heading = state.navigation.heading.angle,
                 headingRate = state.navigation.heading.rate,
                 dt = dt,
@@ -198,12 +200,8 @@ function control_task.run(shared)
                     state = state,
                     flight = flight,
                     mode = mode,
-                    lock = {
-                        height = height,
-                        heading = heading,
-                    },
-                    height = target.vertical,
-                    heading = target.heading,
+                    height = height,
+                    heading = heading,
                     target = target,
                     command = command,
                     control = controlTerms,

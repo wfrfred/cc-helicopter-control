@@ -8,6 +8,16 @@ local attitude = {}
 local Attitude = {}
 Attitude.__index = Attitude
 
+local function updateAngle(axisAnglePid, targetAngle, currentRate, dt)
+    return axisAnglePid:update({
+        target = targetAngle,
+        current = 0.0,
+        error = targetAngle,
+        derivative = -currentRate,
+        dt = dt,
+    })
+end
+
 local function updateRate(axisRatePid, targetRate, currentRate, dt)
     return axisRatePid:update({
         target = targetRate,
@@ -37,12 +47,15 @@ end
 function attitude.new(control)
     local controllers = {
         roll = {
+            angle = pid.new(control.pid.attitude.roll.angle),
             rate = pid.new(control.pid.attitude.roll.rate),
         },
         pitch = {
+            angle = pid.new(control.pid.attitude.pitch.angle),
             rate = pid.new(control.pid.attitude.pitch.rate),
         },
         yaw = {
+            angle = pid.new(control.pid.attitude.yaw.angle),
             rate = pid.new(control.pid.attitude.yaw.rate),
         },
     }
@@ -65,7 +78,6 @@ function attitude.new(control)
 
     return setmetatable({
         control = control,
-        attitude = control.attitude,
         controllers = controllers,
         lastTerms = {},
     }, Attitude)
@@ -88,26 +100,39 @@ function Attitude:update(input)
         state.body.orientation,
         attitudeTarget.orientation
     )
-    local targetRates = attitude_math.bodyRateCommand(
-        state.body.orientation,
-        attitudeTarget.orientation,
-        self.attitude.time_constant
+    local rollAngleResult = updateAngle(
+        self.controllers.roll.angle,
+        bodyAttitudeError.roll,
+        rates.roll,
+        dt
+    )
+    local pitchAngleResult = updateAngle(
+        self.controllers.pitch.angle,
+        bodyAttitudeError.pitch,
+        rates.pitch,
+        dt
+    )
+    local yawAngleResult = updateAngle(
+        self.controllers.yaw.angle,
+        bodyAttitudeError.yaw,
+        rates.yaw,
+        dt
     )
     local rollRateResult = updateRate(
         self.controllers.roll.rate,
-        targetRates.roll,
+        rollAngleResult.output,
         rates.roll,
         dt
     )
     local pitchRateResult = updateRate(
         self.controllers.pitch.rate,
-        targetRates.pitch,
+        pitchAngleResult.output,
         rates.pitch,
         dt
     )
     local yawRateResult = updateRate(
         self.controllers.yaw.rate,
-        targetRates.yaw,
+        yawAngleResult.output,
         rates.yaw,
         dt
     )
@@ -125,23 +150,29 @@ function Attitude:update(input)
             reducedOrientation = attitudeTarget.reducedOrientation,
             yawPriority = attitudeTarget.yawPriority,
             roll = {
-                rate = targetRates.roll,
+                angle = rollAngleResult.target,
+                rate = rollRateResult.target,
             },
             pitch = {
-                rate = targetRates.pitch,
+                angle = pitchAngleResult.target,
+                rate = pitchRateResult.target,
             },
             yaw = {
-                rate = targetRates.yaw,
+                angle = yawAngleResult.target,
+                rate = yawRateResult.target,
             },
         },
         current = {
             roll = {
+                angle = rollAngleResult.current,
                 rate = rates.roll,
             },
             pitch = {
+                angle = pitchAngleResult.current,
                 rate = rates.pitch,
             },
             yaw = {
+                angle = yawAngleResult.current,
                 rate = rates.yaw,
             },
             heading = {
@@ -150,15 +181,15 @@ function Attitude:update(input)
         },
         error = {
             roll = {
-                angle = bodyAttitudeError.roll,
+                angle = rollAngleResult.error,
                 rate = rollRateResult.error,
             },
             pitch = {
-                angle = bodyAttitudeError.pitch,
+                angle = pitchAngleResult.error,
                 rate = pitchRateResult.error,
             },
             yaw = {
-                angle = bodyAttitudeError.yaw,
+                angle = yawAngleResult.error,
                 rate = yawRateResult.error,
             },
             heading = {
@@ -167,12 +198,15 @@ function Attitude:update(input)
         },
         terms = {
             roll = {
+                angle = self.controllers.roll.angle:terms(),
                 rate = self.controllers.roll.rate:terms(),
             },
             pitch = {
+                angle = self.controllers.pitch.angle:terms(),
                 rate = self.controllers.pitch.rate:terms(),
             },
             yaw = {
+                angle = self.controllers.yaw.angle:terms(),
                 rate = self.controllers.yaw.rate:terms(),
             },
         },

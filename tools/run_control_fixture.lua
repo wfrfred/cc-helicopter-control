@@ -61,6 +61,11 @@ local function assertEquivalent(path, expected, actual)
     )
 end
 
+local function assertClose(path, actual, expected)
+    assertNumber(path, actual)
+    assert(math.abs(actual - expected) <= 1.0e-9, path .. " expected " .. expected .. " got " .. actual)
+end
+
 local seen = {}
 
 for _, case in ipairs(baseline.cases()) do
@@ -233,7 +238,7 @@ local function makeRuntimeMachines(state)
         heading = heading_lock.new({
             initial_heading = state.navigation.heading.angle,
             lookahead_rate = config.control.heading.lookahead_rate,
-            time_constant = config.control.attitude.time_constant,
+            lookahead_time_constant = config.control.heading.lookahead_time_constant,
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
@@ -725,7 +730,7 @@ local function checkNavigationExitRelockTargets()
     local heading = heading_lock.new({
         initial_heading = 0.0,
         lookahead_rate = config.control.heading.lookahead_rate,
-        time_constant = config.control.attitude.time_constant,
+        lookahead_time_constant = config.control.heading.lookahead_time_constant,
         rate_deadband = config.control.heading.lock.rate_deadband,
     })
 
@@ -765,7 +770,7 @@ local function checkNavigationExitRelockTrajectory()
     local heading = heading_lock.new({
         initial_heading = 0.0,
         lookahead_rate = config.control.heading.lookahead_rate,
-        time_constant = config.control.attitude.time_constant,
+        lookahead_time_constant = config.control.heading.lookahead_time_constant,
         rate_deadband = config.control.heading.lock.rate_deadband,
         relock_timeout = config.control.heading.lock.relock_timeout,
     })
@@ -1274,6 +1279,7 @@ end
 
 local function checkControllerTerms()
     local state = runtimeState()
+    state.body.pose.roll = 0.25
     local machines = makeRuntimeMachines(state)
     local input = canonicalInputFromAxes({
         roll = 1.0,
@@ -1344,6 +1350,26 @@ local function checkControllerTerms()
     assert(math.abs(terms.allocation.finalCommands.yaw - command.yaw) < 1.0e-6, "final yaw should match top-level command")
     assert(type(terms.horizontal.terms.position.forward.output) == "number", "horizontal should own position pid terms")
     assert(type(terms.vertical.terms.height.output) == "number", "vertical should own height pid terms")
+    assert(config.control.attitude.time_constant == nil, "attitude time_constant should be removed")
+    assert(config.control.heading.lookahead_time_constant == 0.70, "heading should own lookahead time constant")
+    assert(type(config.control.pid.attitude.roll.angle) == "table", "roll angle pid config should exist")
+    assert(type(config.control.pid.attitude.pitch.angle) == "table", "pitch angle pid config should exist")
+    assert(type(config.control.pid.attitude.yaw.angle) == "table", "yaw angle pid config should exist")
+    assertClose("roll angle kp", config.control.pid.attitude.roll.angle.kp, 1.80)
+    assertClose("roll angle ki", config.control.pid.attitude.roll.angle.ki, 0.18)
+    assertClose("roll angle kd", config.control.pid.attitude.roll.angle.kd, 0.05)
+    assertClose("pitch angle kp", config.control.pid.attitude.pitch.angle.kp, 1.25)
+    assertClose("pitch angle ki", config.control.pid.attitude.pitch.angle.ki, 0.20)
+    assertClose("pitch angle kd", config.control.pid.attitude.pitch.angle.kd, 0.05)
+    assertClose("yaw angle kp", config.control.pid.attitude.yaw.angle.kp, 0.85)
+    assertClose("yaw angle ki", config.control.pid.attitude.yaw.angle.ki, 0.0)
+    assertClose("yaw angle kd", config.control.pid.attitude.yaw.angle.kd, 0.25)
+    assert(type(terms.attitude.terms.roll.angle.output) == "number", "attitude should own roll angle pid terms")
+    assert(type(terms.attitude.terms.pitch.angle.output) == "number", "attitude should own pitch angle pid terms")
+    assert(type(terms.attitude.terms.yaw.angle.output) == "number", "attitude should own yaw angle pid terms")
+    assert(terms.attitude.current.roll.angle == 0.0, "roll angle pid current should be zero quaternion-error reference")
+    assert(terms.attitude.current.roll.angle ~= state.body.pose.roll, "roll angle pid current should not be body pose roll")
+    assert(math.abs(terms.attitude.target.roll.rate - terms.attitude.terms.roll.angle.output) < 1.0e-6, "roll rate target should come from angle pid output")
     assert(type(terms.attitude.terms.roll.rate.output) == "number", "attitude should own rate pid terms")
     assert(math.abs(terms.allocation.rawCommands.roll - terms.attitude.terms.roll.rate.output) < 1.0e-6, "rate pid output should match raw roll command")
 end

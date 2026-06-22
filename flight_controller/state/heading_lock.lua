@@ -22,7 +22,7 @@ function heading_lock.new(options)
     return setmetatable({
         target = mathx.wrapPi(options.initial_heading),
         lookaheadRate = options.lookahead_rate,
-        timeConstant = options.time_constant,
+        lookaheadTimeConstant = options.lookahead_time_constant,
         rateDeadband = options.rate_deadband,
         relockTimeout = options.relock_timeout or 0.0,
         wasManual = false,
@@ -57,7 +57,7 @@ function Lock:update(input)
         self.pendingTime = 0.0
 
         return makeTarget(
-            heading + headingInput * self.lookaheadRate * self.timeConstant,
+            heading + headingInput * self.lookaheadRate * self.lookaheadTimeConstant,
             heading,
             headingInput,
             true,

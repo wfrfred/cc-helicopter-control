@@ -100,22 +100,6 @@ function attitude_math.relativeQuaternion(current, target)
     return shortest(qCurrent:conjugate() * qTarget):normalize()
 end
 
-function attitude_math.bodyRateCommand(current, target, tau)
-    assert(type(current) == "table", "current attitude quaternion must be table")
-    assert(type(target) == "table", "target attitude quaternion must be table")
-    assert(type(tau) == "number" and tau > 0.0, "attitude time_constant must be positive")
-
-    local qe = attitude_math.relativeQuaternion(current, target):normalize()
-    local gain = 2.0 / tau
-    local sign = mathx.signNonZero(qe.a)
-
-    return {
-        roll = gain * sign * qe.v.x,
-        pitch = gain * sign * qe.v.y,
-        yaw = gain * sign * qe.v.z,
-    }
-end
-
 function attitude_math.attitudeError(current, target)
     local q = attitude_math.relativeQuaternion(current, target)
     local vectorNorm = mathx.vectorLength(q.v)

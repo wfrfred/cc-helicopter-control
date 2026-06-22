@@ -89,7 +89,7 @@ local function makeInitialMachines(initialState)
         heading = heading_lock.new({
             initial_heading = initialState.navigation.heading.angle,
             lookahead_rate = config.control.heading.lookahead_rate,
-            time_constant = config.control.attitude.time_constant,
+            lookahead_time_constant = config.control.heading.lookahead_time_constant,
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),

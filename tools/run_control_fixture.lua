@@ -4,10 +4,13 @@ env.install()
 local baseline = require("tools.fixtures.control_baseline")
 local config = require("config")
 local flight_state = require("state.flight_state")
+local heading_lock = require("state.heading_lock")
+local height_lock = require("state.height_lock")
 local input_protocol = require("protocol.input")
 local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
 local sensor_task = require("tasks.sensor_task")
+local telemetry_terms = require("telemetry.terms")
 local trajectory = require("trajectory")
 
 local function assertNumber(path, value)
@@ -60,6 +63,11 @@ end
 
 local function canonicalState()
     return {
+        raw = {
+            position = vector.new(-213.0, 80.0, 304.0),
+            velocity = vector.new(0.0, 0.0, 0.0),
+            angularVelocity = vector.new(0.0, 0.0, 0.0),
+        },
         world = {
             position = vector.new(-213.0, 80.0, 304.0),
             velocity = vector.new(0.0, 0.0, 0.0),
@@ -290,6 +298,94 @@ local function checkCruiseToggleOneShot()
     assert(second.cruiseVelocity.x == 3.0, "held cruise toggle should not recapture velocity")
 end
 
+local function checkNavigationExitRelockTargets()
+    local height = height_lock.new({
+        initial_target = 80.0,
+        target_rate = config.control.vertical.target_rate,
+        rate_deadband = config.control.vertical.lock.speed_deadband,
+    })
+    local heading = heading_lock.new({
+        initial_heading = 0.0,
+        lookahead_rate = config.control.heading.lookahead_rate,
+        time_constant = config.control.attitude.time_constant,
+        rate_deadband = config.control.heading.lock.rate_deadband,
+    })
+
+    height:update({
+        climb = 0.0,
+        height = 80.0,
+        verticalSpeed = 0.0,
+        dt = config.control.loop.dt,
+    })
+    heading:update({
+        headingInput = 0.0,
+        heading = 0.0,
+        headingRate = 0.0,
+        dt = config.control.loop.dt,
+    })
+
+    local heightTarget = height:lockedTarget(91.0)
+    local headingTarget = heading:lockedTarget(1.25)
+
+    assert(heightTarget.target == 91.0, "navigation exit should recapture current height")
+    assert(heightTarget.active == true, "navigation exit height target should be locked")
+    assert(heightTarget.error == 0.0, "navigation exit height relock should have zero initial error")
+    assert(math.abs(headingTarget.angle - 1.25) < 1.0e-9, "navigation exit should recapture heading")
+    assert(headingTarget.active == true, "navigation exit heading target should be locked")
+    assert(math.abs(headingTarget.error) < 1.0e-9, "navigation exit heading relock should have zero initial error")
+end
+
+local function checkTelemetryPreservesConsumedCruiseEvent()
+    local telemetry = telemetry_terms.running({
+        now = 1.0,
+        dt = config.control.loop.dt,
+        input = input_protocol.defaultInput(),
+        inputEvent = {
+            cruiseToggle = true,
+            holdCapture = false,
+        },
+        inputAge = 0.0,
+        inputStale = false,
+        inputSender = 1,
+        state = canonicalState(),
+        flight = {
+            name = "running",
+            reason = "ready",
+        },
+        mode = {
+            name = "cruise",
+        },
+        height = {
+            source = "locked",
+        },
+        heading = {
+            source = "locked",
+        },
+        target = {
+            navigation = {
+                active = false,
+            },
+        },
+        command = {
+            collective = 0.0,
+            roll = 0.0,
+            pitch = 0.0,
+            yaw = 0.0,
+        },
+        details = {
+            output = {},
+            current = {},
+            error = {},
+            terms = {},
+            pid = {},
+            positionHold = {},
+        },
+        rotor = {},
+    })
+
+    assert(telemetry.input.event.cruiseToggle == true, "telemetry should preserve consumed cruise event")
+end
+
 local function checkMixerFormula()
     local mix = mixer.new(config.hardware.rotor, config.calibration.rotor)
     local output = mix:update({
@@ -317,6 +413,8 @@ checkTrajectoryNavigationOverride()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
 checkCruiseToggleOneShot()
+checkNavigationExitRelockTargets()
+checkTelemetryPreservesConsumedCruiseEvent()
 checkMixerFormula()
 
 assertOldRuntimeModuleRemoved("control_task")

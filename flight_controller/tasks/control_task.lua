@@ -44,6 +44,13 @@ local function consumeCruiseToggle(shared, input)
     end
 end
 
+local function inputEventSnapshot(input)
+    return {
+        cruiseToggle = input.event.cruiseToggle,
+        holdCapture = input.event.holdCapture,
+    }
+end
+
 local function sleepLoop(loopStart)
     local elapsed = os.clock() - loopStart
     local remain = config.control.loop.dt - elapsed
@@ -99,6 +106,7 @@ function control_task.run(shared)
     local lastLoopTime = os.clock() - config.control.loop.dt
     local telemetryTimer = 0.0
     local flightMachine = flight_state.new()
+    local navigationWasActive = false
 
     while shared.running do
         local loopStart = os.clock()
@@ -124,12 +132,15 @@ function control_task.run(shared)
             end
 
             local navigationCommand = takeNavigationCommand(shared)
+            local inputEvent = inputEventSnapshot(input)
             local mode = machines.mode:update({
                 input = input,
                 state = state,
                 navigationCommand = navigationCommand,
                 dt = dt,
             })
+            local navigationExited = navigationWasActive and not mode.navigation.active
+
             consumeCruiseToggle(shared, input)
             local height = machines.height:update({
                 climb = input.manual.velocity.up,
@@ -143,6 +154,17 @@ function control_task.run(shared)
                 headingRate = state.navigation.heading.rate,
                 dt = dt,
             })
+
+            if navigationExited and input.manual.velocity.up == 0.0 then
+                height = machines.height:lockedTarget(state.body.pose.height)
+            end
+
+            if navigationExited and input.manual.heading.rate == 0.0 then
+                heading = machines.heading:lockedTarget(state.navigation.heading.angle)
+            end
+
+            navigationWasActive = mode.navigation.active
+
             local target = machines.trajectory:update({
                 mode = mode,
                 input = input,
@@ -173,10 +195,7 @@ function control_task.run(shared)
                     now = loopStart,
                     dt = dt,
                     input = input,
-                    inputEvent = {
-                        cruiseToggle = input.event.cruiseToggle,
-                        holdCapture = input.event.holdCapture,
-                    },
+                    inputEvent = inputEvent,
                     inputAge = inputAge,
                     inputStale = inputStale,
                     inputSender = shared.inputSender,

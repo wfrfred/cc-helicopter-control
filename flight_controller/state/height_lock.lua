@@ -22,6 +22,19 @@ function Lock:capture(height)
     self.pendingTime = 0.0
 end
 
+function Lock:lockedTarget(height)
+    self:capture(height)
+
+    return {
+        target = self.target,
+        speed = 0.0,
+        active = true,
+        pending = false,
+        error = 0.0,
+        source = "locked",
+    }
+end
+
 function Lock:update(input)
     local climb = input.climb or 0.0
     local height = input.height

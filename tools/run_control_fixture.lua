@@ -384,6 +384,7 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
     })
 
     assert(telemetry.input.event.cruiseToggle == true, "telemetry should preserve consumed cruise event")
+    assert(type(telemetry.state.body.angular.velocity) == "table", "telemetry should expose angular velocity")
 end
 
 local function checkMixerFormula()

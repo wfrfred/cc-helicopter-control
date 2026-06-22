@@ -493,7 +493,8 @@ local function drawCurrentAttitude(mon, x, y, width, telemetry)
     local state = expectTable(telemetry.state, "telemetry.state")
     local body = expectTable(state.body, "telemetry.state.body")
     local pose = expectTable(body.pose, "telemetry.state.body.pose")
-    local rates = expectTable(body.rates, "telemetry.state.body.rates")
+    local angular = expectTable(body.angular, "telemetry.state.body.angular")
+    local rates = expectTable(angular.velocity, "telemetry.state.body.angular.velocity")
 
     drawValueGrid(mon, x, y, width, {
         { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },

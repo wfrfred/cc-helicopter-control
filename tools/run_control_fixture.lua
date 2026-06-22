@@ -1144,6 +1144,12 @@ local function canonicalTelemetry()
             allocation = {
                 rawCommands = {},
                 allocatedCommands = {},
+                finalCommands = {
+                    collective = 1.0,
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
                 debug = {},
             },
         },
@@ -1322,10 +1328,14 @@ local function checkControllerTerms()
     assert(type(terms.attitude) == "table", "controller terms should include attitude")
     assert(type(terms.allocation) == "table", "controller terms should include allocation")
     assert(terms.output == nil, "controller terms should not duplicate final command under output")
-    assert(terms.allocation["final" .. "Commands"] == nil, "controller terms should not duplicate final command")
     assert(type(terms.allocation.rawCommands) == "table", "allocation terms should include raw commands")
     assert(type(terms.allocation.allocatedCommands) == "table", "allocation terms should include allocated commands")
+    assert(type(terms.allocation.finalCommands) == "table", "allocation terms should include final commands")
     assert(type(terms.allocation.debug) == "table", "allocation terms should include allocator debug")
+    assert(math.abs(terms.allocation.finalCommands.collective - command.collective) < 1.0e-6, "final collective should match top-level command")
+    assert(math.abs(terms.allocation.finalCommands.roll - command.roll) < 1.0e-6, "final roll should match top-level command")
+    assert(math.abs(terms.allocation.finalCommands.pitch - command.pitch) < 1.0e-6, "final pitch should match top-level command")
+    assert(math.abs(terms.allocation.finalCommands.yaw - command.yaw) < 1.0e-6, "final yaw should match top-level command")
     assert(type(terms.horizontal.terms.position.forward.output) == "number", "horizontal should own position pid terms")
     assert(type(terms.vertical.terms.height.output) == "number", "vertical should own height pid terms")
     assert(type(terms.attitude.terms.roll.rate.output) == "number", "attitude should own rate pid terms")

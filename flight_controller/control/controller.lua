@@ -333,6 +333,7 @@ function Controller:update(input)
         allocation = {
             rawCommands = rawCommands,
             allocatedCommands = allocated.commands,
+            finalCommands = commands,
             debug = allocated.debug,
         },
     }

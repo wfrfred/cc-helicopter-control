@@ -1,6 +1,7 @@
 local allocation_control = require("control.allocation")
 local attitude_control = require("control.attitude")
-local translation_control = require("control.translation")
+local horizontal_control = require("control.horizontal")
+local vertical_control = require("control.vertical")
 
 local controller = {}
 
@@ -9,24 +10,69 @@ Controller.__index = Controller
 
 function controller.new(control)
     return setmetatable({
-        translation = translation_control.new(control),
+        horizontal = horizontal_control.new(control),
+        vertical = vertical_control.new(control),
         attitude = attitude_control.new(control),
         allocation = allocation_control.new(control),
         lastTerms = {},
     }, Controller)
 end
 
+local function horizontalTarget(self, state, target, dt)
+    if target.reset.horizontal then
+        self.horizontal:reset()
+    end
+
+    if target.world.position ~= nil then
+        return self.horizontal:updatePosition(
+            target.world.position,
+            state.world.position,
+            state.world.velocity,
+            target.heading.angle,
+            dt
+        )
+    end
+
+    if target.world.velocity ~= nil then
+        return self.horizontal:updateVelocity(
+            target.world.velocity,
+            state.world.velocity,
+            target.heading.angle,
+            dt
+        )
+    end
+
+    return self.horizontal:inactive()
+end
+
+local function desiredAttitude(target, horizontalResult)
+    if target.attitude.roll ~= nil and target.attitude.pitch ~= nil then
+        return {
+            roll = target.attitude.roll,
+            pitch = target.attitude.pitch,
+            source = target.source,
+        }
+    end
+
+    return {
+        roll = horizontalResult.output.attitude.roll,
+        pitch = horizontalResult.output.attitude.pitch,
+        source = target.source,
+    }
+end
+
 function Controller:update(input)
     local state = input.state
     local target = input.target
-    local translation = self.translation:update({
+    local horizontal = horizontalTarget(self, state, target, input.dt)
+    local vertical = self.vertical:update({
         state = state,
-        target = target,
+        target = target.vertical,
         dt = input.dt,
     })
     local attitudeCommands = self.attitude:update({
         state = state,
-        commanded = translation.attitude,
+        commanded = desiredAttitude(target, horizontal),
         heading = target.heading.angle,
         headingError = target.heading.error,
         dt = input.dt,
@@ -34,17 +80,16 @@ function Controller:update(input)
     local command = self.allocation:update({
         pose = state.body.pose,
         rawCommands = {
-            collective = translation.collective,
+            collective = vertical.collective,
             roll = attitudeCommands.roll,
             pitch = attitudeCommands.pitch,
             yaw = attitudeCommands.yaw,
         },
     })
-    local translationTerms = self.translation:terms()
 
     self.lastTerms = {
-        horizontal = translationTerms.horizontal,
-        vertical = translationTerms.vertical,
+        horizontal = self.horizontal:terms(),
+        vertical = self.vertical:terms(),
         attitude = self.attitude:terms(),
         allocation = self.allocation:terms(),
     }

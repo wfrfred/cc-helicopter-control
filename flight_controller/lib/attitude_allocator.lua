@@ -8,6 +8,13 @@ local AXIS_INDEX = {
 
 local AXES = { "roll", "pitch", "yaw" }
 
+local function matrixApi()
+    assert(type(matrix) == "table", "matrix API must be loaded")
+    assert(type(matrix.from2DArray) == "function", "matrix.from2DArray must be available")
+
+    return matrix
+end
+
 local function copyCommands(commands)
     return {
         collective = commands.collective,
@@ -40,36 +47,45 @@ local function matrixValue(matrix, row, col)
     return matrix[row][col]
 end
 
-local function copyMatrix(matrix)
+local function matrixFromRows(rows)
     local out = {}
 
-    assert(type(matrix) == "table", "attitude allocator matrix must be table")
+    assert(type(rows) == "table", "attitude allocator matrix must be table")
 
     for row = 1, 3 do
         out[row] = {}
 
         for col = 1, 3 do
-            out[row][col] = matrixValue(matrix, row, col)
+            out[row][col] = matrixValue(rows, row, col)
         end
     end
 
-    return out
+    return matrixApi().from2DArray(out)
 end
 
-local function multiplyMatrixCommands(matrix, commands)
-    local input = { commands.roll, commands.pitch, commands.yaw }
-    local output = {}
+local function matrixRows(value)
+    return {
+        { value[1][1], value[1][2], value[1][3] },
+        { value[2][1], value[2][2], value[2][3] },
+        { value[3][1], value[3][2], value[3][3] },
+    }
+end
 
-    for row = 1, 3 do
-        output[row] = matrix[row][1] * input[1]
-            + matrix[row][2] * input[2]
-            + matrix[row][3] * input[3]
-    end
+local function commandsColumn(commands)
+    return matrixApi().from2DArray({
+        { commands.roll },
+        { commands.pitch },
+        { commands.yaw },
+    })
+end
+
+local function transformCommands(transform, commands)
+    local output = transform * commandsColumn(commands)
 
     return {
-        roll = output[1],
-        pitch = output[2],
-        yaw = output[3],
+        roll = output[1][1],
+        pitch = output[2][1],
+        yaw = output[3][1],
     }
 end
 
@@ -90,7 +106,7 @@ local function attitudeSignal(config, pose, name)
 end
 
 local function scheduleMatrix(config, pose)
-    local matrix = copyMatrix(config.base_matrix)
+    local transform = matrixFromRows(config.base_matrix)
 
     for _, term in ipairs(config.terms or {}) do
         local row = axisIndex(term.out)
@@ -99,10 +115,10 @@ local function scheduleMatrix(config, pose)
 
         assert(type(term.gain) == "number", "attitude allocator term gain must be number")
 
-        matrix[row][col] = matrix[row][col] + term.gain * attitude
+        transform[row][col] = transform[row][col] + term.gain * attitude
     end
 
-    return matrix
+    return transform
 end
 
 local function identityMatrix()
@@ -137,10 +153,10 @@ function attitude_allocator.apply(config, pose, rawCommands)
 
     assert(config.model == "affine_tensor", "unsupported attitude allocator model: " .. tostring(config.model))
 
-    local baseMatrix = copyMatrix(config.base_matrix)
+    local baseMatrix = matrixFromRows(config.base_matrix)
     local scheduledMatrix = scheduleMatrix(config, pose)
-    local fixed = multiplyMatrixCommands(baseMatrix, raw)
-    local scheduled = multiplyMatrixCommands(scheduledMatrix, raw)
+    local fixed = transformCommands(baseMatrix, raw)
+    local scheduled = transformCommands(scheduledMatrix, raw)
 
     return {
         commands = {
@@ -156,7 +172,7 @@ function attitude_allocator.apply(config, pose, rawCommands)
             raw = attitudeCommands(raw),
             fixed = fixed,
             scheduled = scheduled,
-            matrix = scheduledMatrix,
+            matrix = matrixRows(scheduledMatrix),
         },
     }
 end

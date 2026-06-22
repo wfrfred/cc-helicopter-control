@@ -52,15 +52,16 @@ local function horizontalTarget(value)
     }
 end
 
-local function horizontalDistance(a, b)
-    local dx = b.x - a.x
-    local dz = b.z - a.z
+local function horizontalVector(value)
+    return vector.new(value.x, 0.0, value.z)
+end
 
-    return math.sqrt(dx * dx + dz * dz)
+local function horizontalDistance(a, b)
+    return (horizontalVector(b) - horizontalVector(a)):length()
 end
 
 local function horizontalSpeed(velocity)
-    return math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
+    return horizontalVector(velocity):length()
 end
 
 local function headingTo(from, to)

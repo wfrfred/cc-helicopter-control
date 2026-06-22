@@ -95,6 +95,102 @@ local function fromComponents(x, y, z, w)
     return newQuaternion(newVector(x, y, z), w)
 end
 
+local matrixMethods = {}
+local matrixMetatable = {
+    __name = "matrix",
+    __index = matrixMethods,
+}
+
+local function from2DArray(values)
+    local out = {
+        rows = #values,
+        columns = #values[1],
+    }
+
+    for row = 1, out.rows do
+        out[row] = {}
+
+        for column = 1, out.columns do
+            out[row][column] = values[row][column]
+        end
+    end
+
+    return setmetatable(out, matrixMetatable)
+end
+
+function matrixMethods:trace()
+    local out = 0.0
+
+    for index = 1, math.min(self.rows, self.columns) do
+        out = out + self[index][index]
+    end
+
+    return out
+end
+
+function matrixMethods:mul(other)
+    local out = {
+        rows = self.rows,
+        columns = other.columns,
+    }
+
+    assert(self.columns == other.rows, "matrix dimensions must align")
+
+    for row = 1, out.rows do
+        out[row] = {}
+
+        for column = 1, out.columns do
+            local sum = 0.0
+
+            for index = 1, self.columns do
+                sum = sum + self[row][index] * other[index][column]
+            end
+
+            out[row][column] = sum
+        end
+    end
+
+    return setmetatable(out, matrixMetatable)
+end
+
+matrixMetatable.__mul = matrixMethods.mul
+
+local function fromMatrix(m)
+    local trace = m:trace()
+    local w
+    local x
+    local y
+    local z
+
+    if trace > 0.0 then
+        local s = math.sqrt(trace + 1.0) * 2.0
+        w = 0.25 * s
+        x = (m[3][2] - m[2][3]) / s
+        y = (m[1][3] - m[3][1]) / s
+        z = (m[2][1] - m[1][2]) / s
+    elseif m[1][1] > m[2][2] and m[1][1] > m[3][3] then
+        local s = math.sqrt(1.0 + m[1][1] - m[2][2] - m[3][3]) * 2.0
+        w = (m[3][2] - m[2][3]) / s
+        x = 0.25 * s
+        y = (m[1][2] + m[2][1]) / s
+        z = (m[1][3] + m[3][1]) / s
+    elseif m[2][2] > m[3][3] then
+        local s = math.sqrt(1.0 + m[2][2] - m[1][1] - m[3][3]) * 2.0
+        w = (m[1][3] - m[3][1]) / s
+        x = (m[1][2] + m[2][1]) / s
+        y = 0.25 * s
+        z = (m[2][3] + m[3][2]) / s
+    else
+        local s = math.sqrt(1.0 + m[3][3] - m[1][1] - m[2][2]) * 2.0
+        w = (m[2][1] - m[1][2]) / s
+        x = (m[1][3] + m[3][1]) / s
+        y = (m[2][3] + m[3][2]) / s
+        z = 0.25 * s
+    end
+
+    return fromComponents(x, y, z, w)
+end
+
 local function fromAxisAngle(axis, angle)
     local normalized = axis:normalize()
     local half = angle * 0.5
@@ -196,10 +292,14 @@ function M.installRuntimeGlobals()
     _G.quaternion = {
         new = newQuaternion,
         fromComponents = fromComponents,
+        fromMatrix = fromMatrix,
         fromAxisAngle = fromAxisAngle,
         identity = function()
             return newQuaternion()
         end,
+    }
+    _G.matrix = {
+        from2DArray = from2DArray,
     }
 
     _G.sleep = _G.sleep or function() end

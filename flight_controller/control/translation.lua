@@ -14,20 +14,6 @@ local function attitudeVerticalFactor(roll, pitch, minFactor)
     return mathx.clamp(factor, minFactor, 1.0)
 end
 
-local function horizontalVelocity(state)
-    return {
-        x = state.world.velocity.x,
-        z = state.world.velocity.z,
-    }
-end
-
-local function horizontalPositionError(target, state)
-    return {
-        x = target.x - state.world.position.x,
-        z = target.z - state.world.position.z,
-    }
-end
-
 local function horizontalTarget(self, state, target, dt)
     if target.reset.horizontal then
         self.horizontal:reset()
@@ -35,8 +21,9 @@ local function horizontalTarget(self, state, target, dt)
 
     if target.world.position ~= nil then
         return self.horizontal:updatePosition(
-            horizontalPositionError(target.world.position, state),
-            horizontalVelocity(state),
+            target.world.position,
+            state.world.position,
+            state.world.velocity,
             target.heading.angle,
             dt
         )
@@ -45,7 +32,7 @@ local function horizontalTarget(self, state, target, dt)
     if target.world.velocity ~= nil then
         return self.horizontal:updateVelocity(
             target.world.velocity,
-            horizontalVelocity(state),
+            state.world.velocity,
             target.heading.angle,
             dt
         )

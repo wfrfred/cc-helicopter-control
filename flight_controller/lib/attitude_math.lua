@@ -13,11 +13,18 @@ end
 local function quaternionApi()
     assert(type(quaternion) == "table", "quaternion API must be loaded")
     assert(
-        type(quaternion.fromComponents) == "function",
-        "quaternion.fromComponents must be available"
+        type(quaternion.fromMatrix) == "function",
+        "quaternion.fromMatrix must be available"
     )
 
     return quaternion
+end
+
+local function matrixApi()
+    assert(type(matrix) == "table", "matrix API must be loaded")
+    assert(type(matrix.from2DArray) == "function", "matrix.from2DArray must be available")
+
+    return matrix
 end
 
 local function shortest(q)
@@ -74,48 +81,13 @@ end
 function attitude_math.quaternionFromFrame(frame)
     assert(type(frame) == "table", "attitude frame must be table")
 
-    local m00 = frame.forward.x
-    local m01 = frame.right.x
-    local m02 = frame.down.x
-    local m10 = frame.forward.y
-    local m11 = frame.right.y
-    local m12 = frame.down.y
-    local m20 = frame.forward.z
-    local m21 = frame.right.z
-    local m22 = frame.down.z
-    local trace = m00 + m11 + m22
-    local x
-    local y
-    local z
-    local w
+    local rotation = matrixApi().from2DArray({
+        { frame.forward.x, frame.right.x, frame.down.x },
+        { frame.forward.y, frame.right.y, frame.down.y },
+        { frame.forward.z, frame.right.z, frame.down.z },
+    })
 
-    if trace > 0.0 then
-        local s = math.sqrt(trace + 1.0) * 2.0
-        w = 0.25 * s
-        x = (m21 - m12) / s
-        y = (m02 - m20) / s
-        z = (m10 - m01) / s
-    elseif m00 > m11 and m00 > m22 then
-        local s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
-        w = (m21 - m12) / s
-        x = 0.25 * s
-        y = (m01 + m10) / s
-        z = (m02 + m20) / s
-    elseif m11 > m22 then
-        local s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
-        w = (m02 - m20) / s
-        x = (m01 + m10) / s
-        y = 0.25 * s
-        z = (m12 + m21) / s
-    else
-        local s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
-        w = (m10 - m01) / s
-        x = (m02 + m20) / s
-        y = (m12 + m21) / s
-        z = 0.25 * s
-    end
-
-    return shortest(quaternionApi().fromComponents(x, y, z, w):normalize())
+    return shortest(quaternionApi().fromMatrix(rotation):normalize())
 end
 
 function attitude_math.relativeQuaternion(current, target)

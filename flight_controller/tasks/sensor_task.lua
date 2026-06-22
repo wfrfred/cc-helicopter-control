@@ -17,10 +17,8 @@ local function buildBodyFrame(rawPose)
 end
 
 local function buildPose(rawPosition, bodyFrame)
-    local horizontal = math.sqrt(
-        bodyFrame.forward.x * bodyFrame.forward.x
-            + bodyFrame.forward.z * bodyFrame.forward.z
-    )
+    local forwardHorizontal = vector.new(bodyFrame.forward.x, 0.0, bodyFrame.forward.z)
+    local horizontal = forwardHorizontal:length()
     local roll = mathx.atan2(-bodyFrame.right.y, -bodyFrame.down.y)
     local pitch = mathx.atan2(bodyFrame.forward.y, horizontal)
     local heading = mathx.atan2(bodyFrame.forward.x, -bodyFrame.forward.z)
@@ -35,7 +33,8 @@ end
 
 local function headingRateFromAngular(bodyFrame, angular)
     local forward = bodyFrame.forward
-    local horizontal = forward.x * forward.x + forward.z * forward.z
+    local forwardHorizontal = vector.new(forward.x, 0.0, forward.z)
+    local horizontal = forwardHorizontal:dot(forwardHorizontal)
 
     if horizontal < 1.0e-6 then
         return 0.0
@@ -50,18 +49,13 @@ local function headingRateFromAngular(bodyFrame, angular)
 end
 
 function sensor_task.navigationVelocity(worldVelocity, heading)
-    local right = {
-        x = math.cos(heading),
-        z = math.sin(heading),
-    }
-    local forward = {
-        x = math.sin(heading),
-        z = -math.cos(heading),
-    }
+    local horizontal = vector.new(worldVelocity.x, 0.0, worldVelocity.z)
+    local right = vector.new(math.cos(heading), 0.0, math.sin(heading))
+    local forward = vector.new(math.sin(heading), 0.0, -math.cos(heading))
 
     return {
-        forward = worldVelocity.x * forward.x + worldVelocity.z * forward.z,
-        right = worldVelocity.x * right.x + worldVelocity.z * right.z,
+        forward = horizontal:dot(forward),
+        right = horizontal:dot(right),
         up = worldVelocity.y,
     }
 end

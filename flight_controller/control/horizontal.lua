@@ -20,6 +20,14 @@ local function worldHorizontal(x, z)
     }
 end
 
+local function horizontalVector(value)
+    return vector.new(value.x, 0.0, value.z)
+end
+
+local function worldHorizontalFromVector(value)
+    return worldHorizontal(value.x, value.z)
+end
+
 local function navigationHorizontal(forward, right)
     return {
         forward = forward,
@@ -45,28 +53,25 @@ end
 
 local function navigationHorizontalAxes(heading)
     return {
-        right = {
-            x = math.cos(heading),
-            z = math.sin(heading),
-        },
-        forward = {
-            x = math.sin(heading),
-            z = -math.cos(heading),
-        },
+        right = vector.new(math.cos(heading), 0.0, math.sin(heading)),
+        forward = vector.new(math.sin(heading), 0.0, -math.cos(heading)),
     }
 end
 
 local function projectWorldHorizontalToNavigation(value, heading)
-    return mathx.project(value, navigationHorizontalAxes(heading))
+    local horizontal = horizontalVector(value)
+    local axes = navigationHorizontalAxes(heading)
+
+    return navigationHorizontal(
+        horizontal:dot(axes.forward),
+        horizontal:dot(axes.right)
+    )
 end
 
 local function projectNavigationHorizontalToWorld(value, heading)
     local axes = navigationHorizontalAxes(heading)
 
-    return worldHorizontal(
-        value.right * axes.right.x + value.forward * axes.forward.x,
-        value.right * axes.right.z + value.forward * axes.forward.z
-    )
+    return axes.right * value.right + axes.forward * value.forward
 end
 
 local function makeInactiveResult()
@@ -196,18 +201,16 @@ local function updateNavigationVelocity(
     local navigationTilt = navigationHorizontal(forwardResult.output, rightResult.output)
     local worldTilt = projectNavigationHorizontalToWorld(navigationTilt, heading)
     local attitude = attitudeFromNavigationTilt(navigationTilt, self.control.attitude.limit)
+    local worldVelocityError = targetWorldVelocity - worldVelocity
 
     return attachTerms(self, {
         active = true,
         worldPosition = worldPosition or emptyWorldState(),
         navigationPosition = navigationPosition or emptyNavigationState(),
         worldVelocity = {
-            target = targetWorldVelocity,
-            current = worldVelocity,
-            error = worldHorizontal(
-                targetWorldVelocity.x - worldVelocity.x,
-                targetWorldVelocity.z - worldVelocity.z
-            ),
+            target = worldHorizontalFromVector(targetWorldVelocity),
+            current = worldHorizontalFromVector(worldVelocity),
+            error = worldHorizontalFromVector(worldVelocityError),
         },
         navigationVelocity = {
             target = targetNavigationVelocity,
@@ -233,18 +236,20 @@ local function updateNavigationVelocity(
 end
 
 function Hold:updateVelocity(targetWorldVelocity, worldVelocity, heading, dt, position)
+    local targetWorld = horizontalVector(targetWorldVelocity)
+    local currentWorld = horizontalVector(worldVelocity)
     local targetNavigationVelocity = projectWorldHorizontalToNavigation(
-        targetWorldVelocity,
+        targetWorld,
         heading
     )
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(worldVelocity, heading)
+    local currentNavigationVelocity = projectWorldHorizontalToNavigation(currentWorld, heading)
 
     return updateNavigationVelocity(
         self,
         targetNavigationVelocity,
         currentNavigationVelocity,
-        targetWorldVelocity,
-        worldVelocity,
+        targetWorld,
+        currentWorld,
         heading,
         dt,
         position,
@@ -252,12 +257,14 @@ function Hold:updateVelocity(targetWorldVelocity, worldVelocity, heading, dt, po
     )
 end
 
-function Hold:updatePosition(worldPositionError, worldVelocity, heading, dt)
+function Hold:updatePosition(targetWorldPosition, currentWorldPosition, worldVelocity, heading, dt)
+    local worldPositionError = horizontalVector(targetWorldPosition) - horizontalVector(currentWorldPosition)
+    local currentWorldVelocity = horizontalVector(worldVelocity)
     local navigationPositionError = projectWorldHorizontalToNavigation(
         worldPositionError,
         heading
     )
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(worldVelocity, heading)
+    local currentNavigationVelocity = projectWorldHorizontalToNavigation(currentWorldVelocity, heading)
     local forwardResult = self.controllers.positionForward:update({
         target = navigationPositionError.forward,
         current = 0.0,
@@ -281,13 +288,13 @@ function Hold:updatePosition(worldPositionError, worldVelocity, heading, dt)
         targetNavigationVelocity,
         currentNavigationVelocity,
         targetWorldVelocity,
-        worldVelocity,
+        currentWorldVelocity,
         heading,
         dt,
         {
             target = worldHorizontal(0.0, 0.0),
-            current = worldHorizontal(-worldPositionError.x, -worldPositionError.z),
-            error = worldPositionError,
+            current = worldHorizontalFromVector(-worldPositionError),
+            error = worldHorizontalFromVector(worldPositionError),
         },
         {
             target = navigationHorizontal(0.0, 0.0),

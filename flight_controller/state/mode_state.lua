@@ -124,6 +124,10 @@ end
 
 local function updateNavigationCommand(self, command, state)
     if command == nil or command.action == nil then
+        if self.navigator:isActive() then
+            return self.navigator:update(state, 0.0, motion(state))
+        end
+
         return self.navigator:state()
     end
 

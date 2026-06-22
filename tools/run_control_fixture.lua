@@ -288,6 +288,37 @@ local function checkNavigationVelocityFrame()
     assert(math.abs(velocity.up - 2.0) < 1.0e-9, "navigation up velocity should be world y")
 end
 
+local function checkActiveNavigationKeepsTarget()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.position = vector.new(-213.0, 90.0, 304.0)
+    state.body.pose.height = 90.0
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    local nextMode = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    assert(nextMode.name == "navigation", "active navigation should remain selected without a new command")
+    assert(nextMode.navigation.active == true, "navigation should remain active without a new command")
+    assert(type(nextMode.navigation.target) == "table", "active navigation should keep a target every tick")
+    assert(type(nextMode.navigation.target.position) == "table", "active navigation target should include position")
+end
+
 local function checkCruiseToggleOneShot()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
@@ -714,6 +745,7 @@ checkFlightState()
 checkTrajectoryNavigationOverride()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
+checkActiveNavigationKeepsTarget()
 checkCruiseToggleOneShot()
 checkNavigationExitRelockTargets()
 checkTelemetryPreservesConsumedCruiseEvent()

@@ -16,8 +16,7 @@ local function axis(value)
     return clamp(value or 0.0, -1.0, 1.0)
 end
 
-local function navigationCommand(event)
-    local command = event and event.navigation
+local function navigationCommand(command)
 
     if command == nil then
         return nil
@@ -76,25 +75,28 @@ function input_protocol.decode(msg)
         return input_protocol.defaultInput()
     end
 
-    local controls = msg.controls or {}
     local event = msg.event or {}
-    local command = navigationCommand(event)
+    local manual = msg.manual or {}
+    local attitude = manual.attitude or {}
+    local velocity = manual.velocity or {}
+    local heading = manual.heading or {}
+    local command = navigationCommand(msg.navigation)
 
     return {
         manual = {
-            mode = "manual.attitude",
-            arm = true,
+            mode = manual.mode or "manual.attitude",
+            arm = manual.arm ~= false,
             attitude = {
-                roll = axis(controls.roll),
-                pitch = axis(controls.pitch),
+                roll = axis(attitude.roll),
+                pitch = axis(attitude.pitch),
             },
             velocity = {
-                forward = 0.0,
-                right = 0.0,
-                up = axis(controls.climb),
+                forward = axis(velocity.forward),
+                right = axis(velocity.right),
+                up = axis(velocity.up),
             },
             heading = {
-                rate = axis(controls.heading),
+                rate = axis(heading.rate),
             },
         },
         navigation = command or {
@@ -102,8 +104,8 @@ function input_protocol.decode(msg)
             waypoint = nil,
         },
         event = {
-            cruiseToggle = event.cruiseLock == true,
-            holdCapture = false,
+            cruiseToggle = event.cruiseToggle == true,
+            holdCapture = event.holdCapture == true,
         },
         seq = msg.seq,
         time = msg.time,

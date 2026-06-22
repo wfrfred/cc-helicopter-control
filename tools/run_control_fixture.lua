@@ -9,6 +9,7 @@ local height_lock = require("state.height_lock")
 local input_protocol = require("protocol.input")
 local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
+local monitor_view = require("monitor_view")
 local sensor_task = require("tasks.sensor_task")
 local telemetry_terms = require("telemetry.terms")
 local trajectory = require("trajectory")
@@ -114,27 +115,40 @@ end
 
 local function checkProtocolDecode()
     local input = input_protocol.decode({
-        controls = {
-            roll = 2.0,
-            pitch = -2.0,
-            climb = 0.25,
-            heading = -0.5,
+        manual = {
+            mode = "manual.attitude",
+            arm = true,
+            attitude = {
+                roll = 2.0,
+                pitch = -2.0,
+            },
+            velocity = {
+                forward = 0.5,
+                right = -0.25,
+                up = 0.25,
+            },
+            heading = {
+                rate = -0.5,
+            },
+        },
+        navigation = {
+            action = "activate",
+            waypoint = "home",
         },
         event = {
-            cruiseLock = true,
-            navigation = {
-                action = "activate",
-                waypoint = "home",
-            },
+            cruiseToggle = true,
+            holdCapture = true,
         },
     })
 
-    assert(input.controls == nil, "decoded input must not expose old controls table")
     assert(input.manual.attitude.roll == 1.0, "roll input should clamp")
     assert(input.manual.attitude.pitch == -1.0, "pitch input should clamp")
-    assert(input.manual.velocity.up == 0.25, "climb input should become manual velocity up")
+    assert(input.manual.velocity.forward == 0.5, "forward velocity should decode")
+    assert(input.manual.velocity.right == -0.25, "right velocity should decode")
+    assert(input.manual.velocity.up == 0.25, "up velocity should decode")
     assert(input.manual.heading.rate == -0.5, "heading input should become heading rate")
     assert(input.event.cruiseToggle == true, "cruise event should decode")
+    assert(input.event.holdCapture == true, "hold capture event should decode")
     assert(input.navigation.action == "activate", "navigation action should decode")
     assert(input.navigation.waypoint == "home", "navigation waypoint should decode")
 end
@@ -387,6 +401,289 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
     assert(type(telemetry.state.body.angular.velocity) == "table", "telemetry should expose angular velocity")
 end
 
+local function pidTerms()
+    return {
+        p = 0.0,
+        i = 0.0,
+        d = 0.0,
+        output = 0.0,
+    }
+end
+
+local function axisRate()
+    return {
+        rate = 0.0,
+    }
+end
+
+local function positionAxis()
+    return {
+        forward = 0.0,
+        right = 0.0,
+    }
+end
+
+local function fakeMonitor(width, height)
+    return {
+        getSize = function()
+            return width, height
+        end,
+        setTextColor = function() end,
+        setBackgroundColor = function() end,
+        clear = function() end,
+        setCursorPos = function() end,
+        write = function() end,
+        blit = function() end,
+    }
+end
+
+local function canonicalTelemetry()
+    local state = canonicalState()
+
+    state.body.pose.roll = 0.0
+    state.body.pose.pitch = 0.0
+    state.body.pose.heading = 0.0
+    state.body.angular.velocity = {
+        roll = 0.0,
+        pitch = 0.0,
+        yaw = 0.0,
+    }
+
+    return {
+        status = "running",
+        time = 1.0,
+        dt = config.control.loop.dt,
+        age = {
+            pose = 0.0,
+            angularVelocity = 0.0,
+            velocity = 0.0,
+        },
+        input = {
+            manual = input_protocol.defaultInput().manual,
+            event = {
+                cruiseToggle = false,
+                holdCapture = false,
+            },
+            age = 0.0,
+            stale = false,
+            sender = 1,
+        },
+        flight = {
+            name = "running",
+            reason = "ready",
+        },
+        mode = {
+            name = "position_hold",
+            navigation = {
+                active = false,
+            },
+        },
+        lock = {
+            height = "locked",
+            heading = "locked",
+        },
+        height = {
+            source = "locked",
+        },
+        heading = {
+            source = "locked",
+        },
+        state = state,
+        output = {
+            commands = {
+                collective = 1.0,
+                roll = 0.0,
+                pitch = 0.0,
+                yaw = 0.0,
+            },
+        },
+        target = {
+            commandedAttitude = {
+                roll = 0.0,
+                pitch = 0.0,
+                heading = 0.0,
+                source = "position_hold",
+            },
+            attitude = {
+                roll = axisRate(),
+                pitch = axisRate(),
+                yaw = axisRate(),
+            },
+            heading = {
+                angle = 0.0,
+                error = 0.0,
+            },
+            navigation = {
+                active = false,
+                phase = "idle",
+                selected = {
+                    id = "home",
+                    name = "Home",
+                    position = {
+                        x = -213.0,
+                        y = 81.0,
+                        z = 264.0,
+                    },
+                },
+                waypoint = nil,
+                approach = nil,
+                target = nil,
+                waypoints = {
+                    {
+                        id = "home",
+                        name = "Home",
+                        position = {
+                            x = -213.0,
+                            y = 81.0,
+                            z = 264.0,
+                        },
+                    },
+                },
+                reason = "selected",
+            },
+        },
+        current = {
+            attitude = {
+                roll = axisRate(),
+                pitch = axisRate(),
+                yaw = axisRate(),
+            },
+            vertical = {
+                height = 80.0,
+                speed = 0.0,
+            },
+        },
+        error = {
+            attitude = {
+                roll = {
+                    angle = 0.0,
+                    rate = 0.0,
+                },
+                pitch = {
+                    angle = 0.0,
+                    rate = 0.0,
+                },
+                yaw = {
+                    angle = 0.0,
+                    rate = 0.0,
+                },
+            },
+            vertical = {
+                height = 0.0,
+                speed = 0.0,
+            },
+        },
+        terms = {},
+        pid = {
+            vertical = {
+                height = pidTerms(),
+                speed = pidTerms(),
+            },
+            position = {
+                forward = pidTerms(),
+                right = pidTerms(),
+            },
+            velocity = {
+                forward = pidTerms(),
+                right = pidTerms(),
+            },
+            attitude = {
+                roll = {
+                    rate = pidTerms(),
+                },
+                pitch = {
+                    rate = pidTerms(),
+                },
+                yaw = {
+                    rate = pidTerms(),
+                },
+            },
+        },
+        positionHold = {
+            worldPosition = {
+                target = {
+                    x = -213.0,
+                    z = 304.0,
+                },
+                current = {
+                    x = -213.0,
+                    z = 304.0,
+                },
+                error = {
+                    x = 0.0,
+                    z = 0.0,
+                },
+            },
+            navigationPosition = {
+                target = positionAxis(),
+                current = positionAxis(),
+                error = positionAxis(),
+            },
+            worldVelocity = {
+                target = {
+                    x = 0.0,
+                    z = 0.0,
+                },
+                current = {
+                    x = 0.0,
+                    z = 0.0,
+                },
+                error = {
+                    x = 0.0,
+                    z = 0.0,
+                },
+            },
+            navigationVelocity = {
+                target = positionAxis(),
+                current = positionAxis(),
+                error = positionAxis(),
+            },
+            output = {
+                attitude = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                },
+            },
+        },
+        navigation = nil,
+        command = {
+            collective = 1.0,
+            roll = 0.0,
+            pitch = 0.0,
+            yaw = 0.0,
+        },
+        rotor = {
+            upper = {
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0,
+            },
+            lower = {
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0,
+            },
+        },
+    }
+end
+
+local function checkUiTelemetryBoundary()
+    local mon = fakeMonitor(80, 30)
+    local shared = {
+        telemetry = canonicalTelemetry(),
+        telemetryTime = os.clock(),
+        telemetrySender = 1,
+        inputSeq = 1,
+    }
+
+    for _, page in ipairs({ "overview", "attitude", "position", "nav" }) do
+        shared.monitorPage = page
+        monitor_view.draw(mon, shared)
+    end
+end
+
 local function checkMixerFormula()
     local mix = mixer.new(config.hardware.rotor, config.calibration.rotor)
     local output = mix:update({
@@ -416,6 +713,7 @@ checkNavigationVelocityFrame()
 checkCruiseToggleOneShot()
 checkNavigationExitRelockTargets()
 checkTelemetryPreservesConsumedCruiseEvent()
+checkUiTelemetryBoundary()
 checkMixerFormula()
 
 assertOldRuntimeModuleRemoved("control_task")

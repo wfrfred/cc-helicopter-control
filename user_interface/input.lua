@@ -61,19 +61,34 @@ function input.read()
     local space = key[KEY_SPACE]
     local shift = key[KEY_LEFT_SHIFT] or key[KEY_RIGHT_SHIFT]
     local capsLock = key[KEY_CAPS_LOCK] == true
-    local cruiseLock = capsLock and not previousCapsLock
+    local cruiseToggle = capsLock and not previousCapsLock
 
     previousCapsLock = capsLock
 
     return {
-        controls = {
-            roll = boolToAxis(e, q),
-            pitch = boolToAxis(s, w),
-            heading = boolToAxis(d, a),
-            climb = boolToAxis(space, shift),
+        manual = {
+            mode = "manual.attitude",
+            arm = true,
+            attitude = {
+                roll = boolToAxis(e, q),
+                pitch = boolToAxis(s, w),
+            },
+            velocity = {
+                forward = 0.0,
+                right = 0.0,
+                up = boolToAxis(space, shift),
+            },
+            heading = {
+                rate = boolToAxis(d, a),
+            },
+        },
+        navigation = {
+            action = nil,
+            waypoint = nil,
         },
         event = {
-            cruiseLock = cruiseLock,
+            cruiseToggle = cruiseToggle,
+            holdCapture = false,
         },
     }
 end

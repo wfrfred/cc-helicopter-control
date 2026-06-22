@@ -293,10 +293,10 @@ local function drawOutputGrid(mon, x, y, width, limitY, rows)
     return rowY + 1
 end
 
-local function drawRotorOutputs(mon, x, y, width, limitY, output)
-    local rotor = expectTable(output.rotor, "telemetry.output.rotor")
-    local upper = expectTable(rotor.upper, "telemetry.output.rotor.upper")
-    local lower = expectTable(rotor.lower, "telemetry.output.rotor.lower")
+local function drawRotorOutputs(mon, x, y, width, limitY, telemetry)
+    local rotor = expectTable(telemetry.rotor, "telemetry.rotor")
+    local upper = expectTable(rotor.upper, "telemetry.rotor.upper")
+    local lower = expectTable(rotor.lower, "telemetry.rotor.lower")
     local rows = {
         { label = "UF", value = upper[1], limit = 15.0 },
         { label = "UR", value = upper[2], limit = 15.0 },
@@ -558,7 +558,7 @@ local function drawOverview(mon, x, y, width, limitY, telemetry)
 
     if y <= limitY then
         y = y + 1
-        y = drawRotorOutputs(mon, x, y, width, limitY, output)
+        y = drawRotorOutputs(mon, x, y, width, limitY, telemetry)
     end
 
     return y
@@ -817,7 +817,7 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
         y = y + 1
         section(mon, y, "locks", colors.black, HEADER)
         y = y + 1
-        draw.writeAt(mon, x, y, "lateral " .. tostring(mode.lateral), TEXT, BG, width)
+        draw.writeAt(mon, x, y, "mode    " .. tostring(mode.name), TEXT, BG, width)
         if y + 1 <= limitY then draw.writeAt(mon, x, y + 1, "heading " .. tostring(lock.heading), TEXT, BG, width) end
         if y + 2 <= limitY then draw.writeAt(mon, x, y + 2, "height  " .. tostring(lock.height), TEXT, BG, width) end
         y = y + 3

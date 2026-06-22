@@ -1,5 +1,4 @@
 local protocol = require("lib.protocol")
-local telemetry_protocol = require("protocol.telemetry")
 local config = require("config")
 
 local telemetry_task = {}
@@ -9,7 +8,7 @@ function telemetry_task.run(shared)
 
     while shared.running do
         if shared.telemetry then
-            rednet.broadcast(telemetry_protocol.encode(shared.telemetry), protocol.CONTROL.TELEMETRY)
+            rednet.broadcast(shared.telemetry, protocol.CONTROL.TELEMETRY)
         end
 
         sleep(config.runtime.telemetry.broadcast_dt)

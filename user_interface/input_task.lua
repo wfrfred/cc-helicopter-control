@@ -9,15 +9,29 @@ local SEND_DT = config.input.send_dt
 
 local function defaultInput()
     return {
-        controls = {
-            roll = 0.0,
-            pitch = 0.0,
-            heading = 0.0,
-            climb = 0.0,
+        manual = {
+            mode = "manual.attitude",
+            arm = true,
+            attitude = {
+                roll = 0.0,
+                pitch = 0.0,
+            },
+            velocity = {
+                forward = 0.0,
+                right = 0.0,
+                up = 0.0,
+            },
+            heading = {
+                rate = 0.0,
+            },
+        },
+        navigation = {
+            action = nil,
+            waypoint = nil,
         },
         event = {
-            cruiseLock = false,
-            navigation = nil,
+            cruiseToggle = false,
+            holdCapture = false,
         },
     }
 end
@@ -39,7 +53,10 @@ function input_task.run(shared)
         local navigationCommand = shared.pendingNavigationCommand
 
         shared.pendingNavigationCommand = nil
-        ctl.event.navigation = navigationCommand
+        ctl.navigation = navigationCommand or {
+            action = nil,
+            waypoint = nil,
+        }
 
         shared.input = ctl
         shared.inputTime = now

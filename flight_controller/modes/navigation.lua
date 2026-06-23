@@ -579,18 +579,14 @@ function Navigation:target(input)
     local phaseTarget = targetForRoute(self.route, input.state)
     local control = routeControl(self.route, phaseTarget, input.state)
 
-    if phaseTarget ~= nil then
-        target.world.position = phaseTarget.position
+    target.world.position = phaseTarget.position
+
+    if control.height.active then
+        target.vertical = control.height
     end
 
-    if control ~= nil then
-        if control.height.active then
-            target.vertical = control.height
-        end
-
-        if control.heading.active then
-            target.heading = control.heading
-        end
+    if control.heading.active then
+        target.heading = control.heading
     end
 
     return target

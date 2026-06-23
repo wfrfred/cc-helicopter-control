@@ -36,7 +36,20 @@ function manual.new(control)
     }, Manual)
 end
 
-function Manual:update(input, dt)
+function Manual:enter() end
+
+function Manual:exit() end
+
+function Manual:update(ctx)
+    local input = ctx.input
+
+    if ctx.current ~= "manual" then
+        return {
+            active = manual.active(input),
+        }
+    end
+
+    local dt = ctx.dt
     local control = self.control
     local roll = input.manual.attitude.roll
     local pitch = input.manual.attitude.pitch
@@ -70,6 +83,10 @@ function Manual:update(input, dt)
             dt
         )
     end
+
+    return {
+        active = manual.active(input),
+    }
 end
 
 function Manual:snapshot()
@@ -77,6 +94,10 @@ function Manual:snapshot()
         roll = self.roll,
         pitch = self.pitch,
     }
+end
+
+function Manual:terms()
+    return self:snapshot()
 end
 
 function Manual:target(input)

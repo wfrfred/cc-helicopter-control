@@ -26,54 +26,49 @@ function navigation.new(config)
     }, Navigation)
 end
 
-function Navigation:isActive()
-    return self.navigator:isActive()
-end
-
-function Navigation:clear()
-    self.lastResult = self.navigator:cancel("manual")
-end
-
-function Navigation:state()
+function Navigation:terms()
     return self.lastResult or self.navigator:state()
 end
 
-function Navigation:update(command, state, dt)
+function Navigation:enter(ctx)
+    local command = ctx.command
+
     if command == nil or command.action == nil then
-        if self.navigator:isActive() then
-            self.lastResult = self.navigator:update(state, dt, motion(state))
-            return self.lastResult
-        end
-
         self.lastResult = self.navigator:state()
-        return self.lastResult
+        return {
+            active = self.lastResult.active,
+        }
     end
 
-    local result = self.navigator:command(command, state, motion(state))
+    self.lastResult = self.navigator:command(command, ctx.state, motion(ctx.state))
 
-    if result.active and result.target == nil then
-        result = self.navigator:update(state, dt, motion(state))
+    if self.lastResult.active and self.lastResult.target == nil then
+        self.lastResult = self.navigator:update(ctx.state, ctx.dt, motion(ctx.state))
     end
 
-    self.lastResult = result
-
-    return result
+    return {
+        active = self.lastResult.active,
+    }
 end
 
-function Navigation:cancelForManualInput(input)
-    if not self.navigator:isActive() then
-        return false
+function Navigation:update(ctx)
+    if ctx.current ~= "navigation" then
+        return {
+            active = self:terms().active,
+        }
     end
 
-    if input.manual.attitude.roll ~= 0.0
-        or input.manual.attitude.pitch ~= 0.0
-        or input.manual.velocity.up ~= 0.0
-        or input.manual.heading.rate ~= 0.0 then
-        self.lastResult = self.navigator:cancel("manual")
-        return true
-    end
+    self.lastResult = self.navigator:update(ctx.state, ctx.dt, motion(ctx.state))
 
-    return false
+    return {
+        active = self.lastResult.active,
+    }
+end
+
+function Navigation:exit(ctx)
+    if self:terms().active then
+        self.lastResult = self.navigator:cancel(ctx.reason)
+    end
 end
 
 local function navigationVertical(nav, currentHeight, fallback)

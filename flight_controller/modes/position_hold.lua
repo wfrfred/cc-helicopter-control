@@ -15,12 +15,30 @@ function position_hold.new(initialState)
     }, Hold)
 end
 
-function Hold:capture(state)
-    self.position = horizontalVector(state.world.position)
+function Hold:enter(ctx)
+    self.position = horizontalVector(ctx.state.world.position)
 end
+
+function Hold:update(ctx)
+    if ctx.current ~= "position_hold" then
+        return {
+            active = false,
+        }
+    end
+
+    return {
+        active = true,
+    }
+end
+
+function Hold:exit() end
 
 function Hold:snapshot()
     return horizontalVector(self.position)
+end
+
+function Hold:terms()
+    return self:snapshot()
 end
 
 function Hold:target(input)

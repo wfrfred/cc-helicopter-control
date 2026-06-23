@@ -295,19 +295,32 @@ local function runCurrentBaselineCase(case)
     local machines = makeRuntimeMachines(state)
     local mode = nil
 
-    mode = runModeUpdate(machines.mode, {
-        input = input,
-        state = state,
-        navigationCommand = navigationCommand,
-        dt = config.control.loop.dt,
-    })
-
     if forceManual then
+        machines.mode.name = "manual"
+        machines.mode.modes.manual:update({
+            input = input,
+            state = state,
+            dt = config.control.loop.dt,
+            current = "manual",
+        })
         machines.mode.name = "manual"
         mode = {
             name = "manual",
-            transition = mode.transition,
+            transition = {
+                navigationExited = false,
+            },
         }
+    else
+        if case.name == "cruise capture" then
+            machines.mode.name = "manual"
+        end
+
+        mode = runModeUpdate(machines.mode, {
+            input = input,
+            state = state,
+            navigationCommand = navigationCommand,
+            dt = config.control.loop.dt,
+        })
     end
 
     local height = machines.height:update({
@@ -479,14 +492,10 @@ end
 local function checkModeTermsSnapshotsAreCopied()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
-    local input = canonicalInputFromAxes({
-        roll = 1.0,
-        pitch = -1.0,
-        climb = 0.0,
-        heading = 0.0,
-    }, true)
+    local input = canonicalInputFromAxes(nil, true)
 
     state.world.velocity = vector.new(3.0, 0.0, -1.0)
+    machine.name = "manual"
     runModeUpdate(machine, {
         input = input,
         state = state,
@@ -764,9 +773,6 @@ local function checkActiveNavigationUpdateReceivesDt()
         package.loaded["navigation"] = {
             new = function()
                 fakeNavigator = {
-                    isActive = function()
-                        return true
-                    end,
                     update = function(_, _, dt)
                         observedDt = dt
 
@@ -793,6 +799,11 @@ local function checkActiveNavigationUpdateReceivesDt()
                     command = function()
                         error("unexpected navigation command")
                     end,
+                    cancel = function()
+                        return {
+                            active = false,
+                        }
+                    end,
                 }
 
                 return fakeNavigator
@@ -801,6 +812,7 @@ local function checkActiveNavigationUpdateReceivesDt()
 
         local fakeModeState = require("state.mode_state")
         local machine = fakeModeState.new(runtimeState(), config)
+        machine.name = "navigation"
         machine:update({
             input = input_protocol.defaultInput(),
             state = runtimeState(),
@@ -824,6 +836,7 @@ local function checkCruiseToggleOneShot()
 
     state.world.velocity = vector.new(3.0, 0.0, -1.0)
     input.event.cruiseToggle = true
+    machine.name = "manual"
 
     machine:update({
         input = input,
@@ -847,6 +860,86 @@ local function checkCruiseToggleOneShot()
     assert(first.cruise.y == 0.0, "cruise toggle should capture horizontal velocity")
     assert(type(first.cruise.length) == "function", "cruise velocity should be runtime vector")
     assert(second.cruise.x == 3.0, "held cruise toggle should not recapture velocity")
+end
+
+local function checkCruiseRequiresManualMode()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.velocity = vector.new(3.0, 0.0, -1.0)
+    input.event.cruiseToggle = true
+
+    local mode = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    assert(mode.name == "position_hold", "cruise toggle outside manual should stay in position_hold")
+    assert(machine:terms().cruise == nil, "cruise toggle outside manual should not capture velocity")
+end
+
+local function checkNavigationCommandIgnoresManualOverride()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = canonicalInputFromAxes({
+        roll = 1.0,
+        pitch = 0.0,
+        climb = 0.0,
+        heading = 0.0,
+    })
+
+    local mode = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    assert(mode.name == "manual", "manual override should win over navigation command")
+    assert(machine:terms().navigation.active == false, "manual override should not activate navigation")
+end
+
+local function checkClimbCancelsNavigationToHold()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.position = vector.new(-213.0, 90.0, 304.0)
+    state.body.pose.height = 90.0
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    input = canonicalInputFromAxes({
+        roll = 0.0,
+        pitch = 0.0,
+        climb = 1.0,
+        heading = 0.0,
+    })
+
+    local mode = machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    assert(mode.name == "position_hold", "climb override should cancel navigation into position_hold")
+    assert(mode.transition.navigationExited == true, "climb override should report navigation exit")
+    assert(machine:terms().navigation.active == false, "climb override should leave navigation inactive")
 end
 
 local function checkNavigationExitRelockTargets()
@@ -1430,7 +1523,12 @@ local function checkControllerTerms()
         climb = 0.0,
         heading = 0.0,
     })
-    machines.mode.modes.manual:update(input, config.control.loop.dt)
+    machines.mode.modes.manual:update({
+        input = input,
+        state = state,
+        dt = config.control.loop.dt,
+        current = "manual",
+    })
     machines.mode.name = "manual"
     local height = machines.height:update({
         climb = input.manual.velocity.up,
@@ -1639,6 +1737,9 @@ checkActiveNavigationKeepsTarget()
 checkActiveNavigationSelectKeepsTarget()
 checkActiveNavigationUpdateReceivesDt()
 checkCruiseToggleOneShot()
+checkCruiseRequiresManualMode()
+checkNavigationCommandIgnoresManualOverride()
+checkClimbCancelsNavigationToHold()
 checkNavigationExitRelockTargets()
 checkNavigationExitRelockTarget()
 checkTelemetryPreservesConsumedCruiseEvent()

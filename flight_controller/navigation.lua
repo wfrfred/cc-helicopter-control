@@ -385,7 +385,7 @@ local function updatePhase(active, position, pose, motion, config)
     end
 end
 
-local function activeResult(active, position, pose)
+local function activeState(active)
     local leg = currentLeg(active)
 
     return {
@@ -400,7 +400,7 @@ local function activeResult(active, position, pose)
             kind = leg.kind,
             position = copyPosition(leg.position),
         } or nil,
-        target = targetForPhase(active, position, pose),
+        target = nil,
         waypoints = waypointList(active.waypoints),
         arrived = active.phase == "arrived",
         reason = nil,
@@ -463,7 +463,7 @@ function Navigator:activate(id, state, motion)
     }
     self.inactiveReason = nil
 
-    return activeResult(self.active, position, pose)
+    return activeState(self.active)
 end
 
 function Navigator:cancel(reason)
@@ -508,7 +508,18 @@ function Navigator:update(state, dt, motion)
 
     updatePhase(self.active, position, pose, motion, self.config)
 
-    return activeResult(self.active, position, pose)
+    return activeState(self.active)
+end
+
+function Navigator:target(state)
+    if self.active == nil then
+        return nil
+    end
+
+    local position = assertPosition(state.world.position, "state.world.position")
+    local pose = assert(type(state.body.pose) == "table" and state.body.pose, "state.body.pose must be table")
+
+    return targetForPhase(self.active, position, pose)
 end
 
 function Navigator:state()
@@ -516,23 +527,7 @@ function Navigator:state()
         return inactiveResult(self)
     end
 
-    return {
-        active = true,
-        phase = self.active.phase,
-        selected = waypointSummary(self.active.waypoint),
-        waypoint = waypointSummary(self.active.waypoint),
-        approach = approachSummary(self.active.approach),
-        leg = {
-            index = self.active.legIndex,
-            count = #self.active.legs,
-            kind = currentLeg(self.active).kind,
-            position = copyPosition(currentLeg(self.active).position),
-        },
-        target = nil,
-        waypoints = waypointList(self.waypoints),
-        arrived = self.active.phase == "arrived",
-        reason = nil,
-    }
+    return activeState(self.active)
 end
 
 return navigation

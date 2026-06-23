@@ -15,13 +15,6 @@ local modes = {
     navigation = "navigation",
 }
 
-local modeOrder = {
-    modes.manual,
-    modes.position_hold,
-    modes.cruise,
-    modes.navigation,
-}
-
 local exclusive = {
     manual = { modes.navigation, modes.cruise },
     position_hold = { modes.navigation, modes.cruise },
@@ -44,7 +37,6 @@ function mode_state.new(initialState, config)
         lastTransition = {
             navigationExited = false,
         },
-        lastNavigationResult = nil,
         lastManualLateral = false,
         lastState = initialState,
     }, State)
@@ -98,8 +90,6 @@ local function requestContext(input)
         dt = input.dt,
         command = input.navigationCommand,
         reason = input.reason,
-        current = nil,
-        navigationExited = false,
     }
 end
 
@@ -139,7 +129,6 @@ function State:update(input)
     local overrideActive = manualOverrideActive(manualInput)
     local lateralEdge = lateralActive and not self.lastManualLateral
     local status = nil
-    local statuses = {}
 
     self.lastReset = {
         horizontal = false,
@@ -172,26 +161,17 @@ function State:update(input)
         end
     end
 
-    ctx.current = self.name
-
-    for _, name in ipairs(modeOrder) do
-        statuses[name] = self.modes[name]:update(ctx)
-    end
-
-    status = statuses[self.name] or status or {
+    status = activeMode(self):update(ctx) or status or {
         active = true,
     }
 
     if not status.active and self.name ~= modes.position_hold then
         ctx.reason = modes.position_hold
         status = enter(self, modes.position_hold, ctx)
-        ctx.current = self.name
-        ctx.navigationExited = wasNavigation
-        status = self.modes[self.name]:update(ctx) or status
+        status = activeMode(self):update(ctx) or status
     end
 
     self.lastTransition.navigationExited = wasNavigation and self.name ~= modes.navigation
-    self.lastNavigationResult = statuses[modes.navigation].navigation
     self.lastManualLateral = lateralActive
 
     return {
@@ -208,9 +188,6 @@ function State:target(input)
         source = self.name,
         input = input.input,
         state = input.state,
-        navigation = self.lastNavigationResult or {
-            active = false,
-        },
         dt = input.dt,
     }
 

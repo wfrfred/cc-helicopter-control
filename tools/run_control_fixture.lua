@@ -535,18 +535,26 @@ end
 
 local function checkModeTargetNavigationOverride()
     local machine = mode_state.new(canonicalState(), config)
+
     machine.name = "navigation"
-    machine.lastNavigationResult = {
-        active = true,
-        phase = "climb",
-        target = {
-            position = {
-                x = 10.0,
-                z = -20.0,
-            },
-            height = 120.0,
-            heading = 0.75,
-        },
+
+    machine.modes.navigation.navigator = {
+        state = function()
+            return {
+                active = true,
+                phase = "climb",
+            }
+        end,
+        target = function()
+            return {
+                position = {
+                    x = 10.0,
+                    z = -20.0,
+                },
+                height = 120.0,
+                heading = 0.75,
+            }
+        end,
     }
 
     local target = modeTarget(machine, {
@@ -599,22 +607,63 @@ local function checkModeTargetIsPure()
     assertEquivalent("mode target purity", before, machine:terms())
 end
 
+local function checkNavigationTargetIsPure()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.position = vector.new(-213.0, 90.0, 304.0)
+    state.body.pose.height = 90.0
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    local before = machine:terms()
+
+    modeTarget(machine, {
+        input = input,
+        state = state,
+        dt = config.control.loop.dt,
+    })
+    modeTarget(machine, {
+        input = input,
+        state = state,
+        dt = config.control.loop.dt,
+    })
+
+    assertEquivalent("navigation target purity", before, machine:terms())
+end
+
 local function checkNavigationHeadingWrap()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
 
     state.navigation.heading.angle = 3.0
     machine.name = "navigation"
-    machine.lastNavigationResult = {
-        active = true,
-        phase = "turn",
-        target = {
-            position = {
-                x = 0.0,
-                z = 0.0,
-            },
-            heading = -3.0,
-        },
+
+    machine.modes.navigation.navigator = {
+        state = function()
+            return {
+                active = true,
+                phase = "turn",
+            }
+        end,
+        target = function()
+            return {
+                position = {
+                    x = 0.0,
+                    z = 0.0,
+                },
+                heading = -3.0,
+            }
+        end,
     }
 
     local target = modeTarget(machine, {
@@ -1900,6 +1949,7 @@ checkModeUpdateExposesStatusOnly()
 checkModeTermsSnapshotsAreCopied()
 checkModeTargetNavigationOverride()
 checkModeTargetIsPure()
+checkNavigationTargetIsPure()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
 checkEulerHeadingRateKinematics()

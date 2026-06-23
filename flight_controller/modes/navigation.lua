@@ -22,18 +22,12 @@ end
 function navigation.new(config)
     return setmetatable({
         navigator = navigation_runtime.new(config),
-        lastResult = nil,
     }, Navigation)
-end
-
-local function currentResult(self)
-    return self.lastResult or self.navigator:state()
 end
 
 local function status(result)
     return {
         active = result.active,
-        navigation = result,
     }
 end
 
@@ -81,11 +75,12 @@ local function copyTerms(value)
 end
 
 function Navigation:terms(state)
-    local terms = copyTerms(currentResult(self))
+    local terms = copyTerms(self.navigator:state())
 
     terms.waypoints = nil
 
     if state ~= nil then
+        terms.target = self.navigator:target(state)
         terms.control = targetControl(terms, state)
     end
 
@@ -96,28 +91,19 @@ function Navigation:enter(ctx)
     local command = ctx.command
 
     if command == nil or command.action == nil then
-        self.lastResult = self.navigator:state()
-        return status(self.lastResult)
+        return status(self.navigator:state())
     end
 
-    self.lastResult = self.navigator:command(command, ctx.state, motion(ctx.state))
-
-    return status(self.lastResult)
+    return status(self.navigator:command(command, ctx.state, motion(ctx.state)))
 end
 
 function Navigation:update(ctx)
-    if ctx.current ~= "navigation" then
-        return status(currentResult(self))
-    end
-
-    self.lastResult = self.navigator:update(ctx.state, ctx.dt, motion(ctx.state))
-
-    return status(self.lastResult)
+    return status(self.navigator:update(ctx.state, ctx.dt, motion(ctx.state)))
 end
 
 function Navigation:exit(ctx)
-    if currentResult(self).active then
-        self.lastResult = self.navigator:cancel(ctx.reason)
+    if self.navigator:isActive() then
+        self.navigator:cancel(ctx.reason)
     end
 end
 
@@ -157,7 +143,9 @@ end
 
 function Navigation:target(input)
     local target = common.base(input)
-    local nav = input.navigation
+    local nav = self.navigator:state()
+
+    nav.target = self.navigator:target(input.state)
 
     if nav.active and nav.target ~= nil then
         target.world.position = nav.target.position

@@ -39,12 +39,6 @@ function Hold:enter(ctx)
 end
 
 function Hold:update(ctx)
-    if ctx.current ~= "position_hold" then
-        return {
-            active = false,
-        }
-    end
-
     self.lastHeight = self.height:update({
         input = ctx.input.manual.velocity.up,
         value = ctx.state.body.pose.height,

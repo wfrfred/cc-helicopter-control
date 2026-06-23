@@ -56,12 +56,6 @@ function Cruise:exit()
 end
 
 function Cruise:update(ctx)
-    if ctx.current ~= "cruise" then
-        return {
-            active = self.velocity ~= nil,
-        }
-    end
-
     return {
         active = self.velocity ~= nil,
     }

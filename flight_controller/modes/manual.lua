@@ -90,12 +90,6 @@ function Manual:exit() end
 function Manual:update(ctx)
     local input = ctx.input
 
-    if ctx.current ~= "manual" then
-        return {
-            active = manual.active(input),
-        }
-    end
-
     self.lastHeight = self.height:update({
         input = input.manual.velocity.up,
         value = ctx.state.body.pose.height,

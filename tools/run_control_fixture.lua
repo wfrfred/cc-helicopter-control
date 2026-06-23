@@ -385,7 +385,7 @@ end
 local function assertOldRuntimeModuleRemoved(name)
     local ok = pcall(require, name)
 
-    assert(not ok, "old root runtime module should not be requireable: " .. name)
+    assert(not ok, "removed module should not be requireable: " .. name)
 end
 
 local function checkProtocolDecode()
@@ -1568,7 +1568,6 @@ local function canonicalTelemetry()
                     pitch = 0.0,
                     yaw = 0.0,
                 },
-                debug = {},
             },
         },
         navigation = {
@@ -1768,7 +1767,7 @@ local function checkControllerTerms()
     assert(type(terms.allocation.rawCommands) == "table", "allocation terms should include raw commands")
     assert(type(terms.allocation.allocatedCommands) == "table", "allocation terms should include allocated commands")
     assert(type(terms.allocation.finalCommands) == "table", "allocation terms should include final commands")
-    assert(type(terms.allocation.debug) == "table", "allocation terms should include allocator debug")
+    assert(terms.allocation.debug == nil, "allocation terms should not expose allocator debug wrapper")
     assert(math.abs(terms.allocation.finalCommands.collective - command.collective) < 1.0e-6, "final collective should match top-level command")
     assert(math.abs(terms.allocation.finalCommands.roll - command.roll) < 1.0e-6, "final roll should match top-level command")
     assert(math.abs(terms.allocation.finalCommands.pitch - command.pitch) < 1.0e-6, "final pitch should match top-level command")
@@ -1951,5 +1950,6 @@ assertOldRuntimeModuleRemoved("rotor")
 assertOldRuntimeModuleRemoved("target_state")
 assertOldRuntimeModuleRemoved("trajectory")
 assertOldRuntimeModuleRemoved("navigation")
+assertOldRuntimeModuleRemoved("lib.attitude_allocator")
 
 print("control fixtures ok")

@@ -573,11 +573,13 @@ function Navigation:exit(ctx)
 end
 
 function Navigation:target(input)
+    assert(self.route ~= nil, "navigation target requires active route")
+
     local target = common.base(input)
     local phaseTarget = targetForRoute(self.route, input.state)
     local control = routeControl(self.route, phaseTarget, input.state)
 
-    if self.route ~= nil and phaseTarget ~= nil then
+    if phaseTarget ~= nil then
         target.world.position = phaseTarget.position
     end
 

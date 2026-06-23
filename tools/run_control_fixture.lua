@@ -593,6 +593,26 @@ local function checkModeTargetNavigationOverride()
     assert(target.heading.source == "navigation_climb", "navigation heading source should include phase")
 end
 
+local function checkNavigationTargetRequiresRoute()
+    local machine = mode_state.new(canonicalState(), config)
+
+    machine.name = "navigation"
+
+    local ok, err = pcall(function()
+        modeTarget(machine, {
+            input = input_protocol.defaultInput(),
+            state = canonicalState(),
+            dt = config.control.loop.dt,
+        })
+    end)
+
+    assert(not ok, "navigation target should require an active route")
+    assert(
+        tostring(err):find("active route", 1, true) ~= nil,
+        "navigation target route failure should be explicit"
+    )
+end
+
 local function checkModeTargetIsPure()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
@@ -1897,6 +1917,7 @@ checkFlightState()
 checkModeUpdateExposesStatusOnly()
 checkModeTermsSnapshotsAreCopied()
 checkModeTargetNavigationOverride()
+checkNavigationTargetRequiresRoute()
 checkModeTargetIsPure()
 checkNavigationTargetIsPure()
 checkNavigationHeadingWrap()

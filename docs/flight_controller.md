@@ -115,7 +115,21 @@ flight_controller/
 
 控制器更接近两条外环加一个姿态内环的结构。水平控制输出姿态需求，垂直控制输出总距，姿态控制再把姿态目标变成三轴力矩命令，最后由 allocation 做通道分配和限幅。
 
-![飞控控制律框图](assets/flight_controller_control.svg)
+### 水平位置 / 速度环
+
+![水平位置和速度控制律框图](assets/flight_control_horizontal.svg)
+
+### 高度 / 垂直速度环
+
+![高度和垂直速度控制律框图](assets/flight_control_vertical.svg)
+
+### 姿态目标 / 角度外环
+
+![姿态目标和角度外环控制律框图](assets/flight_control_attitude.svg)
+
+### 角速度内环 / 分配
+
+![角速度内环和分配控制律框图](assets/flight_control_rate_allocation.svg)
 
 `horizontal` 负责水平位置和速度误差，输出姿态需求。`vertical` 负责高度和垂直速度，输出 collective。`attitude` 负责姿态误差、角速度目标和角速度 PID。`allocation` 负责姿态通道分配、限幅和最终命令。
 

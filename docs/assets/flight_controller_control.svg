@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="820" viewBox="0 0 1500 820" role="img" aria-labelledby="title desc">
+  <title id="title">Flight controller control law diagram</title>
+  <desc id="desc">PX4-style controller diagram showing setpoints, estimates, outer loops, inner loops, allocation, and actuator command.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 z" fill="#27313f"/>
+    </marker>
+    <style>
+      .bg { fill: #f7f8fb; }
+      .group { fill: #fff; stroke: #d8dee9; stroke-width: 1.4; }
+      .sp { fill: #eaf4ff; stroke: #2b6cb0; stroke-width: 2; }
+      .est { fill: #f3f6fa; stroke: #64748b; stroke-width: 2; }
+      .ctrl { fill: #effaf4; stroke: #2f855a; stroke-width: 2; }
+      .att { fill: #fff5e8; stroke: #c05621; stroke-width: 2; }
+      .alloc { fill: #f5efff; stroke: #6b46c1; stroke-width: 2; }
+      .out { fill: #ecfeff; stroke: #0f766e; stroke-width: 2; }
+      .sum { fill: #fff; stroke: #27313f; stroke-width: 2; }
+      .line { fill: none; stroke: #27313f; stroke-width: 2.2; marker-end: url(#arrow); }
+      .thin { fill: none; stroke: #475569; stroke-width: 1.8; marker-end: url(#arrow); }
+      .fb { fill: none; stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 7 5; marker-end: url(#arrow); }
+      .bus { fill: none; stroke: #64748b; stroke-width: 2.1; stroke-dasharray: 7 5; }
+      .title { font: 700 26px sans-serif; fill: #17202c; }
+      .subtitle { font: 14px sans-serif; fill: #536071; }
+      .lane { font: 700 13px sans-serif; fill: #667085; letter-spacing: 1.2px; }
+      .label { font: 700 16px sans-serif; fill: #17202c; }
+      .small { font: 13px sans-serif; fill: #4b5563; }
+      .tiny { font: 12px sans-serif; fill: #667085; }
+      .sign { font: 700 17px sans-serif; fill: #17202c; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1500" height="820"/>
+  <text class="title" x="48" y="48">Flight Controller Control Law</text>
+  <text class="subtitle" x="48" y="74">Setpoints from modes are compared against sensor estimates, then shaped by outer loops, attitude loops, and allocation.</text>
+
+  <rect class="group" x="34" y="108" width="1432" height="168" rx="18"/>
+  <rect class="group" x="34" y="300" width="1432" height="168" rx="18"/>
+  <rect class="group" x="34" y="492" width="1432" height="160" rx="18"/>
+  <rect class="group" x="34" y="688" width="1432" height="78" rx="18"/>
+
+  <text class="lane" x="58" y="134">OUTER LOOP: HORIZONTAL</text>
+  <text class="lane" x="58" y="326">OUTER LOOP: VERTICAL</text>
+  <text class="lane" x="58" y="518">INNER LOOP: ATTITUDE AND RATE</text>
+  <text class="lane" x="58" y="714">SENSOR ESTIMATES</text>
+
+  <!-- Horizontal outer loop -->
+  <rect class="sp" x="78" y="166" width="150" height="60" rx="12"/>
+  <text class="label" x="116" y="190">position</text>
+  <text class="small" x="121" y="210">velocity SP</text>
+
+  <circle class="sum" cx="294" cy="196" r="21"/>
+  <text class="sign" x="289" y="202">Σ</text>
+  <text class="tiny" x="263" y="235">pos / vel error</text>
+
+  <rect class="ctrl" x="370" y="154" width="178" height="84" rx="12"/>
+  <text class="label" x="411" y="187">horizontal</text>
+  <text class="small" x="402" y="209">position / velocity</text>
+
+  <rect class="att" x="620" y="166" width="156" height="60" rx="12"/>
+  <text class="label" x="655" y="190">attitude</text>
+  <text class="small" x="653" y="210">roll / pitch SP</text>
+
+  <!-- Vertical outer loop -->
+  <rect class="sp" x="78" y="358" width="150" height="60" rx="12"/>
+  <text class="label" x="118" y="382">height</text>
+  <text class="small" x="119" y="402">speed SP</text>
+
+  <circle class="sum" cx="294" cy="388" r="21"/>
+  <text class="sign" x="289" y="394">Σ</text>
+  <text class="tiny" x="255" y="427">height / speed error</text>
+
+  <rect class="ctrl" x="370" y="346" width="178" height="84" rx="12"/>
+  <text class="label" x="425" y="379">vertical</text>
+  <text class="small" x="412" y="401">height / speed</text>
+
+  <rect class="out" x="620" y="358" width="156" height="60" rx="12"/>
+  <text class="label" x="657" y="382">collective</text>
+  <text class="small" x="674" y="402">command</text>
+
+  <!-- Attitude inner loop -->
+  <rect class="sp" x="78" y="550" width="150" height="60" rx="12"/>
+  <text class="label" x="116" y="574">heading</text>
+  <text class="small" x="130" y="594">SP</text>
+
+  <rect class="att" x="302" y="538" width="170" height="84" rx="12"/>
+  <text class="label" x="337" y="571">attitude</text>
+  <text class="small" x="330" y="593">target builder</text>
+
+  <circle class="sum" cx="540" cy="580" r="21"/>
+  <text class="sign" x="535" y="586">Σ</text>
+  <text class="tiny" x="506" y="619">attitude error</text>
+
+  <rect class="att" x="614" y="538" width="158" height="84" rx="12"/>
+  <text class="label" x="650" y="571">angle PID</text>
+  <text class="small" x="644" y="593">body rate SP</text>
+
+  <circle class="sum" cx="840" cy="580" r="21"/>
+  <text class="sign" x="835" y="586">Σ</text>
+  <text class="tiny" x="813" y="619">rate error</text>
+
+  <rect class="att" x="914" y="538" width="158" height="84" rx="12"/>
+  <text class="label" x="957" y="571">rate PID</text>
+  <text class="small" x="948" y="593">raw commands</text>
+
+  <rect class="alloc" x="1130" y="538" width="140" height="84" rx="12"/>
+  <text class="label" x="1175" y="571">allocation</text>
+  <text class="small" x="1168" y="593">mix + clamp</text>
+
+  <rect class="out" x="1310" y="538" width="120" height="84" rx="12"/>
+  <text class="label" x="1340" y="571">actuator</text>
+  <text class="small" x="1341" y="593">command</text>
+
+  <!-- Estimate bus -->
+  <rect class="est" x="604" y="710" width="290" height="38" rx="12"/>
+  <text class="label" x="687" y="735">sensor state</text>
+  <path class="bus" d="M 180 729 L 604 729"/>
+  <path class="bus" d="M 894 729 L 1310 729"/>
+
+  <text class="tiny" x="206" y="707">position / velocity</text>
+  <text class="tiny" x="274" y="746">height / vertical speed</text>
+  <text class="tiny" x="532" y="707">orientation</text>
+  <text class="tiny" x="804" y="707">body rates</text>
+
+  <!-- Forward signal flow -->
+  <path class="line" d="M 228 196 L 273 196"/>
+  <path class="line" d="M 315 196 L 370 196"/>
+  <path class="line" d="M 548 196 L 620 196"/>
+
+  <path class="line" d="M 228 388 L 273 388"/>
+  <path class="line" d="M 315 388 L 370 388"/>
+  <path class="line" d="M 548 388 L 620 388"/>
+
+  <path class="line" d="M 228 580 L 302 580"/>
+  <path class="line" d="M 472 580 L 519 580"/>
+  <path class="line" d="M 561 580 L 614 580"/>
+  <path class="line" d="M 772 580 L 819 580"/>
+  <path class="line" d="M 861 580 L 914 580"/>
+  <path class="line" d="M 1072 580 L 1130 580"/>
+  <path class="line" d="M 1270 580 L 1310 580"/>
+
+  <!-- Cross-loop target composition -->
+  <path class="thin" d="M 776 196 C 852 196 850 546 519 568"/>
+  <text class="tiny" x="804" y="206">roll / pitch</text>
+  <path class="thin" d="M 776 388 L 1310 388 C 1370 388 1370 520 1370 538"/>
+  <text class="tiny" x="930" y="378">collective</text>
+
+  <!-- External feedforward -->
+  <rect class="sp" x="612" y="650" width="160" height="48" rx="12"/>
+  <text class="label" x="652" y="670">external</text>
+  <text class="small" x="649" y="688">feedforward</text>
+  <path class="thin" d="M 692 650 L 692 622"/>
+  <path class="thin" d="M 772 674 C 830 674 840 632 840 601"/>
+
+  <!-- Feedback taps -->
+  <path class="fb" d="M 294 729 L 294 409"/>
+  <path class="fb" d="M 294 729 L 294 217"/>
+  <path class="fb" d="M 540 729 L 540 601"/>
+  <path class="fb" d="M 840 729 L 840 601"/>
+
+  <!-- Signs -->
+  <text class="tiny" x="276" y="183">+</text>
+  <text class="tiny" x="309" y="213">-</text>
+  <text class="tiny" x="276" y="375">+</text>
+  <text class="tiny" x="309" y="405">-</text>
+  <text class="tiny" x="522" y="567">+</text>
+  <text class="tiny" x="553" y="597">-</text>
+  <text class="tiny" x="822" y="567">+</text>
+  <text class="tiny" x="853" y="597">-</text>
+</svg>

@@ -72,28 +72,6 @@ function attitude_math.bodyRatesFromEulerRates(roll, pitch, rates)
     }
 end
 
-function attitude_math.reducedFrameFromTargetDown(currentFrame, fullTargetFrame)
-    assert(type(currentFrame) == "table", "current attitude frame must be table")
-    assert(type(fullTargetFrame) == "table", "target attitude frame must be table")
-
-    local down = mathx.normalizeVector(fullTargetFrame.down)
-    local forward = currentFrame.forward - down * currentFrame.forward:dot(down)
-
-    if mathx.vectorLength(forward) < 1.0e-6 then
-        forward = currentFrame.right:cross(down)
-    end
-
-    forward = mathx.normalizeVector(forward)
-
-    local right = mathx.normalizeVector(down:cross(forward))
-
-    return {
-        forward = forward,
-        right = right,
-        down = down,
-    }
-end
-
 function attitude_math.quaternionFromFrame(frame)
     assert(type(frame) == "table", "attitude frame must be table")
 

@@ -1,6 +1,5 @@
 local attitude_math = require("lib.attitude_math")
 local feedforward = require("lib.feedforward")
-local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 
 local attitude = {}
@@ -34,21 +33,14 @@ local function updateRate(axisRatePid, targetRate, currentRate, dt)
     })
 end
 
-local function targetOrientation(control, currentFrame, commanded, heading)
+local function targetOrientation(commanded, heading)
     local fullFrame = attitude_math.frameFromPose(commanded.roll, commanded.pitch, heading)
     local full = attitude_math.quaternionFromFrame(fullFrame):normalize()
-    local reducedFrame = attitude_math.reducedFrameFromTargetDown(currentFrame, fullFrame)
-    local reduced = attitude_math.quaternionFromFrame(reducedFrame):normalize()
-    local yawPriority = mathx.clamp(control.heading.yaw_priority, 0.0, 1.0)
-    local mixed = reduced:slerp(full, yawPriority):normalize()
 
     return {
         roll = commanded.roll,
         pitch = commanded.pitch,
-        orientation = mixed,
-        fullOrientation = full,
-        reducedOrientation = reduced,
-        yawPriority = yawPriority,
+        orientation = full,
     }
 end
 
@@ -105,12 +97,7 @@ function Attitude:update(input)
     local rollRateFf = feedforwardValue(externalFeedforward, "rate", "roll")
     local pitchRateFf = feedforwardValue(externalFeedforward, "rate", "pitch")
     local yawRateFf = feedforwardValue(externalFeedforward, "rate", "yaw")
-    local attitudeTarget = targetOrientation(
-        self.control,
-        state.body.frame,
-        commanded,
-        heading
-    )
+    local attitudeTarget = targetOrientation(commanded, heading)
     local bodyAttitudeError = attitude_math.attitudeError(
         state.body.orientation,
         attitudeTarget.orientation
@@ -167,9 +154,6 @@ function Attitude:update(input)
         },
         target = {
             orientation = attitudeTarget.orientation,
-            fullOrientation = attitudeTarget.fullOrientation,
-            reducedOrientation = attitudeTarget.reducedOrientation,
-            yawPriority = attitudeTarget.yawPriority,
             roll = {
                 angle = rollAngleResult.target,
                 rate = rollRateTarget,

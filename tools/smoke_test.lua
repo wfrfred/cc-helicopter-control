@@ -105,6 +105,16 @@ local command = controller:update({
     },
     dt = config.control.loop.dt,
 })
+local controlTerms = controller:terms()
+local oldYawPriority = "yaw" .. "_priority"
+local oldYawPriorityTerm = "yaw" .. "Priority"
+local oldReducedOrientation = "reduced" .. "Orientation"
+local oldReducedFrameHelper = "reduced" .. "FrameFromTargetDown"
+
+assert(config.control.heading[oldYawPriority] == nil, "heading yaw-priority config should be removed")
+assert(controlTerms.attitude.target[oldYawPriorityTerm] == nil, "attitude target should not expose yaw-priority")
+assert(controlTerms.attitude.target[oldReducedOrientation] == nil, "attitude target should not expose reduced orientation")
+assert(attitude_math[oldReducedFrameHelper] == nil, "reduced target frame helper should be removed")
 
 assertClose("neutral collective", command.collective, 1.0)
 assertClose("neutral roll", command.roll, -0.0467649)

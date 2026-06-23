@@ -94,6 +94,11 @@ config.control = {
         stale_dt = 0.5,
     },
 
+    sensor_age = {
+        warn_dt = 0.25,
+        fault_dt = 1.0,
+    },
+
     collective = {
         min = 0.0,
         max = 10.0,

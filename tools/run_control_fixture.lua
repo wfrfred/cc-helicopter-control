@@ -448,11 +448,12 @@ local function checkProtocolDecode()
 end
 
 local function checkFlightState()
-    local machine = flight_state.new()
+    local machine = flight_state.new(config.control.sensor_age)
     local waiting = machine:update({
         state = nil,
         input = input_protocol.defaultInput(),
         inputStale = false,
+        now = 1.0,
     })
     assert(waiting.name == "waiting_sensors", "missing sensors should wait")
 
@@ -460,9 +461,20 @@ local function checkFlightState()
         state = canonicalState(),
         input = input_protocol.defaultInput(),
         inputStale = true,
+        now = 1.0,
     })
     assert(stale.name == "running", "ready sensors should run")
     assert(stale.reason == "input_stale_zeroed", "stale input should be reported")
+
+    local aged = machine:update({
+        state = canonicalState(),
+        input = input_protocol.defaultInput(),
+        inputStale = false,
+        now = 2.1,
+    })
+    assert(aged.name == "running", "sensor age fault should not stop control")
+    assert(aged.reason == "sensor_age_fault", "sensor age fault should be reported")
+    assert(aged.sensorAge.max >= config.control.sensor_age.fault_dt, "sensor age max should be reported")
 end
 
 local function checkModeUpdateExposesStatusOnly()

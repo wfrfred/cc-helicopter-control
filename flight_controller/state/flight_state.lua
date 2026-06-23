@@ -25,8 +25,46 @@ local function ready(state)
         and state.time.angularVelocity ~= nil
 end
 
-function flight_state.new()
-    return setmetatable({}, State)
+local function sensorAges(state, now)
+    return {
+        pose = now - state.time.pose,
+        velocity = now - state.time.velocity,
+        angularVelocity = now - state.time.angularVelocity,
+    }
+end
+
+local function maxAge(ages)
+    return math.max(ages.pose, math.max(ages.velocity, ages.angularVelocity))
+end
+
+local function agePolicy(self, state, now)
+    if now == nil or self.sensorAge == nil then
+        return nil
+    end
+
+    local ages = sensorAges(state, now)
+    local age = maxAge(ages)
+    local status = "ready"
+
+    if self.sensorAge.fault_dt ~= nil and age >= self.sensorAge.fault_dt then
+        status = "sensor_age_fault"
+    elseif self.sensorAge.warn_dt ~= nil and age >= self.sensorAge.warn_dt then
+        status = "sensor_age_warning"
+    end
+
+    return {
+        status = status,
+        max = age,
+        pose = ages.pose,
+        velocity = ages.velocity,
+        angularVelocity = ages.angularVelocity,
+    }
+end
+
+function flight_state.new(sensorAge)
+    return setmetatable({
+        sensorAge = sensorAge,
+    }, State)
 end
 
 function State:update(input)
@@ -37,16 +75,20 @@ function State:update(input)
         }
     end
 
+    local age = agePolicy(self, input.state, input.now)
+
     if input.inputStale then
         return {
             name = "running",
             reason = "input_stale_zeroed",
+            sensorAge = age,
         }
     end
 
     return {
         name = "running",
-        reason = "ready",
+        reason = age and age.status or "ready",
+        sensorAge = age,
     }
 end
 

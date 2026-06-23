@@ -75,7 +75,7 @@ end
 
 local function makeInitialMachines(initialState)
     return {
-        flight = flight_state.new(),
+        flight = flight_state.new(config.control.sensor_age),
         mode = mode_state.new(initialState, config),
         controller = Controller.new(config.control),
         mixer = mixer_module.new(config.hardware.rotor, config.calibration.rotor),
@@ -88,7 +88,7 @@ function control_task.run(shared)
     local machines = nil
     local lastLoopTime = os.clock() - config.control.loop.dt
     local telemetryTimer = 0.0
-    local flightMachine = flight_state.new()
+    local flightMachine = flight_state.new(config.control.sensor_age)
 
     while shared.running do
         local loopStart = os.clock()

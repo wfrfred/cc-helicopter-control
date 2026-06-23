@@ -22,6 +22,7 @@ end
 function navigation.new(config)
     return setmetatable({
         navigator = navigation_runtime.new(config),
+        lastResult = nil,
     }, Navigation)
 end
 
@@ -30,20 +31,22 @@ function Navigation:isActive()
 end
 
 function Navigation:clear()
-    self.navigator:cancel("manual")
+    self.lastResult = self.navigator:cancel("manual")
 end
 
 function Navigation:state()
-    return self.navigator:state()
+    return self.lastResult or self.navigator:state()
 end
 
 function Navigation:update(command, state, dt)
     if command == nil or command.action == nil then
         if self.navigator:isActive() then
-            return self.navigator:update(state, dt, motion(state))
+            self.lastResult = self.navigator:update(state, dt, motion(state))
+            return self.lastResult
         end
 
-        return self.navigator:state()
+        self.lastResult = self.navigator:state()
+        return self.lastResult
     end
 
     local result = self.navigator:command(command, state, motion(state))
@@ -51,6 +54,8 @@ function Navigation:update(command, state, dt)
     if result.active and result.target == nil then
         result = self.navigator:update(state, dt, motion(state))
     end
+
+    self.lastResult = result
 
     return result
 end
@@ -64,7 +69,7 @@ function Navigation:cancelForManualInput(input)
         or input.manual.attitude.pitch ~= 0.0
         or input.manual.velocity.up ~= 0.0
         or input.manual.heading.rate ~= 0.0 then
-        self.navigator:cancel("manual")
+        self.lastResult = self.navigator:cancel("manual")
         return true
     end
 
@@ -105,9 +110,9 @@ local function navigationHeading(nav, currentHeading, fallback)
     }
 end
 
-function navigation.target(input)
+function Navigation:target(input)
     local target = common.base(input)
-    local nav = input.mode.navigation
+    local nav = input.navigation
 
     if nav.active and nav.target ~= nil then
         target.world.position = nav.target.position

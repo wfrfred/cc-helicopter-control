@@ -79,11 +79,11 @@ function Manual:snapshot()
     }
 end
 
-function manual.target(input)
+function Manual:target(input)
     local target = common.base(input)
 
-    target.attitude.roll = input.mode.manualAttitude.roll
-    target.attitude.pitch = input.mode.manualAttitude.pitch
+    target.attitude.roll = self.roll
+    target.attitude.pitch = self.pitch
 
     if input.heading.source == "manual" then
         target.attitude.feedforward.angle = attitude_math.bodyRatesFromEulerRates(

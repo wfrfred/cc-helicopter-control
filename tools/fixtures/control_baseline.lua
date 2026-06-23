@@ -141,7 +141,7 @@ local cases = {
         name = "cruise capture",
         expected = {
             mode = "cruise",
-            cruiseVelocity = {
+            cruise = {
                 x = 3.0,
                 z = -1.0,
             },

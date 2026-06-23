@@ -70,7 +70,7 @@ function terms.running(input)
         heading = input.heading,
         state = telemetryState(input.state),
         control = input.control,
-        navigation = input.target.navigation,
+        navigation = input.navigation,
         command = input.command,
         rotor = input.rotor,
     }

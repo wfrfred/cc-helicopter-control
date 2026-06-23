@@ -18,8 +18,8 @@ function controller.new(control)
     }, Controller)
 end
 
-local function horizontalTarget(self, state, target, dt)
-    if target.reset.horizontal then
+local function horizontalTarget(self, state, target, reset, dt)
+    if reset.horizontal then
         self.horizontal:reset()
     end
 
@@ -64,7 +64,8 @@ end
 function Controller:update(input)
     local state = input.state
     local target = input.target
-    local horizontal = horizontalTarget(self, state, target, input.dt)
+    local reset = input.reset or {}
+    local horizontal = horizontalTarget(self, state, target, reset, input.dt)
     local vertical = self.vertical:update({
         state = state,
         target = target.vertical,

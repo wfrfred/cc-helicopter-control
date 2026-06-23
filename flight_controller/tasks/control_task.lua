@@ -5,7 +5,6 @@ local flight_state = require("state.flight_state")
 local heading_lock = require("state.heading_lock")
 local height_lock = require("state.height_lock")
 local mixer_module = require("hardware.mixer")
-local mode_targets = require("modes.target")
 local mode_state = require("state.mode_state")
 local rotor_phase = require("hardware.rotor_phase")
 local telemetryTerms = require("telemetry.terms")
@@ -92,7 +91,6 @@ local function makeInitialMachines(initialState)
             rate_deadband = config.control.heading.lock.rate_deadband,
             relock_timeout = config.control.heading.lock.relock_timeout,
         }),
-        targets = mode_targets.new(),
         controller = Controller.new(config.control),
         mixer = mixer_module.new(config.hardware.rotor, config.calibration.rotor),
         phase = rotor_phase.new(config.hardware.rotor),
@@ -161,17 +159,18 @@ function control_task.run(shared)
                 heading = machines.heading:lockedTarget(state.navigation.heading.angle)
             end
 
-            local target = machines.targets:update({
-                mode = mode,
+            local target = machines.mode:target({
                 input = input,
                 state = state,
                 height = height,
                 heading = heading,
                 dt = dt,
             })
+            local modeTerms = machines.mode:terms()
             local command = machines.controller:update({
                 state = state,
                 target = target,
+                reset = modeTerms.reset,
                 dt = dt,
             })
             local controlTerms = machines.controller:terms()
@@ -198,10 +197,10 @@ function control_task.run(shared)
                     inputSender = shared.inputSender,
                     state = state,
                     flight = flight,
-                    mode = mode,
+                    mode = modeTerms.mode,
+                    navigation = modeTerms.navigation,
                     height = height,
                     heading = heading,
-                    target = target,
                     command = command,
                     control = controlTerms,
                     rotor = rotorOutput.blades,

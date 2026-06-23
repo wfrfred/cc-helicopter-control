@@ -20,13 +20,13 @@ function Hold:capture(state)
 end
 
 function Hold:snapshot()
-    return self.position
+    return horizontalVector(self.position)
 end
 
-function position_hold.target(input)
+function Hold:target(input)
     local target = common.base(input)
 
-    target.world.position = input.mode.positionTarget
+    target.world.position = self:snapshot()
 
     return target
 end

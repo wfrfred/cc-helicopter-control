@@ -32,7 +32,7 @@ end
 
 function common.base(input)
     return {
-        source = input.mode.name,
+        source = input.source,
         attitude = {
             roll = nil,
             pitch = nil,
@@ -48,10 +48,6 @@ function common.base(input)
         },
         vertical = input.vertical,
         heading = input.heading,
-        reset = {
-            horizontal = input.mode.reset.horizontal,
-        },
-        navigation = input.mode.navigation,
     }
 end
 

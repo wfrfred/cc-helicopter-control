@@ -65,6 +65,18 @@ local command = controller:update({
         attitude = {
             roll = 0.0,
             pitch = 0.0,
+            feedforward = {
+                angle = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+                rate = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+            },
         },
         world = {
             position = nil,
@@ -87,9 +99,9 @@ local command = controller:update({
             error = 0.0,
             source = "locked",
         },
-        reset = {
-            horizontal = false,
-        },
+    },
+    reset = {
+        horizontal = false,
     },
     dt = config.control.loop.dt,
 })

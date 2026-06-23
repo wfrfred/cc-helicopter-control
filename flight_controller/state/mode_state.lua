@@ -1,4 +1,5 @@
 local cruise_mode = require("modes.cruise")
+local mode_common = require("modes.common")
 local manual_mode = require("modes.manual")
 local navigation_mode = require("modes.navigation")
 local position_hold_mode = require("modes.position_hold")
@@ -22,6 +23,13 @@ function mode_state.new(initialState, config)
         positionHold = position_hold_mode.new(initialState),
         cruise = cruise_mode.new(),
         navigation = navigation_mode.new(config.navigation),
+        lastReset = {
+            horizontal = false,
+        },
+        lastTransition = {
+            navigationExited = false,
+        },
+        lastNavigation = nil,
     }, State)
 end
 
@@ -78,18 +86,61 @@ function State:update(input)
         end
     end
 
+    self.lastReset = {
+        horizontal = resetHorizontal,
+    }
+    self.lastTransition = {
+        navigationExited = navigationExited,
+    }
+    self.lastNavigation = navigationResult
+
     return {
         name = self.name,
-        manualAttitude = self.manual:snapshot(),
-        positionTarget = self.positionHold:snapshot(),
-        cruiseVelocity = self.cruise:snapshot(),
-        navigation = navigationResult,
+        transition = self.lastTransition,
+    }
+end
+
+function State:target(input)
+    local context = {
+        source = self.name,
+        input = input.input,
+        state = input.state,
+        vertical = mode_common.verticalFromLock(input.height),
+        heading = mode_common.headingFromLock(input.heading),
+        navigation = self.lastNavigation or self.navigation:state(),
+        dt = input.dt,
+    }
+
+    if self.name == modes.manual then
+        return self.manual:target(context)
+    end
+
+    if self.name == modes.cruise then
+        return self.cruise:target(context)
+    end
+
+    if self.name == modes.navigation then
+        return self.navigation:target(context)
+    end
+
+    return self.positionHold:target(context)
+end
+
+function State:terms()
+    return {
+        mode = {
+            name = self.name,
+        },
         reset = {
-            horizontal = resetHorizontal,
+            horizontal = self.lastReset.horizontal,
         },
         transition = {
-            navigationExited = navigationExited,
+            navigationExited = self.lastTransition.navigationExited,
         },
+        manual = self.manual:snapshot(),
+        position_hold = self.positionHold:snapshot(),
+        cruise = self.cruise:snapshot(),
+        navigation = self.lastNavigation or self.navigation:state(),
     }
 end
 

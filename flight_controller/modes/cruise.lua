@@ -57,13 +57,17 @@ function Cruise:update(input, state, manualActive)
 end
 
 function Cruise:snapshot()
-    return self.velocity
+    if self.velocity == nil then
+        return nil
+    end
+
+    return horizontalVector(self.velocity)
 end
 
-function cruise.target(input)
+function Cruise:target(input)
     local target = common.base(input)
 
-    target.world.velocity = input.mode.cruiseVelocity
+    target.world.velocity = self:snapshot()
 
     return target
 end

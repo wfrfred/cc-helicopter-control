@@ -632,8 +632,8 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
     })
     state.body.pose.roll = 0.25
     state.body.pose.pitch = -0.20
-    machines.mode.manual.roll = -0.10
-    machines.mode.manual.pitch = 0.30
+    machines.mode.modes.manual.roll = -0.10
+    machines.mode.modes.manual.pitch = 0.30
     machines.mode.name = "manual"
 
     local height = machines.height:update({
@@ -1430,7 +1430,7 @@ local function checkControllerTerms()
         climb = 0.0,
         heading = 0.0,
     })
-    machines.mode.manual:update(input, config.control.loop.dt)
+    machines.mode.modes.manual:update(input, config.control.loop.dt)
     machines.mode.name = "manual"
     local height = machines.height:update({
         climb = input.manual.velocity.up,

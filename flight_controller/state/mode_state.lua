@@ -19,10 +19,12 @@ local modes = {
 function mode_state.new(initialState, config)
     return setmetatable({
         name = modes.position_hold,
-        manual = manual_mode.new(config.control),
-        positionHold = position_hold_mode.new(initialState),
-        cruise = cruise_mode.new(),
-        navigation = navigation_mode.new(config.navigation),
+        modes = {
+            manual = manual_mode.new(config.control),
+            position_hold = position_hold_mode.new(initialState),
+            cruise = cruise_mode.new(),
+            navigation = navigation_mode.new(config.navigation),
+        },
         lastReset = {
             horizontal = false,
         },
@@ -34,11 +36,11 @@ function mode_state.new(initialState, config)
 end
 
 local function selectMode(self, manualActive)
-    if self.navigation:isActive() then
+    if self.modes.navigation:isActive() then
         return modes.navigation
     end
 
-    if self.cruise:isActive() then
+    if self.modes.cruise:isActive() then
         return modes.cruise
     end
 
@@ -49,40 +51,52 @@ local function selectMode(self, manualActive)
     return modes.position_hold
 end
 
+local function activeMode(self)
+    local mode = self.modes[self.name]
+
+    assert(mode ~= nil, "unknown mode: " .. tostring(self.name))
+
+    return mode
+end
+
 function State:update(input)
     local command = input.navigationCommand
     local state = input.state
     local dt = input.dt
     local manualInput = input.input
     local resetHorizontal = false
-    local navigationWasActive = self.navigation:isActive()
+    local navigation = self.modes.navigation
+    local cruise = self.modes.cruise
+    local manual = self.modes.manual
+    local hold = self.modes.position_hold
+    local navigationWasActive = navigation:isActive()
 
-    self.manual:update(manualInput, dt)
+    manual:update(manualInput, dt)
 
     local manualActive = manual_mode.active(manualInput)
-    local navigationResult = self.navigation:update(command, state, dt)
+    local navigationResult = navigation:update(command, state, dt)
 
     if navigationResult.active then
-        self.cruise:clear()
+        cruise:clear()
     end
 
-    if self.navigation:cancelForManualInput(manualInput) then
-        navigationResult = self.navigation:state()
+    if navigation:cancelForManualInput(manualInput) then
+        navigationResult = navigation:state()
     end
 
-    if self.cruise:update(manualInput, state, manualActive) then
+    if cruise:update(manualInput, state, manualActive) then
         resetHorizontal = true
     end
 
     local selected = selectMode(self, manualActive)
-    local navigationExited = navigationWasActive and not self.navigation:isActive()
+    local navigationExited = navigationWasActive and not navigation:isActive()
 
     if selected ~= self.name then
         self.name = selected
         resetHorizontal = true
 
         if selected == modes.manual or selected == modes.position_hold then
-            self.positionHold:capture(state)
+            hold:capture(state)
         end
     end
 
@@ -107,23 +121,11 @@ function State:target(input)
         state = input.state,
         vertical = mode_common.verticalFromLock(input.height),
         heading = mode_common.headingFromLock(input.heading),
-        navigation = self.lastNavigation or self.navigation:state(),
+        navigation = self.lastNavigation or self.modes.navigation:state(),
         dt = input.dt,
     }
 
-    if self.name == modes.manual then
-        return self.manual:target(context)
-    end
-
-    if self.name == modes.cruise then
-        return self.cruise:target(context)
-    end
-
-    if self.name == modes.navigation then
-        return self.navigation:target(context)
-    end
-
-    return self.positionHold:target(context)
+    return activeMode(self):target(context)
 end
 
 function State:terms()
@@ -137,10 +139,10 @@ function State:terms()
         transition = {
             navigationExited = self.lastTransition.navigationExited,
         },
-        manual = self.manual:snapshot(),
-        position_hold = self.positionHold:snapshot(),
-        cruise = self.cruise:snapshot(),
-        navigation = self.lastNavigation or self.navigation:state(),
+        manual = self.modes.manual:snapshot(),
+        position_hold = self.modes.position_hold:snapshot(),
+        cruise = self.modes.cruise:snapshot(),
+        navigation = self.lastNavigation or self.modes.navigation:state(),
     }
 end
 

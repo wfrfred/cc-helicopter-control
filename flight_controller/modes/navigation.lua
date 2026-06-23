@@ -23,15 +23,21 @@ function navigation.new(config)
     return setmetatable({
         navigator = navigation_runtime.new(config),
         lastResult = nil,
-        lastAxes = nil,
     }, Navigation)
 end
 
-function Navigation:terms()
+local function currentResult(self)
     return self.lastResult or self.navigator:state()
 end
 
-local function axisTerms(nav, state)
+local function status(result)
+    return {
+        active = result.active,
+        navigation = result,
+    }
+end
+
+local function targetControl(nav, state)
     if not nav.active or nav.target == nil then
         return nil
     end
@@ -42,7 +48,7 @@ local function axisTerms(nav, state)
 
     return {
         height = {
-            target = height,
+            height = height,
             speed = 0.0,
             active = height ~= nil,
             pending = false,
@@ -64,44 +70,54 @@ local function axisTerms(nav, state)
     }
 end
 
+local function copyTerms(value)
+    local terms = {}
+
+    for key, child in pairs(value) do
+        terms[key] = child
+    end
+
+    return terms
+end
+
+function Navigation:terms(state)
+    local terms = copyTerms(currentResult(self))
+
+    terms.waypoints = nil
+
+    if state ~= nil then
+        terms.control = targetControl(terms, state)
+    end
+
+    return terms
+end
+
 function Navigation:enter(ctx)
     local command = ctx.command
 
     if command == nil or command.action == nil then
         self.lastResult = self.navigator:state()
-        self.lastAxes = axisTerms(self.lastResult, ctx.state)
-        return {
-            active = self.lastResult.active,
-        }
+        return status(self.lastResult)
     end
 
     self.lastResult = self.navigator:command(command, ctx.state, motion(ctx.state))
-    self.lastAxes = axisTerms(self.lastResult, ctx.state)
 
-    return {
-        active = self.lastResult.active,
-    }
+    return status(self.lastResult)
 end
 
 function Navigation:update(ctx)
     if ctx.current ~= "navigation" then
-        return {
-            active = self:terms().active,
-        }
+        return status(currentResult(self))
     end
 
     self.lastResult = self.navigator:update(ctx.state, ctx.dt, motion(ctx.state))
-    self.lastAxes = axisTerms(self.lastResult, ctx.state)
 
-    return {
-        active = self.lastResult.active,
-    }
+    return status(self.lastResult)
 end
 
 function Navigation:exit(ctx)
-    if self:terms().active then
+    if currentResult(self).active then
         self.lastResult = self.navigator:cancel(ctx.reason)
-        self.lastAxes = nil
     end
 end
 
@@ -151,10 +167,6 @@ function Navigation:target(input)
     target.heading = navigationHeading(nav, input.state.navigation.heading.angle, target.heading)
 
     return target
-end
-
-function Navigation:axisTerms()
-    return self.lastAxes
 end
 
 return navigation

@@ -5,7 +5,7 @@ local config = require("config")
 local Controller = require("control.controller")
 local attitude_math = require("lib.attitude_math")
 local horizontal = require("control.horizontal")
-local height_lock = require("state.height_lock")
+local lock = require("modes.lock")
 local navigation = require("navigation")
 
 local function assertClose(name, actual, expected, tolerance)
@@ -133,19 +133,19 @@ assert(holdResult.active == true, "position_hold should produce an active result
 assertClose("position_hold roll", holdResult.output.attitude.roll, 0.0)
 assertClose("position_hold pitch", holdResult.output.attitude.pitch, 0.0)
 
-local lock = height_lock.new({
-    initial_target = 80.0,
+local heightLock = lock.new({
+    initial = 80.0,
     target_rate = config.control.vertical.target_rate,
     rate_deadband = config.control.vertical.lock.speed_deadband,
 })
-local lockResult = lock:update({
-    climb = 1.0,
-    height = 80.0,
-    verticalSpeed = 0.0,
+local lockResult = heightLock:update({
+    input = 1.0,
+    value = 80.0,
+    rate = 0.0,
     dt = config.control.loop.dt,
 })
 assert(lockResult.active == false, "manual climb should disable height lock feedback")
-assertClose("manual climb commanded rate", lockResult.speed, config.control.vertical.target_rate)
+assertClose("manual climb commanded rate", lockResult.rate, config.control.vertical.target_rate)
 
 local navigator = navigation.new(config.navigation)
 local navResult = navigator:command(

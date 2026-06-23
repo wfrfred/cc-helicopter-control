@@ -1,6 +1,6 @@
 local common = require("modes.common")
 local attitude_math = require("lib.attitude_math")
-local axis_locks = require("modes.axis_locks")
+local lock = require("modes.lock")
 local mathx = require("lib.mathx")
 
 local manual = {}
@@ -30,12 +30,34 @@ function manual.active(input)
 end
 
 function manual.new(initialState, control)
-    return setmetatable({
+    local self = setmetatable({
         control = control,
-        locks = axis_locks.new(initialState, control),
+        height = lock.new({
+            initial = initialState.body.pose.height,
+            target_rate = control.vertical.target_rate,
+            rate_deadband = control.vertical.lock.speed_deadband,
+            relock_timeout = control.vertical.lock.relock_timeout,
+        }),
+        heading = lock.new({
+            initial = initialState.navigation.heading.angle,
+            target_rate = control.heading.target_rate,
+            rate_deadband = control.heading.lock.rate_deadband,
+            relock_timeout = control.heading.lock.relock_timeout,
+            normalize = mathx.wrapPi,
+            error = function(target, value)
+                return mathx.wrapPi(target - value)
+            end,
+        }),
+        lastHeight = nil,
+        lastHeading = nil,
         roll = control.attitude.home.roll,
         pitch = control.attitude.home.pitch,
     }, Manual)
+
+    self.lastHeight = self.height:locked(initialState.body.pose.height)
+    self.lastHeading = self.heading:locked(initialState.navigation.heading.angle)
+
+    return self
 end
 
 function Manual:enter(ctx)
@@ -54,7 +76,13 @@ function Manual:enter(ctx)
         -control.attitude.limit.pitch,
         control.attitude.limit.pitch
     )
-    self.locks:enter(ctx)
+    if ctx.input.manual.velocity.up == 0.0 then
+        self.lastHeight = self.height:locked(ctx.state.body.pose.height)
+    end
+
+    if ctx.input.manual.heading.rate == 0.0 then
+        self.lastHeading = self.heading:locked(ctx.state.navigation.heading.angle)
+    end
 end
 
 function Manual:exit() end
@@ -68,7 +96,18 @@ function Manual:update(ctx)
         }
     end
 
-    self.locks:update(ctx)
+    self.lastHeight = self.height:update({
+        input = input.manual.velocity.up,
+        value = ctx.state.body.pose.height,
+        rate = ctx.state.world.velocity.y,
+        dt = ctx.dt,
+    })
+    self.lastHeading = self.heading:update({
+        input = input.manual.heading.rate,
+        value = ctx.state.navigation.heading.angle,
+        rate = ctx.state.navigation.heading.rate,
+        dt = ctx.dt,
+    })
 
     local dt = ctx.dt
     local control = self.control
@@ -117,15 +156,53 @@ function Manual:snapshot()
     }
 end
 
+local function verticalTarget(result)
+    return {
+        height = result.target,
+        speed = result.rate,
+        active = result.active,
+        pending = result.pending,
+        error = result.error,
+        source = result.source,
+    }
+end
+
+local function headingTarget(result)
+    return {
+        angle = result.target,
+        rate = result.rate,
+        active = result.active,
+        pending = result.pending,
+        error = result.error,
+        source = result.source,
+    }
+end
+
+local function targetControl(self)
+    return {
+        height = verticalTarget(self.lastHeight),
+        heading = headingTarget(self.lastHeading),
+        lock = {
+            height = self.lastHeight.source,
+            heading = self.lastHeading.source,
+        },
+    }
+end
+
 function Manual:terms()
-    return self:snapshot()
+    local terms = self:snapshot()
+
+    terms.control = targetControl(self)
+
+    return terms
 end
 
 function Manual:target(input)
-    local heading = self.locks:headingTarget()
+    local terms = targetControl(self)
+    local heading = terms.heading
     local target = common.base({
         source = input.source,
-        vertical = self.locks:verticalTarget(),
+        vertical = terms.height,
         heading = heading,
     })
 
@@ -143,10 +220,6 @@ function Manual:target(input)
     end
 
     return target
-end
-
-function Manual:axisTerms()
-    return self.locks:terms()
 end
 
 return manual

@@ -15,14 +15,13 @@ function cruise.new()
         velocity = nil,
         height = nil,
         heading = nil,
-        lastAxes = nil,
     }, Cruise)
 end
 
-local function axisTerms(self, state)
+local function targetControl(self, state)
     return {
         height = {
-            target = self.height,
+            height = self.height,
             speed = 0.0,
             active = true,
             pending = false,
@@ -48,14 +47,12 @@ function Cruise:enter(ctx)
     self.velocity = horizontalVector(ctx.state.world.velocity)
     self.height = ctx.state.body.pose.height
     self.heading = mathx.wrapPi(ctx.state.navigation.heading.angle)
-    self.lastAxes = axisTerms(self, ctx.state)
 end
 
 function Cruise:exit()
     self.velocity = nil
     self.height = nil
     self.heading = nil
-    self.lastAxes = nil
 end
 
 function Cruise:update(ctx)
@@ -64,8 +61,6 @@ function Cruise:update(ctx)
             active = self.velocity ~= nil,
         }
     end
-
-    self.lastAxes = axisTerms(self, ctx.state)
 
     return {
         active = self.velocity ~= nil,
@@ -84,36 +79,25 @@ function Cruise:snapshot()
     }
 end
 
-function Cruise:terms()
-    return self:snapshot()
+function Cruise:terms(state)
+    local terms = self:snapshot()
+
+    if terms ~= nil and state ~= nil then
+        terms.control = targetControl(self, state)
+    end
+
+    return terms
 end
 
 function Cruise:target(input)
     local target = common.base(input)
+    local terms = targetControl(self, input.state)
 
     target.world.velocity = horizontalVector(self.velocity)
-    target.vertical = {
-        height = self.height,
-        speed = 0.0,
-        active = true,
-        pending = false,
-        error = self.height - input.state.body.pose.height,
-        source = "cruise",
-    }
-    target.heading = {
-        angle = self.heading,
-        rate = 0.0,
-        active = true,
-        pending = false,
-        error = mathx.wrapPi(self.heading - input.state.navigation.heading.angle),
-        source = "cruise",
-    }
+    target.vertical = terms.height
+    target.heading = terms.heading
 
     return target
-end
-
-function Cruise:axisTerms()
-    return self.lastAxes
 end
 
 return cruise

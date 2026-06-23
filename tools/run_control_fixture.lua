@@ -290,6 +290,9 @@ local function runCurrentBaselineCase(case)
         machines.mode.name = "manual"
         mode = {
             name = "manual",
+            reset = {
+                horizontal = false,
+            },
             transition = {
                 navigationExited = false,
             },
@@ -316,7 +319,7 @@ local function runCurrentBaselineCase(case)
     local command = machines.controller:update({
         state = state,
         target = target,
-        reset = modeTerms.reset,
+        reset = mode.reset,
         dt = config.control.loop.dt,
     })
     local controlTerms = machines.controller:terms()
@@ -330,23 +333,27 @@ local function runCurrentBaselineCase(case)
     end
 
     if case.name == "cruise capture" then
+        local terms = modeTerms.mode.terms
+
         return {
             mode = mode.name,
             cruise = {
-                x = modeTerms.cruise.velocity.x,
-                z = modeTerms.cruise.velocity.z,
-                height = modeTerms.cruise.height,
-                heading = modeTerms.cruise.heading,
+                x = terms.velocity.x,
+                z = terms.velocity.z,
+                height = terms.height,
+                heading = terms.heading,
             },
             target = controlTerms.horizontal.output.attitude,
         }
     end
 
     if case.name == "navigation active target" then
+        local terms = modeTerms.mode.terms
+
         return {
             mode = mode.name,
-            active = modeTerms.navigation.active,
-            phase = modeTerms.navigation.phase,
+            active = terms.active,
+            phase = terms.phase,
             target = {
                 x = target.world.position.x,
                 z = target.world.position.z,
@@ -495,7 +502,8 @@ local function checkModeUpdateExposesStatusOnly()
     assert(result[oldPosition] == nil, "mode update should not expose hold target internals")
     assert(result[oldCruise] == nil, "mode update should not expose cruise target internals")
     assert(result.navigation == nil, "mode update should not expose navigation telemetry")
-    assert(result.reset == nil, "mode update should not expose controller reset")
+    assert(type(result.reset) == "table", "mode update should expose controller reset")
+    assert(type(result.reset.horizontal) == "boolean", "mode reset should expose horizontal reset")
 end
 
 local function checkModeTermsSnapshotsAreCopied()
@@ -512,23 +520,23 @@ local function checkModeTermsSnapshotsAreCopied()
         dt = config.control.loop.dt,
     })
 
-    local first = machine:terms()
+    local first = machine:terms().mode.terms
 
-    first.manual.roll = 99.0
-    first.position_hold.x = 99.0
-    first.cruise.velocity.x = 99.0
+    first.velocity.x = 99.0
 
     local second = machine:terms()
 
-    assert(second.manual.roll ~= 99.0, "manual terms should be copied")
-    assert(second.position_hold.x ~= 99.0, "position_hold terms should be copied")
-    assert(second.cruise.velocity.x ~= 99.0, "cruise terms should be copied")
+    assert(second.mode.name == "cruise", "mode terms should describe current mode")
+    assert(second.mode.terms.velocity.x ~= 99.0, "current mode terms should be copied")
+    assert(second.manual == nil, "mode terms should not expose inactive manual state")
+    assert(second.position_hold == nil, "mode terms should not expose inactive position_hold state")
+    assert(second.cruise == nil, "mode terms should not expose inactive cruise state")
 end
 
 local function checkModeTargetNavigationOverride()
     local machine = mode_state.new(canonicalState(), config)
     machine.name = "navigation"
-    machine.lastNavigation = {
+    machine.lastNavigationResult = {
         active = true,
         phase = "climb",
         target = {
@@ -597,7 +605,7 @@ local function checkNavigationHeadingWrap()
 
     state.navigation.heading.angle = 3.0
     machine.name = "navigation"
-    machine.lastNavigation = {
+    machine.lastNavigationResult = {
         active = true,
         phase = "turn",
         target = {
@@ -662,7 +670,7 @@ local function checkManualEnterCapturesCurrentPose()
         dt = 0.0,
     })
 
-    local terms = machine:terms().manual
+    local terms = machine:terms().mode.terms
 
     assertClose("manual enter roll capture clamp", terms.roll, config.control.attitude.limit.roll)
     assertClose("manual enter pitch capture", terms.pitch, -0.20)
@@ -683,7 +691,7 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
     machines.mode.modes.manual.pitch = 0.30
     machines.mode.name = "manual"
 
-    machines.mode:update({
+    local modeStatus = machines.mode:update({
         input = input,
         state = state,
         navigationCommand = nil,
@@ -749,10 +757,11 @@ local function checkActiveNavigationKeepsTarget()
     })
 
     assert(nextMode.name == "navigation", "active navigation should remain selected without a new command")
-    local terms = machine:terms()
-    assert(terms.navigation.active == true, "navigation should remain active without a new command")
-    assert(type(terms.navigation.target) == "table", "active navigation should keep a target every tick")
-    assert(type(terms.navigation.target.position) == "table", "active navigation target should include position")
+    local terms = machine:terms().mode.terms
+    assert(terms.active == true, "navigation should remain active without a new command")
+    assert(type(terms.target) == "table", "active navigation should keep a target every tick")
+    assert(type(terms.target.position) == "table", "active navigation target should include position")
+    assert(terms.waypoints == nil, "navigation mode terms should not expose waypoint catalog")
 end
 
 local function checkActiveNavigationActivateKeepsTarget()
@@ -784,10 +793,10 @@ local function checkActiveNavigationActivateKeepsTarget()
     })
 
     assert(activated.name == "navigation", "active activated navigation should remain active")
-    local terms = machine:terms()
-    assert(terms.navigation.active == true, "active activated navigation should remain active")
-    assert(type(terms.navigation.target) == "table", "active activated navigation should keep a target")
-    assert(type(terms.navigation.target.position) == "table", "active activated navigation target should include position")
+    local terms = machine:terms().mode.terms
+    assert(terms.active == true, "active activated navigation should remain active")
+    assert(type(terms.target) == "table", "active activated navigation should keep a target")
+    assert(type(terms.target.position) == "table", "active activated navigation target should include position")
 end
 
 local function checkActiveNavigationUpdateReceivesDt()
@@ -950,7 +959,7 @@ local function checkCruiseToggleOneShot()
         navigationCommand = nil,
         dt = config.control.loop.dt,
     })
-    local first = machine:terms()
+    local first = machine:terms().mode.terms
 
     state.world.velocity = vector.new(9.0, 0.0, 9.0)
 
@@ -960,14 +969,14 @@ local function checkCruiseToggleOneShot()
         navigationCommand = nil,
         dt = config.control.loop.dt,
     })
-    local second = machine:terms()
+    local second = machine:terms().mode.terms
 
-    assert(first.cruise.velocity.x == 3.0, "first cruise toggle should capture velocity")
-    assert(first.cruise.velocity.y == 0.0, "cruise toggle should capture horizontal velocity")
-    assert(type(first.cruise.velocity.length) == "function", "cruise velocity should be runtime vector")
-    assert(first.cruise.height == 80.0, "cruise should freeze entry height")
-    assert(first.cruise.heading == 0.0, "cruise should freeze entry heading")
-    assert(second.cruise.velocity.x == 3.0, "held cruise toggle should not recapture velocity")
+    assert(first.velocity.x == 3.0, "first cruise toggle should capture velocity")
+    assert(first.velocity.y == 0.0, "cruise toggle should capture horizontal velocity")
+    assert(type(first.velocity.length) == "function", "cruise velocity should be runtime vector")
+    assert(first.height == 80.0, "cruise should freeze entry height")
+    assert(first.heading == 0.0, "cruise should freeze entry heading")
+    assert(second.velocity.x == 3.0, "held cruise toggle should not recapture velocity")
 end
 
 local function checkCruiseRequiresManualMode()
@@ -986,7 +995,7 @@ local function checkCruiseRequiresManualMode()
     })
 
     assert(mode.name == "position_hold", "cruise toggle outside manual should stay in position_hold")
-    assert(machine:terms().cruise == nil, "cruise toggle outside manual should not capture velocity")
+    assert(machine:terms().mode.name == "position_hold", "terms should describe current mode only")
 end
 
 local function checkCruiseFreezesAxes()
@@ -1052,7 +1061,8 @@ local function checkNavigationCommandIgnoresManualOverride()
     })
 
     assert(mode.name == "manual", "manual override should win over navigation command")
-    assert(machine:terms().navigation.active == false, "manual override should not activate navigation")
+    local terms = machine:terms()
+    assert(terms.navigation == nil, "manual override should not expose navigation terms")
 end
 
 local function checkClimbCancelsNavigationToHold()
@@ -1089,7 +1099,8 @@ local function checkClimbCancelsNavigationToHold()
 
     assert(mode.name == "position_hold", "climb override should cancel navigation into position_hold")
     assert(mode.transition.navigationExited == true, "climb override should report navigation exit")
-    assert(machine:terms().navigation.active == false, "climb override should leave navigation inactive")
+    local terms = machine:terms()
+    assert(terms.navigation == nil, "climb override should leave navigation inactive")
 end
 
 local function checkNavigationManualOverrideDestinations()
@@ -1198,7 +1209,7 @@ local function checkNavigationExitRelockTarget()
     assert(target.vertical.source == "locked", "navigation exit height target should use lock source")
     assert(target.vertical.error == 0.0, "navigation exit height target should start with zero error")
     assert(math.abs(target.heading.angle - 1.25) < 1.0e-9, "navigation exit should relock target heading to current heading")
-    assert(target.heading.source == "locked", "navigation exit heading target should use lock source")
+    assert(target.heading.source == "position_hold", "navigation exit heading target should use position_hold source")
     assert(math.abs(target.heading.error) < 1.0e-9, "navigation exit heading target should start with zero error")
 end
 
@@ -1230,7 +1241,18 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
         },
         navigation = {
             active = false,
+            waypoints = {
+                {
+                    id = "runtime_should_not_supply_catalog",
+                    position = {
+                        x = 0.0,
+                        y = 0.0,
+                        z = 0.0,
+                    },
+                },
+            },
         },
+        navigationConfig = config.navigation,
         command = {
             collective = 0.0,
             roll = 0.0,
@@ -1242,6 +1264,7 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
     })
 
     assert(telemetry.input.event.cruiseToggle == true, "telemetry should preserve consumed cruise event")
+    assert(telemetry.navigation.waypoints[1].id == "home", "telemetry should expose waypoint catalog from config")
     assert(type(telemetry.state.body.angular.velocity) == "table", "telemetry should expose angular velocity")
     assert(type(telemetry.control) == "table", "telemetry should expose control terms")
     assert(telemetry["out" .. "put"] == nil, "old output diagnostics should not be exposed")
@@ -1694,7 +1717,7 @@ local function checkControllerTerms()
         heading = 0.0,
     })
     machines.mode.name = "manual"
-    machines.mode:update({
+    local modeStatus = machines.mode:update({
         input = input,
         state = state,
         navigationCommand = nil,
@@ -1705,11 +1728,10 @@ local function checkControllerTerms()
         state = state,
         dt = config.control.loop.dt,
     })
-    local modeTerms = machines.mode:terms()
     local command, oldDetails = machines.controller:update({
         state = state,
         target = target,
-        reset = modeTerms.reset,
+        reset = modeStatus.reset,
         dt = config.control.loop.dt,
     })
     local terms = machines.controller:terms()
@@ -1829,7 +1851,7 @@ local function checkAttitudeExternalFeedforward()
         heading = 0.0,
     })
     machines.mode.name = "manual"
-    machines.mode:update({
+    local modeStatus = machines.mode:update({
         input = input,
         state = state,
         navigationCommand = nil,
@@ -1851,7 +1873,7 @@ local function checkAttitudeExternalFeedforward()
     machines.controller:update({
         state = state,
         target = target,
-        reset = machines.mode:terms().reset,
+        reset = modeStatus.reset,
         dt = config.control.loop.dt,
     })
 

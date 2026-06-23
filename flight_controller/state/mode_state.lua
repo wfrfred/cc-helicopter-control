@@ -44,7 +44,7 @@ function mode_state.new(initialState, config)
         lastTransition = {
             navigationExited = false,
         },
-        lastNavigation = nil,
+        lastNavigationResult = nil,
         lastManualLateral = false,
         lastState = initialState,
     }, State)
@@ -66,10 +66,10 @@ local function manualOverrideActive(input)
     return manualLateralActive(input) or input.manual.velocity.up ~= 0.0
 end
 
-local function holdAxes(state, source)
+local function fixedControlTerms(state, source)
     return {
         height = {
-            target = state.body.pose.height,
+            height = state.body.pose.height,
             speed = 0.0,
             active = true,
             pending = false,
@@ -191,11 +191,14 @@ function State:update(input)
     end
 
     self.lastTransition.navigationExited = wasNavigation and self.name ~= modes.navigation
-    self.lastNavigation = self.modes.navigation:terms()
+    self.lastNavigationResult = statuses[modes.navigation].navigation
     self.lastManualLateral = lateralActive
 
     return {
         name = self.name,
+        reset = {
+            horizontal = self.lastReset.horizontal,
+        },
         transition = self.lastTransition,
     }
 end
@@ -205,7 +208,9 @@ function State:target(input)
         source = self.name,
         input = input.input,
         state = input.state,
-        navigation = self.lastNavigation or self.modes.navigation:terms(),
+        navigation = self.lastNavigationResult or {
+            active = false,
+        },
         dt = input.dt,
     }
 
@@ -214,25 +219,24 @@ end
 
 function State:terms()
     local mode = activeMode(self)
-    local axisTerms = mode.axisTerms and mode:axisTerms() or holdAxes(self.lastState, self.name)
+    local activeTerms = mode:terms(self.lastState) or {}
+    local targetControl = activeTerms.control
+        or fixedControlTerms(self.lastState, self.name)
+
+    activeTerms.control = nil
 
     return {
         mode = {
             name = self.name,
-        },
-        reset = {
-            horizontal = self.lastReset.horizontal,
+            terms = activeTerms,
         },
         transition = {
             navigationExited = self.lastTransition.navigationExited,
         },
-        manual = self.modes.manual:terms(),
-        position_hold = self.modes.position_hold:terms(),
-        cruise = self.modes.cruise:terms(),
-        navigation = self.lastNavigation or self.modes.navigation:terms(),
-        height = axisTerms.height,
-        heading = axisTerms.heading,
-        lock = axisTerms.lock,
+        navigation = self.name == modes.navigation and activeTerms or nil,
+        height = targetControl.height,
+        heading = targetControl.heading,
+        lock = targetControl.lock,
     }
 end
 

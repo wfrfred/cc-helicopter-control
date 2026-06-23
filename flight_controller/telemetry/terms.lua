@@ -43,6 +43,45 @@ local function telemetryState(state)
     }
 end
 
+local function copyTable(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local out = {}
+
+    for key, child in pairs(value) do
+        out[key] = copyTable(child)
+    end
+
+    return out
+end
+
+local function waypointCatalog(navigationConfig)
+    local out = {}
+    local waypoints = navigationConfig and navigationConfig.waypoints or {}
+
+    for index, waypoint in ipairs(waypoints) do
+        out[index] = {
+            id = waypoint.id,
+            name = waypoint.name or waypoint.id,
+            position = copyTable(waypoint.position),
+        }
+    end
+
+    return out
+end
+
+local function navigationView(runtime, navigationConfig)
+    local view = copyTable(runtime or {})
+
+    view.active = view.active == true
+    view.phase = view.phase or (view.active and "active" or "idle")
+    view.waypoints = waypointCatalog(navigationConfig)
+
+    return view
+end
+
 function terms.running(input)
     return {
         status = "running",
@@ -70,7 +109,7 @@ function terms.running(input)
         heading = input.heading,
         state = telemetryState(input.state),
         control = input.control,
-        navigation = input.navigation,
+        navigation = navigationView(input.navigation, input.navigationConfig),
         command = input.command,
         rotor = input.rotor,
     }

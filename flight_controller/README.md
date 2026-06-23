@@ -127,22 +127,43 @@ flight_controller/
 
 ## 控制器
 
-控制器按层拆分：
+控制器更接近两条外环加一个姿态内环的结构。水平控制输出姿态需求，垂直控制输出总距，姿态控制再把姿态目标变成三轴力矩命令，最后由 allocation 做通道分配和限幅。
 
 ```text
-mode target
-    |
-    v
-horizontal + vertical
-    |
-    v
-attitude
-    |
-    v
-allocation
-    |
-    v
-actuator command
+ horizontal target      current position/velocity
+        |                         |
+        v                         v
+   +----------+   pos/vel error   +------------------+
+   | position | ----------------> | horizontal ctrl  | ---- roll/pitch target
+   | velocity |                   +------------------+
+   +----------+                             |
+                                            v
+ vertical target        current height/speed      heading target
+        |                         |                      |
+        v                         v                      v
+   +----------+   height/speed    +------------------+   +----------------+
+   | height   | --------------->  | vertical ctrl    |   | attitude target|
+   | speed    |                   +------------------+   +----------------+
+   +----------+                            |                     |
+                                           v                     v
+                                    collective command     target orientation
+                                                                 |
+                                                                 v
+ current orientation/rates --------------------------------> +------------+
+                                                            | attitude   |
+ external feedforward ------------------------------------> | rate ctrl  |
+                                                            +------------+
+                                                                  |
+                                                                  v
+                                                            raw commands
+                                                                  |
+                                                                  v
+                                                            +------------+
+                                                            | allocation |
+                                                            +------------+
+                                                                  |
+                                                                  v
+                                                           actuator command
 ```
 
 `horizontal` 负责水平位置和速度误差，输出姿态需求。`vertical` 负责高度和垂直速度，输出 collective。`attitude` 负责姿态误差、角速度目标和角速度 PID。`allocation` 负责姿态通道分配、限幅和最终命令。

@@ -2,8 +2,6 @@ local actuator_protocol = require("protocol.actuator")
 local config = require("config")
 local Controller = require("control.controller")
 local flight_state = require("state.flight_state")
-local heading_lock = require("state.heading_lock")
-local height_lock = require("state.height_lock")
 local mixer_module = require("hardware.mixer")
 local mode_state = require("state.mode_state")
 local rotor_phase = require("hardware.rotor_phase")
@@ -79,18 +77,6 @@ local function makeInitialMachines(initialState)
     return {
         flight = flight_state.new(),
         mode = mode_state.new(initialState, config),
-        height = height_lock.new({
-            initial_target = initialState.body.pose.height,
-            target_rate = config.control.vertical.target_rate,
-            rate_deadband = config.control.vertical.lock.speed_deadband,
-            relock_timeout = config.control.vertical.lock.relock_timeout,
-        }),
-        heading = heading_lock.new({
-            initial_heading = initialState.navigation.heading.angle,
-            target_rate = config.control.heading.target_rate,
-            rate_deadband = config.control.heading.lock.rate_deadband,
-            relock_timeout = config.control.heading.lock.relock_timeout,
-        }),
         controller = Controller.new(config.control),
         mixer = mixer_module.new(config.hardware.rotor, config.calibration.rotor),
         phase = rotor_phase.new(config.hardware.rotor),
@@ -129,41 +115,18 @@ function control_task.run(shared)
 
             local navigationCommand = takeNavigationCommand(shared)
             local inputEvent = inputEventSnapshot(input)
-            local mode = machines.mode:update({
+            machines.mode:update({
                 input = input,
                 state = state,
                 navigationCommand = navigationCommand,
                 dt = dt,
             })
-            local navigationExited = mode.transition.navigationExited
 
             consumeCruiseToggle(shared, input)
-            local height = machines.height:update({
-                climb = input.manual.velocity.up,
-                height = state.body.pose.height,
-                verticalSpeed = state.world.velocity.y,
-                dt = dt,
-            })
-            local heading = machines.heading:update({
-                headingRateInput = input.manual.heading.rate,
-                heading = state.navigation.heading.angle,
-                headingRate = state.navigation.heading.rate,
-                dt = dt,
-            })
-
-            if navigationExited and input.manual.velocity.up == 0.0 then
-                height = machines.height:lockedTarget(state.body.pose.height)
-            end
-
-            if navigationExited and input.manual.heading.rate == 0.0 then
-                heading = machines.heading:lockedTarget(state.navigation.heading.angle)
-            end
 
             local target = machines.mode:target({
                 input = input,
                 state = state,
-                height = height,
-                heading = heading,
                 dt = dt,
             })
             local modeTerms = machines.mode:terms()
@@ -199,8 +162,8 @@ function control_task.run(shared)
                     flight = flight,
                     mode = modeTerms.mode,
                     navigation = modeTerms.navigation,
-                    height = height,
-                    heading = heading,
+                    height = modeTerms.height,
+                    heading = modeTerms.heading,
                     command = command,
                     control = controlTerms,
                     rotor = rotorOutput.blades,

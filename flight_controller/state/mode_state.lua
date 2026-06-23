@@ -1,5 +1,4 @@
 local cruise_mode = require("modes.cruise")
-local mode_common = require("modes.common")
 local manual_mode = require("modes.manual")
 local navigation_mode = require("modes.navigation")
 local position_hold_mode = require("modes.position_hold")
@@ -34,8 +33,8 @@ function mode_state.new(initialState, config)
     return setmetatable({
         name = modes.position_hold,
         modes = {
-            manual = manual_mode.new(config.control),
-            position_hold = position_hold_mode.new(initialState),
+            manual = manual_mode.new(initialState, config.control),
+            position_hold = position_hold_mode.new(initialState, config.control),
             cruise = cruise_mode.new(),
             navigation = navigation_mode.new(config.navigation),
         },
@@ -47,6 +46,7 @@ function mode_state.new(initialState, config)
         },
         lastNavigation = nil,
         lastManualLateral = false,
+        lastState = initialState,
     }, State)
 end
 
@@ -66,6 +66,31 @@ local function manualOverrideActive(input)
     return manualLateralActive(input) or input.manual.velocity.up ~= 0.0
 end
 
+local function holdAxes(state, source)
+    return {
+        height = {
+            target = state.body.pose.height,
+            speed = 0.0,
+            active = true,
+            pending = false,
+            error = 0.0,
+            source = source,
+        },
+        heading = {
+            angle = state.navigation.heading.angle,
+            rate = 0.0,
+            active = true,
+            pending = false,
+            error = 0.0,
+            source = source,
+        },
+        lock = {
+            height = source,
+            heading = source,
+        },
+    }
+end
+
 local function requestContext(input)
     return {
         input = input.input,
@@ -74,6 +99,7 @@ local function requestContext(input)
         command = input.navigationCommand,
         reason = input.reason,
         current = nil,
+        navigationExited = false,
     }
 end
 
@@ -84,6 +110,7 @@ local function enter(self, name, ctx)
         dt = ctx.dt,
         command = ctx.command,
         reason = ctx.reason or name,
+        from = self.name,
     }
 
     for _, other in ipairs(exclusive[name] or {}) do
@@ -120,6 +147,7 @@ function State:update(input)
     self.lastTransition = {
         navigationExited = false,
     }
+    self.lastState = input.state
 
     if self.name == modes.navigation and overrideActive then
         if lateralActive then
@@ -157,6 +185,9 @@ function State:update(input)
     if not status.active and self.name ~= modes.position_hold then
         ctx.reason = modes.position_hold
         status = enter(self, modes.position_hold, ctx)
+        ctx.current = self.name
+        ctx.navigationExited = wasNavigation
+        status = self.modes[self.name]:update(ctx) or status
     end
 
     self.lastTransition.navigationExited = wasNavigation and self.name ~= modes.navigation
@@ -174,8 +205,6 @@ function State:target(input)
         source = self.name,
         input = input.input,
         state = input.state,
-        vertical = mode_common.verticalFromLock(input.height),
-        heading = mode_common.headingFromLock(input.heading),
         navigation = self.lastNavigation or self.modes.navigation:terms(),
         dt = input.dt,
     }
@@ -184,6 +213,9 @@ function State:target(input)
 end
 
 function State:terms()
+    local mode = activeMode(self)
+    local axisTerms = mode.axisTerms and mode:axisTerms() or holdAxes(self.lastState, self.name)
+
     return {
         mode = {
             name = self.name,
@@ -198,6 +230,9 @@ function State:terms()
         position_hold = self.modes.position_hold:terms(),
         cruise = self.modes.cruise:terms(),
         navigation = self.lastNavigation or self.modes.navigation:terms(),
+        height = axisTerms.height,
+        heading = axisTerms.heading,
+        lock = axisTerms.lock,
     }
 end
 

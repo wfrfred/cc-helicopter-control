@@ -144,6 +144,8 @@ local cases = {
             cruise = {
                 x = 3.0,
                 z = -1.0,
+                height = 80.0,
+                heading = 0.0,
             },
             target = {
                 roll = 0.052500000000000005,

@@ -1,5 +1,6 @@
 local common = require("modes.common")
 local attitude_math = require("lib.attitude_math")
+local axis_locks = require("modes.axis_locks")
 local mathx = require("lib.mathx")
 
 local manual = {}
@@ -28,9 +29,10 @@ function manual.active(input)
         or input.manual.heading.rate ~= 0.0
 end
 
-function manual.new(control)
+function manual.new(initialState, control)
     return setmetatable({
         control = control,
+        locks = axis_locks.new(initialState, control),
         roll = control.attitude.home.roll,
         pitch = control.attitude.home.pitch,
     }, Manual)
@@ -52,6 +54,7 @@ function Manual:enter(ctx)
         -control.attitude.limit.pitch,
         control.attitude.limit.pitch
     )
+    self.locks:enter(ctx)
 end
 
 function Manual:exit() end
@@ -64,6 +67,8 @@ function Manual:update(ctx)
             active = manual.active(input),
         }
     end
+
+    self.locks:update(ctx)
 
     local dt = ctx.dt
     local control = self.control
@@ -117,22 +122,31 @@ function Manual:terms()
 end
 
 function Manual:target(input)
-    local target = common.base(input)
+    local heading = self.locks:headingTarget()
+    local target = common.base({
+        source = input.source,
+        vertical = self.locks:verticalTarget(),
+        heading = heading,
+    })
 
     target.attitude.roll = self.roll
     target.attitude.pitch = self.pitch
 
-    if input.heading.source == "manual" then
+    if heading.source == "manual" then
         target.attitude.feedforward.angle = attitude_math.bodyRatesFromEulerRates(
             input.state.body.pose.roll,
             input.state.body.pose.pitch,
             {
-                heading = input.heading.rate,
+                heading = heading.rate,
             }
         )
     end
 
     return target
+end
+
+function Manual:axisTerms()
+    return self.locks:terms()
 end
 
 return manual

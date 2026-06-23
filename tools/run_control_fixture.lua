@@ -6,8 +6,6 @@ local attitude_math = require("lib.attitude_math")
 local config = require("config")
 local Controller = require("control.controller")
 local flight_state = require("state.flight_state")
-local heading_lock = require("state.heading_lock")
-local height_lock = require("state.height_lock")
 local input_protocol = require("protocol.input")
 local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
@@ -228,18 +226,6 @@ end
 local function makeRuntimeMachines(state)
     return {
         mode = mode_state.new(state, config),
-        height = height_lock.new({
-            initial_target = state.body.pose.height,
-            target_rate = config.control.vertical.target_rate,
-            rate_deadband = config.control.vertical.lock.speed_deadband,
-            relock_timeout = config.control.vertical.lock.relock_timeout,
-        }),
-        heading = heading_lock.new({
-            initial_heading = state.navigation.heading.angle,
-            target_rate = config.control.heading.target_rate,
-            rate_deadband = config.control.heading.lock.rate_deadband,
-            relock_timeout = config.control.heading.lock.relock_timeout,
-        }),
         controller = Controller.new(config.control),
     }
 end
@@ -248,8 +234,6 @@ local function modeTarget(machine, request)
     return machine:target({
         input = request.input,
         state = request.state,
-        height = request.height,
-        heading = request.heading,
         dt = request.dt,
     })
 end
@@ -323,23 +307,9 @@ local function runCurrentBaselineCase(case)
         })
     end
 
-    local height = machines.height:update({
-        climb = input.manual.velocity.up,
-        height = state.body.pose.height,
-        verticalSpeed = state.world.velocity.y,
-        dt = config.control.loop.dt,
-    })
-    local heading = machines.heading:update({
-        headingRateInput = input.manual.heading.rate,
-        heading = state.navigation.heading.angle,
-        headingRate = state.navigation.heading.rate,
-        dt = config.control.loop.dt,
-    })
     local target = modeTarget(machines.mode, {
         input = input,
         state = state,
-        height = height,
-        heading = heading,
         dt = config.control.loop.dt,
     })
     local modeTerms = machines.mode:terms()
@@ -362,7 +332,12 @@ local function runCurrentBaselineCase(case)
     if case.name == "cruise capture" then
         return {
             mode = mode.name,
-            cruise = modeTerms.cruise,
+            cruise = {
+                x = modeTerms.cruise.velocity.x,
+                z = modeTerms.cruise.velocity.z,
+                height = modeTerms.cruise.height,
+                heading = modeTerms.cruise.heading,
+            },
             target = controlTerms.horizontal.output.attitude,
         }
     end
@@ -529,13 +504,13 @@ local function checkModeTermsSnapshotsAreCopied()
 
     first.manual.roll = 99.0
     first.position_hold.x = 99.0
-    first.cruise.x = 99.0
+    first.cruise.velocity.x = 99.0
 
     local second = machine:terms()
 
     assert(second.manual.roll ~= 99.0, "manual terms should be copied")
     assert(second.position_hold.x ~= 99.0, "position_hold terms should be copied")
-    assert(second.cruise.x ~= 99.0, "cruise terms should be copied")
+    assert(second.cruise.velocity.x ~= 99.0, "cruise terms should be copied")
 end
 
 local function checkModeTargetNavigationOverride()
@@ -557,22 +532,6 @@ local function checkModeTargetNavigationOverride()
     local target = modeTarget(machine, {
         input = input_protocol.defaultInput(),
         state = canonicalState(),
-        height = {
-            target = 80.0,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = "locked",
-        },
-        heading = {
-            angle = 0.0,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = "locked",
-        },
         dt = config.control.loop.dt,
     })
 
@@ -585,6 +544,39 @@ local function checkModeTargetNavigationOverride()
     assert(target.vertical.source == "navigation_climb", "navigation height source should include phase")
     assert(target.heading.angle == 0.75, "navigation should override heading")
     assert(target.heading.source == "navigation_climb", "navigation heading source should include phase")
+end
+
+local function checkModeTargetIsPure()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = canonicalInputFromAxes({
+        roll = 1.0,
+        pitch = 0.0,
+        climb = 0.0,
+        heading = 0.0,
+    })
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    local before = machine:terms()
+
+    modeTarget(machine, {
+        input = input,
+        state = state,
+        dt = config.control.loop.dt,
+    })
+    modeTarget(machine, {
+        input = input,
+        state = state,
+        dt = config.control.loop.dt,
+    })
+
+    assertEquivalent("mode target purity", before, machine:terms())
 end
 
 local function checkNavigationHeadingWrap()
@@ -608,22 +600,6 @@ local function checkNavigationHeadingWrap()
     local target = modeTarget(machine, {
         input = input_protocol.defaultInput(),
         state = state,
-        height = {
-            target = 80.0,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = "locked",
-        },
-        heading = {
-            angle = 3.0,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = "locked",
-        },
         dt = config.control.loop.dt,
     })
 
@@ -695,23 +671,15 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
     machines.mode.modes.manual.pitch = 0.30
     machines.mode.name = "manual"
 
-    local height = machines.height:update({
-        climb = input.manual.velocity.up,
-        height = state.body.pose.height,
-        verticalSpeed = state.world.velocity.y,
-        dt = config.control.loop.dt,
-    })
-    local heading = machines.heading:update({
-        headingRateInput = input.manual.heading.rate,
-        heading = state.navigation.heading.angle,
-        headingRate = state.navigation.heading.rate,
+    machines.mode:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
         dt = config.control.loop.dt,
     })
     local target = modeTarget(machines.mode, {
         input = input,
         state = state,
-        height = height,
-        heading = heading,
         dt = config.control.loop.dt,
     })
     local expected = attitude_math.bodyRatesFromEulerRates(
@@ -982,10 +950,12 @@ local function checkCruiseToggleOneShot()
     })
     local second = machine:terms()
 
-    assert(first.cruise.x == 3.0, "first cruise toggle should capture velocity")
-    assert(first.cruise.y == 0.0, "cruise toggle should capture horizontal velocity")
-    assert(type(first.cruise.length) == "function", "cruise velocity should be runtime vector")
-    assert(second.cruise.x == 3.0, "held cruise toggle should not recapture velocity")
+    assert(first.cruise.velocity.x == 3.0, "first cruise toggle should capture velocity")
+    assert(first.cruise.velocity.y == 0.0, "cruise toggle should capture horizontal velocity")
+    assert(type(first.cruise.velocity.length) == "function", "cruise velocity should be runtime vector")
+    assert(first.cruise.height == 80.0, "cruise should freeze entry height")
+    assert(first.cruise.heading == 0.0, "cruise should freeze entry heading")
+    assert(second.cruise.velocity.x == 3.0, "held cruise toggle should not recapture velocity")
 end
 
 local function checkCruiseRequiresManualMode()
@@ -1005,6 +975,48 @@ local function checkCruiseRequiresManualMode()
 
     assert(mode.name == "position_hold", "cruise toggle outside manual should stay in position_hold")
     assert(machine:terms().cruise == nil, "cruise toggle outside manual should not capture velocity")
+end
+
+local function checkCruiseFreezesAxes()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
+
+    state.world.velocity = vector.new(3.0, 0.0, -1.0)
+    machine.name = "manual"
+    input.event.cruiseToggle = true
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    input = input_protocol.defaultInput()
+    state.world.velocity = vector.new(9.0, 0.0, 9.0)
+    state.body.pose.height = 90.0
+    state.navigation.heading.angle = 1.0
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    local target = modeTarget(machine, {
+        input = input,
+        state = state,
+        dt = config.control.loop.dt,
+    })
+
+    assert(target.world.velocity.x == 3.0, "cruise should keep entry velocity")
+    assert(target.world.velocity.z == -1.0, "cruise should keep entry velocity z")
+    assert(target.vertical.height == 80.0, "cruise should keep entry height")
+    assert(target.vertical.error == -10.0, "cruise height error should use current height")
+    assert(target.heading.angle == 0.0, "cruise should keep entry heading")
+    assert(math.abs(target.heading.error + 1.0) < 1.0e-9, "cruise heading error should use current heading")
 end
 
 local function checkNavigationCommandIgnoresManualOverride()
@@ -1068,57 +1080,69 @@ local function checkClimbCancelsNavigationToHold()
     assert(machine:terms().navigation.active == false, "climb override should leave navigation inactive")
 end
 
-local function checkNavigationExitRelockTargets()
-    local height = height_lock.new({
-        initial_target = 80.0,
-        target_rate = config.control.vertical.target_rate,
-        rate_deadband = config.control.vertical.lock.speed_deadband,
-    })
-    local heading = heading_lock.new({
-        initial_heading = 0.0,
-        target_rate = config.control.heading.target_rate,
-        rate_deadband = config.control.heading.lock.rate_deadband,
-    })
+local function checkNavigationManualOverrideDestinations()
+    local state = canonicalState()
+    local machine = mode_state.new(state, config)
+    local input = input_protocol.defaultInput()
 
-    height:update({
-        climb = 0.0,
-        height = 80.0,
-        verticalSpeed = 0.0,
-        dt = config.control.loop.dt,
-    })
-    heading:update({
-        headingRateInput = 0.0,
-        heading = 0.0,
-        headingRate = 0.0,
+    state.world.position = vector.new(-213.0, 90.0, 304.0)
+    state.body.pose.height = 90.0
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
         dt = config.control.loop.dt,
     })
 
-    local heightTarget = height:lockedTarget(91.0)
-    local headingTarget = heading:lockedTarget(1.25)
+    local headingMode = machine:update({
+        input = canonicalInputFromAxes({
+            roll = 0.0,
+            pitch = 0.0,
+            climb = 0.0,
+            heading = 1.0,
+        }),
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
 
-    assert(heightTarget.target == 91.0, "navigation exit should recapture current height")
-    assert(heightTarget.active == true, "navigation exit height target should be locked")
-    assert(heightTarget.error == 0.0, "navigation exit height relock should have zero initial error")
-    assert(math.abs(headingTarget.angle - 1.25) < 1.0e-9, "navigation exit should recapture heading")
-    assert(headingTarget.active == true, "navigation exit heading target should be locked")
-    assert(math.abs(headingTarget.error) < 1.0e-9, "navigation exit heading relock should have zero initial error")
+    assert(headingMode.name == "manual", "heading override should cancel navigation into manual")
+    assert(headingMode.transition.navigationExited == true, "heading override should report navigation exit")
+
+    machine = mode_state.new(state, config)
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = config.control.loop.dt,
+    })
+
+    local lateralMode = machine:update({
+        input = canonicalInputFromAxes({
+            roll = 1.0,
+            pitch = 0.0,
+            climb = 0.0,
+            heading = 0.0,
+        }),
+        state = state,
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    assert(lateralMode.name == "manual", "lateral override should cancel navigation into manual")
+    assert(lateralMode.transition.navigationExited == true, "lateral override should report navigation exit")
 end
 
 local function checkNavigationExitRelockTarget()
     local state = canonicalState()
     local modes = mode_state.new(state, config)
-    local height = height_lock.new({
-        initial_target = 80.0,
-        target_rate = config.control.vertical.target_rate,
-        rate_deadband = config.control.vertical.lock.speed_deadband,
-        relock_timeout = config.control.vertical.lock.relock_timeout,
-    })
-    local heading = heading_lock.new({
-        initial_heading = 0.0,
-        target_rate = config.control.heading.target_rate,
-        rate_deadband = config.control.heading.lock.rate_deadband,
-        relock_timeout = config.control.heading.lock.relock_timeout,
-    })
     local input = input_protocol.defaultInput()
 
     state.world.position = vector.new(-213.0, 90.0, 304.0)
@@ -1148,34 +1172,12 @@ local function checkNavigationExitRelockTarget()
         },
         dt = config.control.loop.dt,
     })
-    local heightTarget = height:update({
-        climb = input.manual.velocity.up,
-        height = state.body.pose.height,
-        verticalSpeed = state.world.velocity.y,
-        dt = config.control.loop.dt,
-    })
-    local headingTarget = heading:update({
-        headingRateInput = input.manual.heading.rate,
-        heading = state.navigation.heading.angle,
-        headingRate = state.navigation.heading.rate,
-        dt = config.control.loop.dt,
-    })
 
     assert(mode.transition.navigationExited == true, "mode state should report navigation exit edge")
-
-    if mode.transition.navigationExited and input.manual.velocity.up == 0.0 then
-        heightTarget = height:lockedTarget(state.body.pose.height)
-    end
-
-    if mode.transition.navigationExited and input.manual.heading.rate == 0.0 then
-        headingTarget = heading:lockedTarget(state.navigation.heading.angle)
-    end
 
     local target = modeTarget(modes, {
         input = input,
         state = state,
-        height = heightTarget,
-        heading = headingTarget,
         dt = config.control.loop.dt,
     })
 
@@ -1679,30 +1681,16 @@ local function checkControllerTerms()
         climb = 0.0,
         heading = 0.0,
     })
-    machines.mode.modes.manual:update({
+    machines.mode.name = "manual"
+    machines.mode:update({
         input = input,
         state = state,
-        dt = config.control.loop.dt,
-        current = "manual",
-    })
-    machines.mode.name = "manual"
-    local height = machines.height:update({
-        climb = input.manual.velocity.up,
-        height = state.body.pose.height,
-        verticalSpeed = state.world.velocity.y,
-        dt = config.control.loop.dt,
-    })
-    local heading = machines.heading:update({
-        headingRateInput = input.manual.heading.rate,
-        heading = state.navigation.heading.angle,
-        headingRate = state.navigation.heading.rate,
+        navigationCommand = nil,
         dt = config.control.loop.dt,
     })
     local target = modeTarget(machines.mode, {
         input = input,
         state = state,
-        height = height,
-        heading = heading,
         dt = config.control.loop.dt,
     })
     local modeTerms = machines.mode:terms()
@@ -1829,23 +1817,15 @@ local function checkAttitudeExternalFeedforward()
         heading = 0.0,
     })
     machines.mode.name = "manual"
-    local height = machines.height:update({
-        climb = input.manual.velocity.up,
-        height = state.body.pose.height,
-        verticalSpeed = state.world.velocity.y,
-        dt = config.control.loop.dt,
-    })
-    local heading = machines.heading:update({
-        headingRateInput = input.manual.heading.rate,
-        heading = state.navigation.heading.angle,
-        headingRate = state.navigation.heading.rate,
+    machines.mode:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
         dt = config.control.loop.dt,
     })
     local target = modeTarget(machines.mode, {
         input = input,
         state = state,
-        height = height,
-        heading = heading,
         dt = config.control.loop.dt,
     })
 
@@ -1885,6 +1865,7 @@ checkFlightState()
 checkModeUpdateExposesStatusOnly()
 checkModeTermsSnapshotsAreCopied()
 checkModeTargetNavigationOverride()
+checkModeTargetIsPure()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
 checkEulerHeadingRateKinematics()
@@ -1896,9 +1877,10 @@ checkActiveNavigationUpdateReceivesDt()
 checkNavigationEnterUpdatesOnce()
 checkCruiseToggleOneShot()
 checkCruiseRequiresManualMode()
+checkCruiseFreezesAxes()
 checkNavigationCommandIgnoresManualOverride()
+checkNavigationManualOverrideDestinations()
 checkClimbCancelsNavigationToHold()
-checkNavigationExitRelockTargets()
 checkNavigationExitRelockTarget()
 checkTelemetryPreservesConsumedCruiseEvent()
 checkUiTelemetryBoundary()

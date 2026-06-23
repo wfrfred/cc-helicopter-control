@@ -42,10 +42,6 @@ function Navigation:enter(ctx)
 
     self.lastResult = self.navigator:command(command, ctx.state, motion(ctx.state))
 
-    if self.lastResult.active and self.lastResult.target == nil then
-        self.lastResult = self.navigator:update(ctx.state, ctx.dt, motion(ctx.state))
-    end
-
     return {
         active = self.lastResult.active,
     }

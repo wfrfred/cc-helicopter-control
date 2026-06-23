@@ -829,6 +829,82 @@ local function checkActiveNavigationUpdateReceivesDt()
     assert(math.abs(observedDt - 0.123) < 1.0e-9, "active navigation update should receive real dt")
 end
 
+local function checkNavigationEnterUpdatesOnce()
+    local originalNavigation = package.loaded["navigation"]
+    local originalModeState = package.loaded["state.mode_state"]
+    local originalModesNavigation = package.loaded["modes.navigation"]
+    local updateCount = 0
+    local observedDt = nil
+
+    local ok, err = pcall(function()
+        package.loaded["state.mode_state"] = nil
+        package.loaded["modes.navigation"] = nil
+        package.loaded["navigation"] = {
+            new = function()
+                return {
+                    update = function(_, _, dt)
+                        updateCount = updateCount + 1
+                        observedDt = dt
+
+                        return {
+                            active = true,
+                            phase = "climb",
+                            target = {
+                                position = {
+                                    x = 0.0,
+                                    z = 0.0,
+                                },
+                                height = 80.0,
+                                heading = 0.0,
+                            },
+                        }
+                    end,
+                    state = function()
+                        return {
+                            active = false,
+                            phase = "idle",
+                            target = nil,
+                        }
+                    end,
+                    command = function()
+                        return {
+                            active = true,
+                            phase = "climb",
+                            target = nil,
+                        }
+                    end,
+                    cancel = function()
+                        return {
+                            active = false,
+                        }
+                    end,
+                }
+            end,
+        }
+
+        local fakeModeState = require("state.mode_state")
+        local machine = fakeModeState.new(runtimeState(), config)
+
+        machine:update({
+            input = input_protocol.defaultInput(),
+            state = runtimeState(),
+            navigationCommand = {
+                action = "activate",
+                waypoint = "home",
+            },
+            dt = 0.234,
+        })
+    end)
+
+    package.loaded["navigation"] = originalNavigation
+    package.loaded["modes.navigation"] = originalModesNavigation
+    package.loaded["state.mode_state"] = originalModeState
+
+    assert(ok, err)
+    assert(updateCount == 1, "navigation enter should not update before lifecycle update")
+    assert(math.abs(observedDt - 0.234) < 1.0e-9, "navigation lifecycle update should receive real dt")
+end
+
 local function checkCruiseToggleOneShot()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
@@ -1736,6 +1812,7 @@ checkManualHeadingFeedforwardUsesCurrentPose()
 checkActiveNavigationKeepsTarget()
 checkActiveNavigationSelectKeepsTarget()
 checkActiveNavigationUpdateReceivesDt()
+checkNavigationEnterUpdatesOnce()
 checkCruiseToggleOneShot()
 checkCruiseRequiresManualMode()
 checkNavigationCommandIgnoresManualOverride()

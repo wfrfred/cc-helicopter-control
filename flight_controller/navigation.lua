@@ -463,7 +463,7 @@ function Navigator:activate(id, state, motion)
     }
     self.inactiveReason = nil
 
-    return self:update(state, 0.0, motion)
+    return activeResult(self.active, position, pose)
 end
 
 function Navigator:toggle(id, state, motion)

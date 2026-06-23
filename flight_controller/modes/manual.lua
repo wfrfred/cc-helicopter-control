@@ -36,7 +36,23 @@ function manual.new(control)
     }, Manual)
 end
 
-function Manual:enter() end
+function Manual:enter(ctx)
+    local control = self.control
+    local pose = ctx.state.body.pose
+    local roll = pose.roll or control.attitude.home.roll
+    local pitch = pose.pitch or control.attitude.home.pitch
+
+    self.roll = mathx.clamp(
+        roll,
+        -control.attitude.limit.roll,
+        control.attitude.limit.roll
+    )
+    self.pitch = mathx.clamp(
+        pitch,
+        -control.attitude.limit.pitch,
+        control.attitude.limit.pitch
+    )
+end
 
 function Manual:exit() end
 

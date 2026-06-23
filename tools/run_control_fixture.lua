@@ -652,6 +652,34 @@ local function checkEulerHeadingRateKinematics()
     assertClose("heading rate kinematics", projectedHeadingRate, headingRate)
 end
 
+local function checkManualEnterCapturesCurrentPose()
+    local state = runtimeState()
+    local machine = mode_state.new(state, config)
+    local input = canonicalInputFromAxes({
+        roll = 1.0,
+        pitch = 0.0,
+        climb = 0.0,
+        heading = 0.0,
+    })
+
+    state.body.pose.roll = config.control.attitude.limit.roll * 2.0
+    state.body.pose.pitch = -0.20
+    machine.modes.manual.roll = -0.40
+    machine.modes.manual.pitch = 0.40
+
+    machine:update({
+        input = input,
+        state = state,
+        navigationCommand = nil,
+        dt = 0.0,
+    })
+
+    local terms = machine:terms().manual
+
+    assertClose("manual enter roll capture clamp", terms.roll, config.control.attitude.limit.roll)
+    assertClose("manual enter pitch capture", terms.pitch, -0.20)
+end
+
 local function checkManualHeadingFeedforwardUsesCurrentPose()
     local state = runtimeState()
     local machines = makeRuntimeMachines(state)
@@ -1860,6 +1888,7 @@ checkModeTargetNavigationOverride()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
 checkEulerHeadingRateKinematics()
+checkManualEnterCapturesCurrentPose()
 checkManualHeadingFeedforwardUsesCurrentPose()
 checkActiveNavigationKeepsTarget()
 checkActiveNavigationActivateKeepsTarget()

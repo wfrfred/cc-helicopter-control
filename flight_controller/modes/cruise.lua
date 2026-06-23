@@ -61,22 +61,14 @@ function Cruise:update(ctx)
     }
 end
 
-function Cruise:snapshot()
-    if self.velocity == nil then
-        return nil
-    end
-
-    return {
+function Cruise:terms(state)
+    local terms = {
         velocity = horizontalVector(self.velocity),
         height = self.height,
         heading = self.heading,
     }
-end
 
-function Cruise:terms(state)
-    local terms = self:snapshot()
-
-    if terms ~= nil and state ~= nil then
+    if state ~= nil then
         terms.control = targetControl(self, state)
     end
 

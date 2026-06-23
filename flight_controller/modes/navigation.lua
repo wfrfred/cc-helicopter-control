@@ -415,10 +415,9 @@ local function activateRoute(self, id, state)
     end
 
     assert(self.selected ~= nil, "navigation activation requires a selected waypoint")
-    assert(type(state) == "table", "navigation activation requires state")
 
-    local position = assertPosition(state.world.position, "state.world.position")
-    local pose = assert(type(state.body.pose) == "table" and state.body.pose, "state.body.pose must be table")
+    local position = state.world.position
+    local pose = state.body.pose
     local approach = selectApproach(self.selected, position, self.config)
     local legs = buildApproachLegs(self.selected, approach, self.config)
 
@@ -442,8 +441,6 @@ local function cancelRoute(self, reason)
 end
 
 local function applyCommand(self, command, state)
-    assert(type(command) == "table", "navigation command must be table")
-
     if command.action == "activate" then
         activateRoute(self, command.waypoint, state)
         return
@@ -462,8 +459,8 @@ local function targetForRoute(route, state)
         return nil
     end
 
-    local position = assertPosition(state.world.position, "state.world.position")
-    local pose = assert(type(state.body.pose) == "table" and state.body.pose, "state.body.pose must be table")
+    local position = state.world.position
+    local pose = state.body.pose
 
     return targetForPhase(route, position, pose)
 end
@@ -559,15 +556,8 @@ function Navigation:update(ctx)
     end
 
     local routeMotion = motion(ctx.state)
-    local position = assertPosition(ctx.state.world.position, "state.world.position")
-    local pose = assert(type(ctx.state.body.pose) == "table" and ctx.state.body.pose, "state.body.pose must be table")
-
-    assert(type(routeMotion) == "table", "navigation motion must be table")
-    assert(type(routeMotion.worldVelocity) == "table", "navigation motion.worldVelocity must be table")
-    assert(type(routeMotion.worldVelocity.x) == "number", "navigation motion.worldVelocity.x must be number")
-    assert(type(routeMotion.worldVelocity.z) == "number", "navigation motion.worldVelocity.z must be number")
-    assert(type(routeMotion.verticalSpeed) == "number", "navigation motion.verticalSpeed must be number")
-    assert(type(routeMotion.headingRate) == "number", "navigation motion.headingRate must be number")
+    local position = ctx.state.world.position
+    local pose = ctx.state.body.pose
 
     updatePhase(self.route, position, pose, routeMotion, self.config)
 

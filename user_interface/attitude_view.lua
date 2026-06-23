@@ -20,11 +20,6 @@ local function clamp(value, lo, hi)
     return value
 end
 
-local function expectTable(value, name)
-    assert(type(value) == "table", name .. " must be table")
-    return value
-end
-
 local function centerOf(width, height)
     return math.floor((width + 1) / 2), math.floor((height + 1) / 2)
 end
@@ -86,16 +81,14 @@ function attitude_view.draw(mon, shared)
         return
     end
 
-    expectTable(telemetry, "shared.telemetry")
-
     if telemetry.status ~= "running" then
         drawWaiting(mon, "status " .. telemetry.status)
         return
     end
 
-    local state = expectTable(telemetry.state, "telemetry.state")
-    local body = expectTable(state.body, "telemetry.state.body")
-    drawHorizon(mon, expectTable(body.pose, "telemetry.state.body.pose"))
+    local state = telemetry.state
+    local body = state.body
+    drawHorizon(mon, body.pose)
 end
 
 return attitude_view

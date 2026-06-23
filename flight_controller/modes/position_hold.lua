@@ -53,10 +53,6 @@ end
 
 function Hold:exit() end
 
-function Hold:snapshot()
-    return horizontalVector(self.position)
-end
-
 local function verticalTarget(result)
     return {
         height = result.target,
@@ -93,7 +89,7 @@ local function targetControl(self, state)
 end
 
 function Hold:terms(state)
-    local terms = self:snapshot()
+    local terms = horizontalVector(self.position)
 
     if state ~= nil then
         terms.control = targetControl(self, state)
@@ -110,7 +106,7 @@ function Hold:target(input)
         heading = terms.heading,
     })
 
-    target.world.position = self:snapshot()
+    target.world.position = horizontalVector(self.position)
 
     return target
 end

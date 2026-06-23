@@ -42,55 +42,8 @@ function mode_state.new(initialState, config)
     }, State)
 end
 
-local function activeMode(self)
-    local mode = self.modes[self.name]
-
-    assert(mode ~= nil, "unknown mode: " .. tostring(self.name))
-
-    return mode
-end
-
-local function manualLateralActive(input)
-    return manual_mode.active(input)
-end
-
 local function manualOverrideActive(input)
-    return manualLateralActive(input) or input.manual.velocity.up ~= 0.0
-end
-
-local function fixedControlTerms(state, source)
-    return {
-        height = {
-            height = state.body.pose.height,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = source,
-        },
-        heading = {
-            angle = state.navigation.heading.angle,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = source,
-        },
-        lock = {
-            height = source,
-            heading = source,
-        },
-    }
-end
-
-local function requestContext(input)
-    return {
-        input = input.input,
-        state = input.state,
-        dt = input.dt,
-        command = input.navigationCommand,
-        reason = input.reason,
-    }
+    return manual_mode.active(input) or input.manual.velocity.up ~= 0.0
 end
 
 local function enter(self, name, ctx)
@@ -103,32 +56,29 @@ local function enter(self, name, ctx)
         from = self.name,
     }
 
-    for _, other in ipairs(exclusive[name] or {}) do
-        if other ~= name then
-            self.modes[other]:exit(exitCtx)
-        end
+    for _, other in ipairs(exclusive[name]) do
+        self.modes[other]:exit(exitCtx)
     end
 
     self.name = name
-
-    local status = self.modes[name]:enter(exitCtx) or {
-        active = true,
-    }
-
+    self.modes[name]:enter(exitCtx)
     self.lastReset.horizontal = true
-
-    return status
 end
 
 function State:update(input)
     local command = input.navigationCommand
     local manualInput = input.input
-    local ctx = requestContext(input)
+    local ctx = {
+        input = input.input,
+        state = input.state,
+        dt = input.dt,
+        command = input.navigationCommand,
+        reason = input.reason,
+    }
     local wasNavigation = self.name == modes.navigation
-    local lateralActive = manualLateralActive(manualInput)
+    local lateralActive = manual_mode.active(manualInput)
     local overrideActive = manualOverrideActive(manualInput)
     local lateralEdge = lateralActive and not self.lastManualLateral
-    local status = nil
 
     self.lastReset = {
         horizontal = false,
@@ -141,34 +91,32 @@ function State:update(input)
     if self.name == modes.navigation and overrideActive then
         if lateralActive then
             ctx.reason = modes.manual
-            status = enter(self, modes.manual, ctx)
+            enter(self, modes.manual, ctx)
         else
             ctx.reason = modes.position_hold
-            status = enter(self, modes.position_hold, ctx)
+            enter(self, modes.position_hold, ctx)
         end
     elseif lateralEdge then
         ctx.reason = modes.manual
-        status = enter(self, modes.manual, ctx)
+        enter(self, modes.manual, ctx)
     elseif manualInput.event.cruiseToggle then
         if self.name == modes.manual then
             ctx.reason = modes.cruise
-            status = enter(self, modes.cruise, ctx)
+            enter(self, modes.cruise, ctx)
         end
     elseif command ~= nil then
         if not overrideActive then
             ctx.reason = modes.navigation
-            status = enter(self, modes.navigation, ctx)
+            enter(self, modes.navigation, ctx)
         end
     end
 
-    status = activeMode(self):update(ctx) or status or {
-        active = true,
-    }
+    local status = self.modes[self.name]:update(ctx)
 
     if not status.active and self.name ~= modes.position_hold then
         ctx.reason = modes.position_hold
-        status = enter(self, modes.position_hold, ctx)
-        status = activeMode(self):update(ctx) or status
+        enter(self, modes.position_hold, ctx)
+        status = self.modes[self.name]:update(ctx)
     end
 
     self.lastTransition.navigationExited = wasNavigation and self.name ~= modes.navigation
@@ -191,14 +139,13 @@ function State:target(input)
         dt = input.dt,
     }
 
-    return activeMode(self):target(context)
+    return self.modes[self.name]:target(context)
 end
 
 function State:terms()
-    local mode = activeMode(self)
-    local activeTerms = mode:terms(self.lastState) or {}
+    local mode = self.modes[self.name]
+    local activeTerms = mode:terms(self.lastState)
     local targetControl = activeTerms.control
-        or fixedControlTerms(self.lastState, self.name)
 
     activeTerms.control = nil
 

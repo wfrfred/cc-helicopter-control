@@ -143,13 +143,6 @@ function Manual:update(ctx)
     }
 end
 
-function Manual:snapshot()
-    return {
-        roll = self.roll,
-        pitch = self.pitch,
-    }
-end
-
 local function verticalTarget(result)
     return {
         height = result.target,
@@ -184,11 +177,11 @@ local function targetControl(self)
 end
 
 function Manual:terms()
-    local terms = self:snapshot()
-
-    terms.control = targetControl(self)
-
-    return terms
+    return {
+        roll = self.roll,
+        pitch = self.pitch,
+        control = targetControl(self),
+    }
 end
 
 function Manual:target(input)

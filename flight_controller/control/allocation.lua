@@ -6,15 +6,6 @@ local allocation = {}
 local Allocation = {}
 Allocation.__index = Allocation
 
-local function copyCommands(commands)
-    return {
-        collective = commands.collective,
-        roll = commands.roll,
-        pitch = commands.pitch,
-        yaw = commands.yaw,
-    }
-end
-
 local function finalClampCommands(commands, limits)
     return {
         collective = commands.collective,
@@ -33,16 +24,15 @@ function allocation.new(control)
 end
 
 function Allocation:update(input)
-    local rawCommands = copyCommands(input.rawCommands)
     local allocated = attitude_allocator.apply(
         self.allocator,
         input.pose,
-        copyCommands(rawCommands)
+        input.rawCommands
     )
     local commands = finalClampCommands(allocated.commands, self.outputLimits)
 
     self.lastTerms = {
-        rawCommands = rawCommands,
+        rawCommands = input.rawCommands,
         allocatedCommands = allocated.commands,
         finalCommands = commands,
         debug = allocated.debug,

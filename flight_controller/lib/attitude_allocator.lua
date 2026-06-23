@@ -15,15 +15,6 @@ local function matrixApi()
     return matrix
 end
 
-local function copyCommands(commands)
-    return {
-        collective = commands.collective,
-        roll = commands.roll,
-        pitch = commands.pitch,
-        yaw = commands.yaw,
-    }
-end
-
 local function attitudeCommands(commands)
     return {
         roll = commands.roll,
@@ -130,22 +121,19 @@ local function identityMatrix()
 end
 
 function attitude_allocator.apply(config, pose, rawCommands)
-    assert(type(rawCommands) == "table", "attitude allocator rawCommands must be table")
-
-    local raw = copyCommands(rawCommands)
     local rollDeg = math.deg((pose and pose.roll) or 0.0)
     local pitchDeg = math.deg((pose and pose.pitch) or 0.0)
 
     if config == nil or config.enabled ~= true then
         return {
-            commands = raw,
+            commands = rawCommands,
             debug = {
                 enabled = false,
                 pitch_deg = pitchDeg,
                 roll_deg = rollDeg,
-                raw = attitudeCommands(raw),
-                fixed = attitudeCommands(raw),
-                scheduled = attitudeCommands(raw),
+                raw = attitudeCommands(rawCommands),
+                fixed = attitudeCommands(rawCommands),
+                scheduled = attitudeCommands(rawCommands),
                 matrix = identityMatrix(),
             },
         }
@@ -155,12 +143,12 @@ function attitude_allocator.apply(config, pose, rawCommands)
 
     local baseMatrix = matrixFromRows(config.base_matrix)
     local scheduledMatrix = scheduleMatrix(config, pose)
-    local fixed = transformCommands(baseMatrix, raw)
-    local scheduled = transformCommands(scheduledMatrix, raw)
+    local fixed = transformCommands(baseMatrix, rawCommands)
+    local scheduled = transformCommands(scheduledMatrix, rawCommands)
 
     return {
         commands = {
-            collective = raw.collective,
+            collective = rawCommands.collective,
             roll = scheduled.roll,
             pitch = scheduled.pitch,
             yaw = scheduled.yaw,
@@ -169,7 +157,7 @@ function attitude_allocator.apply(config, pose, rawCommands)
             enabled = true,
             pitch_deg = pitchDeg,
             roll_deg = rollDeg,
-            raw = attitudeCommands(raw),
+            raw = attitudeCommands(rawCommands),
             fixed = fixed,
             scheduled = scheduled,
             matrix = matrixRows(scheduledMatrix),

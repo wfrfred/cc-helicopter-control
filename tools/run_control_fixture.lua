@@ -535,31 +535,50 @@ end
 
 local function checkModeTargetNavigationOverride()
     local machine = mode_state.new(canonicalState(), config)
+    local state = canonicalState()
 
     machine.name = "navigation"
-
-    machine.modes.navigation.navigator = {
-        state = function()
-            return {
-                active = true,
-                phase = "climb",
-            }
-        end,
-        target = function()
-            return {
+    state.body.pose.heading = 0.75
+    machine.modes.navigation.route = {
+        waypoint = {
+            id = "fixture",
+            position = {
+                x = 10.0,
+                y = 120.0,
+                z = -20.0,
+            },
+        },
+        approach = nil,
+        legs = {
+            {
+                kind = "direct",
                 position = {
                     x = 10.0,
+                    y = 120.0,
                     z = -20.0,
                 },
-                height = 120.0,
-                heading = 0.75,
-            }
-        end,
+                radius = 5.0,
+            },
+        },
+        legIndex = 1,
+        phase = "climb",
+        holdPosition = {
+            x = 10.0,
+            y = 80.0,
+            z = -20.0,
+        },
+        destination = {
+            x = 10.0,
+            y = 120.0,
+            z = -20.0,
+        },
+        cruiseAltitude = 120.0,
+        arrivalHeading = 0.75,
     }
 
     local target = modeTarget(machine, {
         input = input_protocol.defaultInput(),
-        state = canonicalState(),
+        state = state,
         dt = config.control.loop.dt,
     })
 
@@ -647,23 +666,42 @@ local function checkNavigationHeadingWrap()
 
     state.navigation.heading.angle = 3.0
     machine.name = "navigation"
-
-    machine.modes.navigation.navigator = {
-        state = function()
-            return {
-                active = true,
-                phase = "turn",
-            }
-        end,
-        target = function()
-            return {
+    machine.modes.navigation.route = {
+        waypoint = {
+            id = "fixture",
+            position = {
+                x = 0.0,
+                y = 80.0,
+                z = 0.0,
+            },
+        },
+        approach = nil,
+        legs = {
+            {
+                kind = "direct",
                 position = {
                     x = 0.0,
+                    y = 80.0,
                     z = 0.0,
                 },
                 heading = -3.0,
-            }
-        end,
+                radius = 5.0,
+            },
+        },
+        legIndex = 1,
+        phase = "turn",
+        holdPosition = {
+            x = 0.0,
+            y = 80.0,
+            z = 0.0,
+        },
+        destination = {
+            x = 0.0,
+            y = 80.0,
+            z = 0.0,
+        },
+        cruiseAltitude = 80.0,
+        arrivalHeading = -3.0,
     }
 
     local target = modeTarget(machine, {
@@ -849,146 +887,57 @@ local function checkActiveNavigationActivateKeepsTarget()
 end
 
 local function checkActiveNavigationUpdateReceivesDt()
-    local originalNavigation = package.loaded["navigation"]
-    local originalModeState = package.loaded["state.mode_state"]
-    local originalModesNavigation = package.loaded["modes.navigation"]
     local observedDt = nil
-    local fakeNavigator = nil
+    local machine = mode_state.new(runtimeState(), config)
 
-    local ok, err = pcall(function()
-        package.loaded["state.mode_state"] = nil
-        package.loaded["modes.navigation"] = nil
-        package.loaded["navigation"] = {
-            new = function()
-                fakeNavigator = {
-                    update = function(_, _, dt)
-                        observedDt = dt
+    machine.modes.navigation.update = function(_, ctx)
+        observedDt = ctx.dt
 
-                        return {
-                            active = true,
-                            phase = "climb",
-                            target = {
-                                position = {
-                                    x = 0.0,
-                                    z = 0.0,
-                                },
-                                height = 80.0,
-                                heading = 0.0,
-                            },
-                        }
-                    end,
-                    state = function()
-                        return {
-                            active = true,
-                            phase = "climb",
-                            target = nil,
-                        }
-                    end,
-                    command = function()
-                        error("unexpected navigation command")
-                    end,
-                    cancel = function()
-                        return {
-                            active = false,
-                        }
-                    end,
-                }
-
-                return fakeNavigator
-            end,
+        return {
+            active = true,
         }
+    end
 
-        local fakeModeState = require("state.mode_state")
-        local machine = fakeModeState.new(runtimeState(), config)
-        machine.name = "navigation"
-        machine:update({
-            input = input_protocol.defaultInput(),
-            state = runtimeState(),
-            navigationCommand = nil,
-            dt = 0.123,
-        })
-    end)
+    machine.name = "navigation"
+    machine:update({
+        input = input_protocol.defaultInput(),
+        state = runtimeState(),
+        navigationCommand = nil,
+        dt = 0.123,
+    })
 
-    package.loaded["navigation"] = originalNavigation
-    package.loaded["modes.navigation"] = originalModesNavigation
-    package.loaded["state.mode_state"] = originalModeState
-
-    assert(ok, err)
     assert(math.abs(observedDt - 0.123) < 1.0e-9, "active navigation update should receive real dt")
 end
 
 local function checkNavigationEnterUpdatesOnce()
-    local originalNavigation = package.loaded["navigation"]
-    local originalModeState = package.loaded["state.mode_state"]
-    local originalModesNavigation = package.loaded["modes.navigation"]
     local updateCount = 0
     local observedDt = nil
+    local machine = mode_state.new(runtimeState(), config)
 
-    local ok, err = pcall(function()
-        package.loaded["state.mode_state"] = nil
-        package.loaded["modes.navigation"] = nil
-        package.loaded["navigation"] = {
-            new = function()
-                return {
-                    update = function(_, _, dt)
-                        updateCount = updateCount + 1
-                        observedDt = dt
-
-                        return {
-                            active = true,
-                            phase = "climb",
-                            target = {
-                                position = {
-                                    x = 0.0,
-                                    z = 0.0,
-                                },
-                                height = 80.0,
-                                heading = 0.0,
-                            },
-                        }
-                    end,
-                    state = function()
-                        return {
-                            active = false,
-                            phase = "idle",
-                            target = nil,
-                        }
-                    end,
-                    command = function()
-                        return {
-                            active = true,
-                            phase = "climb",
-                            target = nil,
-                        }
-                    end,
-                    cancel = function()
-                        return {
-                            active = false,
-                        }
-                    end,
-                }
-            end,
+    machine.modes.navigation.enter = function()
+        return {
+            active = true,
         }
+    end
+    machine.modes.navigation.update = function(_, ctx)
+        updateCount = updateCount + 1
+        observedDt = ctx.dt
 
-        local fakeModeState = require("state.mode_state")
-        local machine = fakeModeState.new(runtimeState(), config)
+        return {
+            active = true,
+        }
+    end
 
-        machine:update({
-            input = input_protocol.defaultInput(),
-            state = runtimeState(),
-            navigationCommand = {
-                action = "activate",
-                waypoint = "home",
-            },
-            dt = 0.234,
-        })
-    end)
+    machine:update({
+        input = input_protocol.defaultInput(),
+        state = runtimeState(),
+        navigationCommand = {
+            action = "activate",
+            waypoint = "home",
+        },
+        dt = 0.234,
+    })
 
-    package.loaded["navigation"] = originalNavigation
-    package.loaded["modes.navigation"] = originalModesNavigation
-    package.loaded["state.mode_state"] = originalModeState
-
-    assert(ok, err)
     assert(updateCount == 1, "navigation enter should not update before lifecycle update")
     assert(math.abs(observedDt - 0.234) < 1.0e-9, "navigation lifecycle update should receive real dt")
 end
@@ -1980,5 +1929,6 @@ assertOldRuntimeModuleRemoved("data_task")
 assertOldRuntimeModuleRemoved("rotor")
 assertOldRuntimeModuleRemoved("target_state")
 assertOldRuntimeModuleRemoved("trajectory")
+assertOldRuntimeModuleRemoved("navigation")
 
 print("control fixtures ok")

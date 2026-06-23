@@ -6,7 +6,7 @@ local Controller = require("control.controller")
 local attitude_math = require("lib.attitude_math")
 local horizontal = require("control.horizontal")
 local lock = require("modes.lock")
-local navigation = require("navigation")
+local navigation = require("modes.navigation")
 
 local function assertClose(name, actual, expected, tolerance)
     tolerance = tolerance or 1.0e-9
@@ -147,25 +147,28 @@ local lockResult = heightLock:update({
 assert(lockResult.active == false, "manual climb should disable height lock feedback")
 assertClose("manual climb commanded rate", lockResult.rate, config.control.vertical.target_rate)
 
-local navigator = navigation.new(config.navigation)
-local navResult = navigator:command(
-    { action = "activate", waypoint = "home" },
-    {
-        world = {
-            position = vector.new(-213, 90, 304),
-        },
-        body = {
-            pose = {
-                heading = 0.0,
-            },
+local navState = {
+    world = {
+        position = vector.new(-213, 90, 304),
+        velocity = vector.new(0.0, 0.0, 0.0),
+    },
+    body = {
+        pose = {
+            heading = 0.0,
         },
     },
-    {
-        worldVelocity = { x = 0.0, z = 0.0 },
-        verticalSpeed = 0.0,
-        headingRate = 0.0,
-    }
-)
+    navigation = {
+        heading = {
+            rate = 0.0,
+        },
+    },
+}
+local navMode = navigation.new(config.navigation)
+local navResult = navMode:enter({
+    command = { action = "activate", waypoint = "home" },
+    state = navState,
+    dt = config.control.loop.dt,
+})
 assert(navResult.active == true, "navigation should activate configured home waypoint")
 
 print("smoke ok")

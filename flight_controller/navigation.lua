@@ -466,18 +466,6 @@ function Navigator:activate(id, state, motion)
     return activeResult(self.active, position, pose)
 end
 
-function Navigator:toggle(id, state, motion)
-    if self.selected ~= nil and self.selected.id == id and self.active == nil then
-        return self:activate(id, state, motion)
-    end
-
-    if self.active ~= nil and self.active.waypoint.id == id then
-        return self:cancel("toggle")
-    end
-
-    return self:select(id)
-end
-
 function Navigator:cancel(reason)
     self.active = nil
     self.inactiveReason = reason or "cancelled"
@@ -492,23 +480,15 @@ end
 function Navigator:command(command, state, motion)
     assert(type(command) == "table", "navigation command must be table")
 
-    if command.action == "select" then
-        return self:select(command.waypoint)
-    end
-
     if command.action == "activate" then
         return self:activate(command.waypoint, state, motion)
-    end
-
-    if command.action == "toggle" then
-        return self:toggle(command.waypoint, state, motion)
     end
 
     if command.action == "cancel" then
         return self:cancel("command")
     end
 
-    error("unknown navigation command action: " .. tostring(command.action))
+    error("navigation command action must be activate or cancel: " .. tostring(command.action))
 end
 
 function Navigator:update(state, dt, motion)

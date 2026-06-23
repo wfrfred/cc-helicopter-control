@@ -448,6 +448,28 @@ local function checkProtocolDecode()
     assert(input.event.holdCapture == true, "hold capture event should decode")
     assert(input.navigation.action == "activate", "navigation action should decode")
     assert(input.navigation.waypoint == "home", "navigation waypoint should decode")
+
+    local ok = pcall(function()
+        input_protocol.decode({
+            navigation = {
+                action = "sel" .. "ect",
+                waypoint = "home",
+            },
+        })
+    end)
+
+    assert(not ok, "runtime input should reject UI-only navigation select")
+
+    ok = pcall(function()
+        input_protocol.decode({
+            navigation = {
+                action = "tog" .. "gle",
+                waypoint = "home",
+            },
+        })
+    end)
+
+    assert(not ok, "runtime input should reject UI-only navigation toggle")
 end
 
 local function checkFlightState()
@@ -725,7 +747,7 @@ local function checkActiveNavigationKeepsTarget()
     assert(type(terms.navigation.target.position) == "table", "active navigation target should include position")
 end
 
-local function checkActiveNavigationSelectKeepsTarget()
+local function checkActiveNavigationActivateKeepsTarget()
     local state = canonicalState()
     local machine = mode_state.new(state, config)
     local input = input_protocol.defaultInput()
@@ -743,21 +765,21 @@ local function checkActiveNavigationSelectKeepsTarget()
         dt = config.control.loop.dt,
     })
 
-    local selected = machine:update({
+    local activated = machine:update({
         input = input,
         state = state,
         navigationCommand = {
-            action = "select",
+            action = "activate",
             waypoint = "home",
         },
         dt = config.control.loop.dt,
     })
 
-    assert(selected.name == "navigation", "active selected navigation should remain selected")
+    assert(activated.name == "navigation", "active activated navigation should remain active")
     local terms = machine:terms()
-    assert(terms.navigation.active == true, "active selected navigation should remain active")
-    assert(type(terms.navigation.target) == "table", "active selected navigation should keep a target")
-    assert(type(terms.navigation.target.position) == "table", "active selected navigation target should include position")
+    assert(terms.navigation.active == true, "active activated navigation should remain active")
+    assert(type(terms.navigation.target) == "table", "active activated navigation should keep a target")
+    assert(type(terms.navigation.target.position) == "table", "active activated navigation target should include position")
 end
 
 local function checkActiveNavigationUpdateReceivesDt()
@@ -1094,8 +1116,7 @@ local function checkNavigationExitRelockTarget()
         input = input,
         state = state,
         navigationCommand = {
-            action = "toggle",
-            waypoint = "home",
+            action = "cancel",
         },
         dt = config.control.loop.dt,
     })
@@ -1130,7 +1151,7 @@ local function checkNavigationExitRelockTarget()
         dt = config.control.loop.dt,
     })
 
-    assert(mode.name == "position_hold", "navigation toggle exit should return to position_hold")
+    assert(mode.name == "position_hold", "navigation cancel exit should return to position_hold")
     assert(target.vertical.height == 97.0, "navigation exit should relock target height to current height")
     assert(target.vertical.source == "locked", "navigation exit height target should use lock source")
     assert(target.vertical.error == 0.0, "navigation exit height target should start with zero error")
@@ -1568,6 +1589,37 @@ local function checkUiTelemetryBoundary()
     assert(sawVerticalError, "navigation page vertical error should use target height")
 end
 
+local function checkUiNavigationCommands()
+    local mon = fakeMonitor(80, 30)
+    local shared = {
+        telemetry = canonicalTelemetry(),
+        telemetryTime = os.clock(),
+        telemetrySender = 1,
+        inputSeq = 1,
+        monitorPage = "nav",
+    }
+
+    monitor_view.draw(mon, shared)
+
+    local row = shared.monitorTouch.navRows[1]
+
+    assert(type(row) == "table", "navigation page should expose touch row")
+    assert(monitor_view.handleTouch(mon, shared, row.x1, row.y), "inactive waypoint touch should be handled")
+    assert(shared.pendingNavigationCommand.action == "activate", "inactive waypoint touch should activate")
+    assert(shared.pendingNavigationCommand.waypoint == "home", "inactive waypoint touch should target waypoint")
+
+    shared.pendingNavigationCommand = nil
+    shared.telemetry.navigation.active = true
+    shared.telemetry.navigation.waypoint = shared.telemetry.navigation.selected
+    monitor_view.draw(mon, shared)
+
+    row = shared.monitorTouch.navRows[1]
+
+    assert(monitor_view.handleTouch(mon, shared, row.x1, row.y), "active waypoint touch should be handled")
+    assert(shared.pendingNavigationCommand.action == "cancel", "active waypoint touch should cancel")
+    assert(shared.pendingNavigationCommand.waypoint == nil, "cancel command should not include waypoint")
+end
+
 local function checkMixerFormula()
     local mix = mixer.new(config.hardware.rotor, config.calibration.rotor)
     local output = mix:update({
@@ -1810,7 +1862,7 @@ checkNavigationVelocityFrame()
 checkEulerHeadingRateKinematics()
 checkManualHeadingFeedforwardUsesCurrentPose()
 checkActiveNavigationKeepsTarget()
-checkActiveNavigationSelectKeepsTarget()
+checkActiveNavigationActivateKeepsTarget()
 checkActiveNavigationUpdateReceivesDt()
 checkNavigationEnterUpdatesOnce()
 checkCruiseToggleOneShot()
@@ -1821,6 +1873,7 @@ checkNavigationExitRelockTargets()
 checkNavigationExitRelockTarget()
 checkTelemetryPreservesConsumedCruiseEvent()
 checkUiTelemetryBoundary()
+checkUiNavigationCommands()
 checkMixerFormula()
 checkControllerTerms()
 checkControllerResetInput()

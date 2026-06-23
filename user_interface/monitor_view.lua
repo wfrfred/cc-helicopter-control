@@ -954,8 +954,19 @@ function monitor_view.handleTouch(mon, shared, x, y)
     if touch ~= nil and touch.page == "nav" then
         for _, row in ipairs(touch.navRows or {}) do
             if y == row.y and x >= row.x1 and x <= row.x2 then
+                local telemetry = shared.telemetry or {}
+                local navigation = telemetry.navigation or {}
+                local activeWaypoint = navigation.active == true and navigation.waypoint or nil
+
+                if activeWaypoint ~= nil and activeWaypoint.id == row.waypoint then
+                    shared.pendingNavigationCommand = {
+                        action = "cancel",
+                    }
+                    return true
+                end
+
                 shared.pendingNavigationCommand = {
-                    action = "toggle",
+                    action = "activate",
                     waypoint = row.waypoint,
                 }
                 return true

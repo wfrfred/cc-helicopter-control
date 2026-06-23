@@ -35,10 +35,11 @@ local function navigationCommand(command)
         }
     end
 
+    assert(command.action == "activate", "navigation command action must be activate or cancel")
     assert(type(command.waypoint) == "string", "navigation command waypoint must be string")
 
     return {
-        action = command.action,
+        action = "activate",
         waypoint = command.waypoint,
     }
 end

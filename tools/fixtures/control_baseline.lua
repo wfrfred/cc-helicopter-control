@@ -89,7 +89,6 @@ local cases = {
             target = {
                 roll = 0.0,
                 pitch = 0.0,
-                height = 80.0,
                 verticalSpeed = 5.0,
                 heightActive = false,
             },

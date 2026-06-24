@@ -1,5 +1,6 @@
 local cruise_mode = require("modes.cruise")
 local manual_mode = require("modes.manual")
+local mathx = require("lib.mathx")
 local navigation_mode = require("modes.navigation")
 local position_hold_mode = require("modes.position_hold")
 
@@ -133,7 +134,6 @@ end
 
 function State:target(input)
     local context = {
-        source = self.name,
         input = input.input,
         state = input.state,
         dt = input.dt,
@@ -142,12 +142,105 @@ function State:target(input)
     return self.modes[self.name]:target(context)
 end
 
+local function heightTerms(terms, state, modeName)
+    if terms.height ~= nil and type(terms.height) == "table" then
+        return {
+            height = terms.height.target,
+            speed = terms.height.rate,
+            active = terms.height.active,
+            pending = terms.height.pending,
+            error = terms.height.error,
+            source = terms.height.source,
+        }
+    end
+
+    if terms.height ~= nil then
+        return {
+            height = terms.height,
+            speed = 0.0,
+            active = true,
+            pending = false,
+            error = terms.height - state.body.pose.height,
+            source = modeName,
+        }
+    end
+
+    if terms.target ~= nil and terms.target.height ~= nil then
+        return {
+            height = terms.target.height,
+            speed = 0.0,
+            active = true,
+            pending = false,
+            error = terms.target.height - state.body.pose.height,
+            source = modeName .. "_" .. tostring(terms.phase),
+        }
+    end
+
+    return {
+        height = state.body.pose.height,
+        speed = 0.0,
+        active = false,
+        pending = false,
+        error = 0.0,
+        source = modeName,
+    }
+end
+
+local function headingTerms(terms, state, modeName)
+    if terms.heading ~= nil and type(terms.heading) == "table" then
+        local target = terms.heading.target
+
+        return {
+            angle = target,
+            rate = terms.heading.rate,
+            active = terms.heading.active,
+            pending = terms.heading.pending,
+            error = target == nil and 0.0 or mathx.wrapPi(target - state.navigation.heading.angle),
+            source = terms.heading.source,
+        }
+    end
+
+    if terms.heading ~= nil then
+        return {
+            angle = terms.heading,
+            rate = 0.0,
+            active = true,
+            pending = false,
+            error = mathx.wrapPi(terms.heading - state.navigation.heading.angle),
+            source = modeName,
+        }
+    end
+
+    if terms.target ~= nil and terms.target.heading ~= nil then
+        return {
+            angle = terms.target.heading,
+            rate = 0.0,
+            active = true,
+            pending = false,
+            error = mathx.wrapPi(terms.target.heading - state.navigation.heading.angle),
+            source = modeName .. "_" .. tostring(terms.phase),
+        }
+    end
+
+    return {
+        angle = state.navigation.heading.angle,
+        rate = 0.0,
+        active = false,
+        pending = false,
+        error = 0.0,
+        source = modeName,
+    }
+end
+
 function State:terms()
     local mode = self.modes[self.name]
     local activeTerms = mode:terms(self.lastState)
-    local targetControl = activeTerms.control
-
-    activeTerms.control = nil
+    local height = heightTerms(activeTerms, self.lastState, self.name)
+    local heading = headingTerms(activeTerms, self.lastState, self.name)
+    local lock = activeTerms.lock or {
+        height = height.source,
+        heading = heading.source,
+    }
 
     return {
         mode = {
@@ -158,9 +251,9 @@ function State:terms()
             navigationExited = self.lastTransition.navigationExited,
         },
         navigation = self.name == modes.navigation and activeTerms or nil,
-        height = targetControl.height,
-        heading = targetControl.heading,
-        lock = targetControl.lock,
+        height = height,
+        heading = heading,
+        lock = lock,
     }
 end
 

@@ -18,31 +18,6 @@ function cruise.new()
     }, Cruise)
 end
 
-local function targetControl(self, state)
-    return {
-        height = {
-            height = self.height,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = self.height - state.body.pose.height,
-            source = "cruise",
-        },
-        heading = {
-            angle = self.heading,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = mathx.wrapPi(self.heading - state.navigation.heading.angle),
-            source = "cruise",
-        },
-        lock = {
-            height = "cruise",
-            heading = "cruise",
-        },
-    }
-end
-
 function Cruise:enter(ctx)
     self.velocity = horizontalVector(ctx.state.world.velocity)
     self.height = ctx.state.body.pose.height
@@ -56,34 +31,36 @@ function Cruise:exit()
 end
 
 function Cruise:update(ctx)
-    return {
-        active = self.velocity ~= nil,
-    }
+    return common.status(self.velocity ~= nil)
 end
 
-function Cruise:terms(state)
-    local terms = {
+function Cruise:terms()
+    return {
         velocity = horizontalVector(self.velocity),
         height = self.height,
         heading = self.heading,
+        lock = {
+            height = "cruise",
+            heading = "cruise",
+        },
     }
-
-    if state ~= nil then
-        terms.control = targetControl(self, state)
-    end
-
-    return terms
 end
 
 function Cruise:target(input)
-    local target = common.base(input)
-    local terms = targetControl(self, input.state)
+    local feedforward = common.frdFromWorld(self.velocity, self.heading)
 
-    target.world.velocity = horizontalVector(self.velocity)
-    target.vertical = terms.height
-    target.heading = terms.heading
-
-    return target
+    return common.target({
+        position = {
+            down = input.state.body.pose.height - self.height,
+        },
+        feedforward = {
+            forward = feedforward.forward,
+            right = feedforward.right,
+        },
+        attitude = {
+            yaw = self.heading,
+        },
+    })
 end
 
 return cruise

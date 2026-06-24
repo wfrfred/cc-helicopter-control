@@ -257,6 +257,57 @@ function Hold:updateVelocity(targetWorldVelocity, worldVelocity, heading, dt, po
     )
 end
 
+function Hold:updateTranslation(position, feedforward, worldVelocity, heading, dt)
+    local currentWorldVelocity = horizontalVector(worldVelocity)
+    local currentNavigationVelocity = projectWorldHorizontalToNavigation(currentWorldVelocity, heading)
+    local forwardResult = nil
+    local rightResult = nil
+    local targetNavigationVelocity = {
+        forward = feedforward.forward,
+        right = feedforward.right,
+    }
+    local worldPosition = emptyWorldState()
+    local navigationPosition = emptyNavigationState()
+
+    if position.forward ~= nil then
+        forwardResult = self.controllers.positionForward:update({
+            target = position.forward,
+            current = 0.0,
+            dt = dt,
+            derivative = -currentNavigationVelocity.forward,
+        })
+        targetNavigationVelocity.forward = targetNavigationVelocity.forward + forwardResult.output
+        navigationPosition.target.forward = 0.0
+        navigationPosition.current.forward = -position.forward
+        navigationPosition.error.forward = forwardResult.error
+    end
+
+    if position.right ~= nil then
+        rightResult = self.controllers.positionRight:update({
+            target = position.right,
+            current = 0.0,
+            dt = dt,
+            derivative = -currentNavigationVelocity.right,
+        })
+        targetNavigationVelocity.right = targetNavigationVelocity.right + rightResult.output
+        navigationPosition.target.right = 0.0
+        navigationPosition.current.right = -position.right
+        navigationPosition.error.right = rightResult.error
+    end
+
+    return updateNavigationVelocity(
+        self,
+        targetNavigationVelocity,
+        currentNavigationVelocity,
+        projectNavigationHorizontalToWorld(targetNavigationVelocity, heading),
+        currentWorldVelocity,
+        heading,
+        dt,
+        worldPosition,
+        navigationPosition
+    )
+end
+
 function Hold:updatePosition(targetWorldPosition, currentWorldPosition, worldVelocity, heading, dt)
     local worldPositionError = horizontalVector(targetWorldPosition) - horizontalVector(currentWorldPosition)
     local currentWorldVelocity = horizontalVector(worldVelocity)

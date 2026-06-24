@@ -138,37 +138,15 @@ function Manual:update(ctx)
         )
     end
 
-    return {
-        active = manual.active(input),
-    }
+    return common.status(manual.active(input))
 end
 
-local function verticalTarget(result)
+function Manual:terms()
     return {
-        height = result.target,
-        speed = result.rate,
-        active = result.active,
-        pending = result.pending,
-        error = result.error,
-        source = result.source,
-    }
-end
-
-local function headingTarget(result)
-    return {
-        angle = result.target,
-        rate = result.rate,
-        active = result.active,
-        pending = result.pending,
-        error = result.error,
-        source = result.source,
-    }
-end
-
-local function targetControl(self)
-    return {
-        height = verticalTarget(self.lastHeight),
-        heading = headingTarget(self.lastHeading),
+        roll = self.roll,
+        pitch = self.pitch,
+        height = self.lastHeight,
+        heading = self.lastHeading,
         lock = {
             height = self.lastHeight.source,
             heading = self.lastHeading.source,
@@ -176,25 +154,22 @@ local function targetControl(self)
     }
 end
 
-function Manual:terms()
-    return {
-        roll = self.roll,
-        pitch = self.pitch,
-        control = targetControl(self),
-    }
-end
-
 function Manual:target(input)
-    local terms = targetControl(self)
-    local heading = terms.heading
-    local target = common.base({
-        source = input.source,
-        vertical = terms.height,
-        heading = heading,
+    local height = self.lastHeight
+    local heading = self.lastHeading
+    local target = common.target({
+        position = {
+            down = height.active and input.state.body.pose.height - height.target or nil,
+        },
+        feedforward = {
+            down = -height.rate,
+        },
+        attitude = {
+            roll = self.roll,
+            pitch = self.pitch,
+            yaw = heading.active and heading.target or nil,
+        },
     })
-
-    target.attitude.roll = self.roll
-    target.attitude.pitch = self.pitch
 
     if heading.source == "manual" then
         target.attitude.feedforward.angle = attitude_math.bodyRatesFromEulerRates(

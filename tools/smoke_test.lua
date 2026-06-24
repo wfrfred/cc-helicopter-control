@@ -61,10 +61,24 @@ local command = controller:update({
         },
     },
     target = {
-        source = "manual",
+        translation = {
+            position = {
+                forward = nil,
+                right = nil,
+                down = 0.0,
+            },
+            feedforward = {
+                forward = 0.0,
+                right = 0.0,
+                down = 0.0,
+            },
+        },
         attitude = {
-            roll = 0.0,
-            pitch = 0.0,
+            angle = {
+                roll = 0.0,
+                pitch = 0.0,
+                yaw = 0.0,
+            },
             feedforward = {
                 angle = {
                     roll = 0.0,
@@ -77,27 +91,6 @@ local command = controller:update({
                     yaw = 0.0,
                 },
             },
-        },
-        world = {
-            position = nil,
-            velocity = nil,
-            acceleration = nil,
-        },
-        vertical = {
-            height = 80.0,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = "locked",
-        },
-        heading = {
-            angle = 0.0,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = 0.0,
-            source = "locked",
         },
     },
     reset = {

@@ -485,49 +485,16 @@ function navigation.new(config)
     }, Navigation)
 end
 
-local function routeControl(route, phaseTarget, state)
-    if route == nil or phaseTarget == nil then
-        return nil
-    end
-
-    local source = "navigation_" .. route.phase
-    local height = phaseTarget.height
-    local heading = phaseTarget.heading
-
-    return {
-        height = {
-            height = height,
-            speed = 0.0,
-            active = height ~= nil,
-            pending = false,
-            error = height ~= nil and height - state.body.pose.height or 0.0,
-            source = source,
-        },
-        heading = {
-            angle = heading,
-            rate = 0.0,
-            active = heading ~= nil,
-            pending = false,
-            error = heading ~= nil and mathx.wrapPi(heading - state.navigation.heading.angle) or 0.0,
-            source = source,
-        },
-        lock = {
-            height = source,
-            heading = source,
-        },
-    }
-end
-
 function Navigation:terms(state)
     local route = self.route
     local terms = route == nil and inactiveTerms(self) or routeTerms(route)
     local phaseTarget = state ~= nil and targetForRoute(self.route, state) or nil
 
     terms.target = phaseTarget
-
-    if state ~= nil then
-        terms.control = routeControl(route, phaseTarget, state)
-    end
+    terms.lock = route == nil and nil or {
+        height = "navigation_" .. route.phase,
+        heading = "navigation_" .. route.phase,
+    }
 
     return terms
 end
@@ -536,23 +503,17 @@ function Navigation:enter(ctx)
     local command = ctx.command
 
     if command == nil or command.action == nil then
-        return {
-            active = self.route ~= nil,
-        }
+        return common.status(self.route ~= nil)
     end
 
     applyCommand(self, command, ctx.state)
 
-    return {
-        active = self.route ~= nil,
-    }
+    return common.status(self.route ~= nil)
 end
 
 function Navigation:update(ctx)
     if self.route == nil then
-        return {
-            active = false,
-        }
+        return common.status(false)
     end
 
     local routeMotion = motion(ctx.state)
@@ -561,9 +522,7 @@ function Navigation:update(ctx)
 
     updatePhase(self.route, position, pose, routeMotion, self.config)
 
-    return {
-        active = self.route ~= nil,
-    }
+    return common.status(self.route ~= nil)
 end
 
 function Navigation:exit(ctx)
@@ -575,21 +534,20 @@ end
 function Navigation:target(input)
     assert(self.route ~= nil, "navigation target requires active route")
 
-    local target = common.base(input)
     local phaseTarget = targetForRoute(self.route, input.state)
-    local control = routeControl(self.route, phaseTarget, input.state)
+    local positionError = {
+        x = phaseTarget.position.x - input.state.world.position.x,
+        y = phaseTarget.height - input.state.body.pose.height,
+        z = phaseTarget.position.z - input.state.world.position.z,
+    }
+    local position = common.frdFromWorld(positionError, phaseTarget.heading)
 
-    target.world.position = phaseTarget.position
-
-    if control.height.active then
-        target.vertical = control.height
-    end
-
-    if control.heading.active then
-        target.heading = control.heading
-    end
-
-    return target
+    return common.target({
+        position = position,
+        attitude = {
+            yaw = phaseTarget.heading,
+        },
+    })
 end
 
 return navigation

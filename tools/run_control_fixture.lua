@@ -238,6 +238,73 @@ local function modeTarget(machine, request)
     })
 end
 
+local function worldFromFrd(value, heading)
+    local forward = vector.new(math.sin(heading), 0.0, -math.cos(heading))
+    local right = vector.new(math.cos(heading), 0.0, math.sin(heading))
+
+    return forward * (value.forward or 0.0)
+        + right * (value.right or 0.0)
+        + vector.new(0.0, -(value.down or 0.0), 0.0)
+end
+
+local function legacyTarget(target, state)
+    local heading = target.attitude.angle.yaw or state.navigation.heading.angle
+    local translation = target.translation
+    local positionDelta = worldFromFrd(translation.position, heading)
+    local height = nil
+
+    if translation.position.down ~= nil then
+        height = state.body.pose.height - translation.position.down
+    end
+
+    return {
+        position = state.world.position + positionDelta,
+        velocity = worldFromFrd(translation.feedforward, heading),
+        height = height,
+        verticalSpeed = -translation.feedforward.down,
+        heightActive = translation.position.down ~= nil,
+        heading = heading,
+        roll = target.attitude.angle.roll,
+        pitch = target.attitude.angle.pitch,
+    }
+end
+
+local function neutralTarget()
+    return {
+        translation = {
+            position = {
+                forward = nil,
+                right = nil,
+                down = nil,
+            },
+            feedforward = {
+                forward = 0.0,
+                right = 0.0,
+                down = 0.0,
+            },
+        },
+        attitude = {
+            angle = {
+                roll = nil,
+                pitch = nil,
+                yaw = nil,
+            },
+            feedforward = {
+                angle = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+                rate = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+            },
+        },
+    }
+end
+
 local function runModeUpdate(machine, request)
     return machine:update({
         input = request.input,
@@ -349,28 +416,31 @@ local function runCurrentBaselineCase(case)
 
     if case.name == "navigation active target" then
         local terms = modeTerms.mode.terms
+        local legacy = legacyTarget(target, state)
 
         return {
             mode = mode.name,
             active = terms.active,
             phase = terms.phase,
             target = {
-                x = target.world.position.x,
-                z = target.world.position.z,
-                height = target.vertical.height,
-                heading = target.heading.angle,
+                x = legacy.position.x,
+                z = legacy.position.z,
+                height = legacy.height,
+                heading = legacy.heading,
             },
         }
     end
 
+    local legacy = legacyTarget(target, state)
+
     return {
         mode = mode.name,
         target = {
-            roll = target.attitude.roll,
-            pitch = target.attitude.pitch,
-            height = target.vertical.height,
-            verticalSpeed = target.vertical.speed,
-            heightActive = target.vertical.active,
+            roll = legacy.roll,
+            pitch = legacy.pitch,
+            height = legacy.height,
+            verticalSpeed = legacy.verticalSpeed,
+            heightActive = legacy.heightActive,
         },
         command = command,
     }
@@ -582,15 +652,17 @@ local function checkModeTargetNavigationOverride()
         dt = config.control.loop.dt,
     })
 
-    assert(target.source == "navigation", "controller target should keep navigation source")
-    assert(target.world.position.x == 10.0, "navigation should set horizontal target x")
-    assert(target.world.position.z == -20.0, "navigation should set horizontal target z")
+    local legacy = legacyTarget(target, state)
+
+    assert(target.world == nil, "controller target should not expose old world target")
+    assert(target.vertical == nil, "controller target should not expose old vertical target")
+    assert(target.heading == nil, "controller target should not expose old heading target")
+    assert(math.abs(legacy.position.x - 10.0) < 1.0e-6, "navigation should set horizontal target x")
+    assert(math.abs(legacy.position.z - -20.0) < 1.0e-6, "navigation should set horizontal target z")
     assert(target.attitude.feedforward.angle.roll == 0.0, "controller target should default roll angle feedforward")
     assert(target.attitude.feedforward.rate.yaw == 0.0, "controller target should default yaw rate feedforward")
-    assert(target.vertical.height == 120.0, "navigation should override height")
-    assert(target.vertical.source == "navigation_climb", "navigation height source should include phase")
-    assert(target.heading.angle == 0.75, "navigation should override heading")
-    assert(target.heading.source == "navigation_climb", "navigation heading source should include phase")
+    assert(math.abs(legacy.height - 120.0) < 1.0e-6, "navigation should override height")
+    assert(target.attitude.angle.yaw == 0.75, "navigation should override yaw")
 end
 
 local function checkNavigationTargetRequiresRoute()
@@ -681,7 +753,7 @@ local function checkNavigationTargetIsPure()
 end
 
 local function checkNavigationHeadingWrap()
-    local state = canonicalState()
+    local state = runtimeState()
     local machine = mode_state.new(state, config)
 
     state.navigation.heading.angle = 3.0
@@ -729,8 +801,22 @@ local function checkNavigationHeadingWrap()
         state = state,
         dt = config.control.loop.dt,
     })
+    local controller = Controller.new(config.control)
 
-    assert(math.abs(target.heading.error) < 1.0, "navigation heading error should wrap")
+    controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
+
+    assert(
+        math.abs(target.attitude.angle.yaw - state.navigation.heading.angle) > math.pi,
+        "navigation target should expose raw yaw target, not wrapped debug error"
+    )
+    assert(math.abs(controller:terms().attitude.error.heading.angle) < 1.0, "controller heading error should wrap")
 end
 
 local function checkNavigationVelocityFrame()
@@ -817,18 +903,15 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
         }
     )
     local targetPoseRates = attitude_math.bodyRatesFromEulerRates(
-        target.attitude.roll,
-        target.attitude.pitch,
+        target.attitude.angle.roll,
+        target.attitude.angle.pitch,
         {
             heading = config.control.heading.target_rate,
         }
     )
 
-    assert(target.heading.source == "manual", "manual heading should use rate target source")
-    assert(target.heading.active == false, "manual heading should not report locked heading")
-    assertClose("manual heading target angle", target.heading.angle, state.navigation.heading.angle)
-    assertClose("manual heading target rate", target.heading.rate, config.control.heading.target_rate)
-    assertClose("manual heading target error", target.heading.error, 0.0)
+    assert(target.heading == nil, "controller target should not expose old heading target")
+    assert(target.attitude.angle.yaw == nil, "manual heading rate should not lock yaw")
     assertClose("manual heading roll feedforward", target.attitude.feedforward.angle.roll, expected.roll)
     assertClose("manual heading pitch feedforward", target.attitude.feedforward.angle.pitch, expected.pitch)
     assertClose("manual heading yaw feedforward", target.attitude.feedforward.angle.yaw, expected.yaw)
@@ -1050,12 +1133,14 @@ local function checkCruiseFreezesAxes()
         dt = config.control.loop.dt,
     })
 
-    assert(target.world.velocity.x == 3.0, "cruise should keep entry velocity")
-    assert(target.world.velocity.z == -1.0, "cruise should keep entry velocity z")
-    assert(target.vertical.height == 80.0, "cruise should keep entry height")
-    assert(target.vertical.error == -10.0, "cruise height error should use current height")
-    assert(target.heading.angle == 0.0, "cruise should keep entry heading")
-    assert(math.abs(target.heading.error + 1.0) < 1.0e-9, "cruise heading error should use current heading")
+    local legacy = legacyTarget(target, state)
+
+    assertClose("cruise should keep entry velocity", legacy.velocity.x, 3.0)
+    assertClose("cruise should keep entry velocity z", legacy.velocity.z, -1.0)
+    assertClose("cruise should keep entry height", legacy.height, 80.0)
+    assertClose("cruise height error should use current height", legacy.height - state.body.pose.height, -10.0)
+    assertClose("cruise should keep entry heading", target.attitude.angle.yaw, 0.0)
+    assertClose("cruise heading error should use current heading", target.attitude.angle.yaw - state.navigation.heading.angle, -1.0)
 end
 
 local function checkNavigationCommandIgnoresManualOverride()
@@ -1222,13 +1307,13 @@ local function checkNavigationExitRelockTarget()
         dt = config.control.loop.dt,
     })
 
+    local legacy = legacyTarget(target, state)
+
     assert(mode.name == "position_hold", "navigation cancel exit should return to position_hold")
-    assert(target.vertical.height == 97.0, "navigation exit should relock target height to current height")
-    assert(target.vertical.source == "locked", "navigation exit height target should use lock source")
-    assert(target.vertical.error == 0.0, "navigation exit height target should start with zero error")
-    assert(math.abs(target.heading.angle - 1.25) < 1.0e-9, "navigation exit should relock target heading to current heading")
-    assert(target.heading.source == "position_hold", "navigation exit heading target should use position_hold source")
-    assert(math.abs(target.heading.error) < 1.0e-9, "navigation exit heading target should start with zero error")
+    assertClose("navigation exit should relock target height to current height", legacy.height, 97.0)
+    assertClose("navigation exit height target should start with zero error", legacy.height - state.body.pose.height, 0.0)
+    assertClose("navigation exit should relock target heading to current heading", target.attitude.angle.yaw, 1.25)
+    assertClose("navigation exit heading target should start with zero error", target.attitude.angle.yaw - state.navigation.heading.angle, 0.0)
 end
 
 local function checkTelemetryPreservesConsumedCruiseEvent()
@@ -1809,46 +1894,7 @@ local function checkControllerResetInput()
 
     controller:update({
         state = state,
-        target = {
-            source = "position_hold",
-            attitude = {
-                roll = nil,
-                pitch = nil,
-                feedforward = {
-                    angle = {
-                        roll = 0.0,
-                        pitch = 0.0,
-                        yaw = 0.0,
-                    },
-                    rate = {
-                        roll = 0.0,
-                        pitch = 0.0,
-                        yaw = 0.0,
-                    },
-                },
-            },
-            world = {
-                position = vector.new(-213.0, 0.0, 304.0),
-                velocity = nil,
-                acceleration = nil,
-            },
-            vertical = {
-                height = 80.0,
-                speed = 0.0,
-                active = true,
-                pending = false,
-                error = 0.0,
-                source = "locked",
-            },
-            heading = {
-                angle = 0.0,
-                rate = 0.0,
-                active = true,
-                pending = false,
-                error = 0.0,
-                source = "locked",
-            },
-        },
+        target = neutralTarget(),
         reset = {
             horizontal = true,
         },
@@ -1856,6 +1902,61 @@ local function checkControllerResetInput()
     })
 
     assert(resetCalled, "controller should read horizontal reset from lifecycle input")
+end
+
+local function checkControllerTargetSemantics()
+    local state = runtimeState()
+    local controller = Controller.new(config.control)
+    local target = neutralTarget()
+
+    state.navigation.heading.angle = 1.25
+    controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
+
+    local terms = controller:terms()
+
+    assert(terms.vertical.target.active == false, "nil down position should disable height loop")
+    assertClose("nil yaw heading error", terms.attitude.error.heading.angle, 0.0)
+    assert(terms.horizontal.active == false, "nil horizontal position and zero feedforward should disable horizontal loop")
+
+    target = neutralTarget()
+    target.translation.position.down = 0.0
+    controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
+
+    terms = controller:terms()
+
+    assert(terms.vertical.target.active == true, "zero down position should enable height hold")
+    assertClose("zero down height error", terms.vertical.error.height, 0.0)
+
+    target = neutralTarget()
+    target.translation.feedforward.forward = 2.0
+    controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
+
+    terms = controller:terms()
+
+    assert(terms.horizontal.active == true, "horizontal feedforward should activate horizontal velocity loop")
+    assertClose("nil forward position uses feedforward only", terms.horizontal.navigationVelocity.target.forward, 2.0)
+    assertClose("nil right position uses zero feedforward only", terms.horizontal.navigationVelocity.target.right, 0.0)
 end
 
 local function checkAttitudeExternalFeedforward()
@@ -1941,6 +2042,7 @@ checkUiNavigationCommands()
 checkMixerFormula()
 checkControllerTerms()
 checkControllerResetInput()
+checkControllerTargetSemantics()
 checkAttitudeExternalFeedforward()
 
 assertOldRuntimeModuleRemoved("control_task")

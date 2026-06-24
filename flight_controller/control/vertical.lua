@@ -35,10 +35,10 @@ function Vertical:update(input)
     local target = input.target
     local dt = input.dt
     local pose = state.body.pose
-    local targetVerticalSpeed = target.speed
-    local heightErr = target.error
+    local targetVerticalSpeed = target.velocity
+    local heightErr = target.height == nil and 0.0 or target.height - pose.height
 
-    if target.active then
+    if target.height ~= nil then
         local heightResult = self.controllers.height:update({
             target = target.height,
             current = pose.height,
@@ -74,8 +74,7 @@ function Vertical:update(input)
         target = {
             height = target.height,
             speed = targetVerticalSpeed,
-            active = target.active,
-            pending = target.pending,
+            active = target.height ~= nil,
         },
         current = {
             height = pose.height,

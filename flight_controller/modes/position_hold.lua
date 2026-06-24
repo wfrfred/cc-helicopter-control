@@ -46,69 +46,47 @@ function Hold:update(ctx)
         dt = ctx.dt,
     })
 
-    return {
-        active = true,
-    }
+    return common.status(true)
 end
 
 function Hold:exit() end
 
-local function verticalTarget(result)
-    return {
-        height = result.target,
-        speed = result.rate,
-        active = result.active,
-        pending = result.pending,
-        error = result.error,
-        source = result.source,
-    }
-end
+function Hold:terms()
+    local terms = horizontalVector(self.position)
 
-local function headingTarget(self, state)
-    return {
-        angle = self.heading,
+    terms.height = self.lastHeight
+    terms.heading = {
+        target = self.heading,
         rate = 0.0,
         active = true,
         pending = false,
-        error = mathx.wrapPi(self.heading - state.navigation.heading.angle),
         source = "position_hold",
     }
-end
-
-local function targetControl(self, state)
-    local heading = headingTarget(self, state)
-
-    return {
-        height = verticalTarget(self.lastHeight),
-        heading = heading,
-        lock = {
-            height = self.lastHeight.source,
-            heading = heading.source,
-        },
+    terms.lock = {
+        height = self.lastHeight.source,
+        heading = "position_hold",
     }
-end
-
-function Hold:terms(state)
-    local terms = horizontalVector(self.position)
-
-    if state ~= nil then
-        terms.control = targetControl(self, state)
-    end
 
     return terms
 end
 
 function Hold:target(input)
-    local terms = targetControl(self, input.state)
-    local target = common.base({
-        source = input.source,
-        vertical = terms.height,
-        heading = terms.heading,
+    local positionError = self.position - horizontalVector(input.state.world.position)
+    local position = common.frdFromWorld(positionError, self.heading)
+
+    return common.target({
+        position = {
+            forward = position.forward,
+            right = position.right,
+            down = self.lastHeight.active and input.state.body.pose.height - self.lastHeight.target or nil,
+        },
+        feedforward = {
+            down = -self.lastHeight.rate,
+        },
+        attitude = {
+            yaw = self.heading,
+        },
     })
-
-    target.world.position = horizontalVector(self.position)
-
-    return target
 end
 
 return position_hold

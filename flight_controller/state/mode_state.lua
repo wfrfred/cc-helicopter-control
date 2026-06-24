@@ -1,8 +1,33 @@
 local cruise_mode = require("modes.cruise")
 local manual_mode = require("modes.manual")
-local mathx = require("lib.mathx")
 local navigation_mode = require("modes.navigation")
 local position_hold_mode = require("modes.position_hold")
+
+--- Coordinates mode lifecycle and dispatches to the active mode.
+---
+--- Mode interface:
+---
+--- - `enter(ctx)`
+---   Called when the mode becomes active. May update internal mode state.
+---
+--- - `update(ctx)`
+---   Advances mode-local state for one control tick.
+---
+--- - `exit(ctx)`
+---   Called when the mode is deactivated.
+---
+--- - `target(ctx) -> controller target`
+---   Const method. Returns the controller target for the active mode. See common.target()
+---
+--- - `terms(state) -> telemetry/debug terms`
+---   Const method. Returns mode-local telemetry/debug data only.
+---
+--- mode_state owns all mode transitions.
+--- Modes must not choose or enter another mode directly.
+---
+--- This module may depend only on the interface above.
+--- Do not read or write implementation-specific fields of any mode here.
+--- If another view is required, extend the interface deliberately for every mode.
 
 local mode_state = {}
 
@@ -16,13 +41,6 @@ local modes = {
     navigation = "navigation",
 }
 
-local exclusive = {
-    manual = { modes.navigation, modes.cruise },
-    position_hold = { modes.navigation, modes.cruise },
-    cruise = { modes.navigation },
-    navigation = { modes.cruise },
-}
-
 function mode_state.new(initialState, config)
     return setmetatable({
         name = modes.position_hold,
@@ -31,12 +49,6 @@ function mode_state.new(initialState, config)
             position_hold = position_hold_mode.new(initialState, config.control),
             cruise = cruise_mode.new(),
             navigation = navigation_mode.new(config.navigation),
-        },
-        lastReset = {
-            horizontal = false,
-        },
-        lastTransition = {
-            navigationExited = false,
         },
         lastManualLateral = false,
         lastState = initialState,
@@ -47,213 +59,101 @@ local function manualOverrideActive(input)
     return manual_mode.active(input) or input.manual.velocity.up ~= 0.0
 end
 
-local function enter(self, name, ctx)
-    local exitCtx = {
-        input = ctx.input,
-        state = ctx.state,
-        dt = ctx.dt,
-        command = ctx.command,
-        reason = ctx.reason or name,
-        from = self.name,
-    }
-
-    for _, other in ipairs(exclusive[name]) do
-        self.modes[other]:exit(exitCtx)
-    end
-
-    self.name = name
-    self.modes[name]:enter(exitCtx)
-    self.lastReset.horizontal = true
-end
-
-function State:update(input)
-    local command = input.navigationCommand
-    local manualInput = input.input
+function State:update(request)
+    local command = request.navigationCommand
+    local manualInput = request.input
     local ctx = {
-        input = input.input,
-        state = input.state,
-        dt = input.dt,
-        command = input.navigationCommand,
-        reason = input.reason,
+        input = request.input,
+        state = request.state,
+        dt = request.dt,
     }
-    local wasNavigation = self.name == modes.navigation
     local lateralActive = manual_mode.active(manualInput)
     local overrideActive = manualOverrideActive(manualInput)
     local lateralEdge = lateralActive and not self.lastManualLateral
+    local nextMode = self.name
+    local resetHorizontal = false
 
-    self.lastReset = {
-        horizontal = false,
-    }
-    self.lastTransition = {
-        navigationExited = false,
-    }
-    self.lastState = input.state
+    self.lastState = request.state
 
     if self.name == modes.navigation and overrideActive then
         if lateralActive then
-            ctx.reason = modes.manual
-            enter(self, modes.manual, ctx)
+            nextMode = modes.manual
         else
-            ctx.reason = modes.position_hold
-            enter(self, modes.position_hold, ctx)
+            nextMode = modes.position_hold
         end
     elseif lateralEdge then
-        ctx.reason = modes.manual
-        enter(self, modes.manual, ctx)
+        nextMode = modes.manual
     elseif manualInput.event.cruiseToggle then
         if self.name == modes.manual then
-            ctx.reason = modes.cruise
-            enter(self, modes.cruise, ctx)
+            nextMode = modes.cruise
         end
-    elseif command ~= nil then
-        if not overrideActive then
-            ctx.reason = modes.navigation
-            enter(self, modes.navigation, ctx)
-        end
+    elseif command ~= nil and command.action == "activate" and not overrideActive then
+        nextMode = modes.navigation
+    elseif command ~= nil
+        and command.action == "cancel"
+        and self.name == modes.navigation
+        and not overrideActive then
+        nextMode = modes.position_hold
+    elseif self.name == modes.manual and not lateralActive then
+        nextMode = modes.position_hold
     end
 
-    local status = self.modes[self.name]:update(ctx)
-
-    if not status.active and self.name ~= modes.position_hold then
-        ctx.reason = modes.position_hold
-        enter(self, modes.position_hold, ctx)
-        status = self.modes[self.name]:update(ctx)
+    if nextMode ~= self.name then
+        self.modes[self.name]:exit(ctx)
+        self.name = nextMode
+        if self.name == modes.navigation then
+            self.modes[self.name]:enter({
+                input = ctx.input,
+                state = ctx.state,
+                dt = ctx.dt,
+                command = command,
+            })
+        else
+            self.modes[self.name]:enter(ctx)
+        end
+        resetHorizontal = true
+    elseif self.name == modes.navigation
+        and command ~= nil
+        and command.action == "activate"
+        and not overrideActive then
+        self.modes[self.name]:enter({
+            input = ctx.input,
+            state = ctx.state,
+            dt = ctx.dt,
+            command = command,
+        })
+        resetHorizontal = true
     end
 
-    self.lastTransition.navigationExited = wasNavigation and self.name ~= modes.navigation
+    self.modes[self.name]:update(ctx)
+
     self.lastManualLateral = lateralActive
 
     return {
         name = self.name,
         reset = {
-            horizontal = self.lastReset.horizontal,
+            horizontal = resetHorizontal,
         },
-        transition = self.lastTransition,
     }
 end
 
-function State:target(input)
-    local context = {
-        input = input.input,
-        state = input.state,
-        dt = input.dt,
+function State:target(request)
+    local ctx = {
+        input = request.input,
+        state = request.state,
+        dt = request.dt,
     }
 
-    return self.modes[self.name]:target(context)
-end
-
-local function heightTerms(terms, state, modeName)
-    if terms.height ~= nil and type(terms.height) == "table" then
-        return {
-            height = terms.height.target,
-            speed = terms.height.rate,
-            active = terms.height.active,
-            pending = terms.height.pending,
-            error = terms.height.error,
-            source = terms.height.source,
-        }
-    end
-
-    if terms.height ~= nil then
-        return {
-            height = terms.height,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = terms.height - state.body.pose.height,
-            source = modeName,
-        }
-    end
-
-    if terms.target ~= nil and terms.target.height ~= nil then
-        return {
-            height = terms.target.height,
-            speed = 0.0,
-            active = true,
-            pending = false,
-            error = terms.target.height - state.body.pose.height,
-            source = modeName .. "_" .. tostring(terms.phase),
-        }
-    end
-
-    return {
-        height = state.body.pose.height,
-        speed = 0.0,
-        active = false,
-        pending = false,
-        error = 0.0,
-        source = modeName,
-    }
-end
-
-local function headingTerms(terms, state, modeName)
-    if terms.heading ~= nil and type(terms.heading) == "table" then
-        local target = terms.heading.target
-
-        return {
-            angle = target,
-            rate = terms.heading.rate,
-            active = terms.heading.active,
-            pending = terms.heading.pending,
-            error = target == nil and 0.0 or mathx.wrapPi(target - state.navigation.heading.angle),
-            source = terms.heading.source,
-        }
-    end
-
-    if terms.heading ~= nil then
-        return {
-            angle = terms.heading,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = mathx.wrapPi(terms.heading - state.navigation.heading.angle),
-            source = modeName,
-        }
-    end
-
-    if terms.target ~= nil and terms.target.heading ~= nil then
-        return {
-            angle = terms.target.heading,
-            rate = 0.0,
-            active = true,
-            pending = false,
-            error = mathx.wrapPi(terms.target.heading - state.navigation.heading.angle),
-            source = modeName .. "_" .. tostring(terms.phase),
-        }
-    end
-
-    return {
-        angle = state.navigation.heading.angle,
-        rate = 0.0,
-        active = false,
-        pending = false,
-        error = 0.0,
-        source = modeName,
-    }
+    return self.modes[self.name]:target(ctx)
 end
 
 function State:terms()
     local mode = self.modes[self.name]
     local activeTerms = mode:terms(self.lastState)
-    local height = heightTerms(activeTerms, self.lastState, self.name)
-    local heading = headingTerms(activeTerms, self.lastState, self.name)
-    local lock = activeTerms.lock or {
-        height = height.source,
-        heading = heading.source,
-    }
 
     return {
-        mode = {
-            name = self.name,
-            terms = activeTerms,
-        },
-        transition = {
-            navigationExited = self.lastTransition.navigationExited,
-        },
-        navigation = self.name == modes.navigation and activeTerms or nil,
-        height = height,
-        heading = heading,
-        lock = lock,
+        name = self.name,
+        terms = activeTerms,
     }
 end
 

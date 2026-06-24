@@ -30,37 +30,38 @@ function Cruise:exit()
     self.heading = nil
 end
 
-function Cruise:update(ctx)
-    return common.status(self.velocity ~= nil)
-end
+function Cruise:update() end
 
-function Cruise:terms()
+function Cruise:terms(state)
+    local heightError = state == nil and 0.0 or self.height - state.body.pose.height
+    local headingError = state == nil and 0.0
+        or mathx.wrapPi(self.heading - state.navigation.heading.angle)
+
     return {
         velocity = horizontalVector(self.velocity),
-        height = self.height,
-        heading = self.heading,
-        lock = {
-            height = "cruise",
-            heading = "cruise",
+        height = {
+            target = self.height,
+            rate = 0.0,
+            error = heightError,
+        },
+        heading = {
+            target = self.heading,
+            rate = 0.0,
+            error = headingError,
         },
     }
 end
 
-function Cruise:target(input)
+function Cruise:target(ctx)
     local feedforward = common.frdFromWorld(self.velocity, self.heading)
+    local target = common.target()
 
-    return common.target({
-        position = {
-            down = input.state.body.pose.height - self.height,
-        },
-        feedforward = {
-            forward = feedforward.forward,
-            right = feedforward.right,
-        },
-        attitude = {
-            yaw = self.heading,
-        },
-    })
+    target.translation.position.down = ctx.state.body.pose.height - self.height
+    target.translation.feedforward.forward = feedforward.forward
+    target.translation.feedforward.right = feedforward.right
+    target.attitude.angle.yaw = self.heading
+
+    return target
 end
 
 return cruise

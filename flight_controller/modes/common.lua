@@ -1,96 +1,38 @@
 local common = {}
 
-local function zeroAxes()
-    return {
-        roll = 0.0,
-        pitch = 0.0,
-        yaw = 0.0,
-    }
-end
-
-local function copyAxes(value)
-    if value == nil then
-        return zeroAxes()
-    end
-
-    return {
-        roll = value.roll or 0.0,
-        pitch = value.pitch or 0.0,
-        yaw = value.yaw or 0.0,
-    }
-end
-
-local function emptyTranslationPosition()
-    return {
-        forward = nil,
-        right = nil,
-        down = nil,
-    }
-end
-
-local function zeroTranslation()
-    return {
-        forward = 0.0,
-        right = 0.0,
-        down = 0.0,
-    }
-end
-
-local function copyTranslation(value)
-    if value == nil then
-        return zeroTranslation()
-    end
-
-    return {
-        forward = value.forward or 0.0,
-        right = value.right or 0.0,
-        down = value.down or 0.0,
-    }
-end
-
-local function copyTranslationPosition(value)
-    if value == nil then
-        return emptyTranslationPosition()
-    end
-
-    return {
-        forward = value.forward,
-        right = value.right,
-        down = value.down,
-    }
-end
-
-local function copyAttitudeAngle(value)
-    value = value or {}
-
-    return {
-        roll = value.roll,
-        pitch = value.pitch,
-        yaw = value.yaw,
-    }
-end
-
-function common.target(input)
-    input = input or {}
-
+function common.target()
     return {
         translation = {
-            position = copyTranslationPosition(input.position),
-            feedforward = copyTranslation(input.feedforward),
-        },
-        attitude = {
-            angle = copyAttitudeAngle(input.attitude),
+            position = {
+                forward = nil,
+                right = nil,
+                down = nil,
+            },
             feedforward = {
-                angle = copyAxes(input.attitudeFeedforwardAngle),
-                rate = copyAxes(input.attitudeFeedforwardRate),
+                forward = 0.0,
+                right = 0.0,
+                down = 0.0,
             },
         },
-    }
-end
-
-function common.status(active)
-    return {
-        active = active == true,
+        attitude = {
+            angle = {
+                roll = nil,
+                pitch = nil,
+                yaw = nil,
+            },
+            feedforward = {
+                angle = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+                rate = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+            },
+        },
     }
 end
 

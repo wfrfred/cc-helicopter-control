@@ -19,7 +19,7 @@ function controller.new(control)
     }, Controller)
 end
 
-local function horizontalTarget(self, state, target, heading, reset, dt)
+local function updateHorizontal(self, state, target, heading, reset, dt)
     local translation = target.translation
     local position = translation.position
     local feedforward = translation.feedforward
@@ -60,7 +60,7 @@ function Controller:update(input)
     local reset = input.reset or {}
     local attitudeAngle = target.attitude.angle
     local heading = attitudeAngle.yaw or state.navigation.heading.angle
-    local horizontal = horizontalTarget(self, state, target, heading, reset, input.dt)
+    local horizontal = updateHorizontal(self, state, target, heading, reset, input.dt)
     local height = nil
 
     if target.translation.position.down ~= nil then

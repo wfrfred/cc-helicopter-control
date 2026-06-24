@@ -115,7 +115,7 @@ function control_task.run(shared)
 
             local navigationCommand = takeNavigationCommand(shared)
             local inputEvent = inputEventSnapshot(input)
-            local modeStatus = machines.mode:update({
+            local modeUpdate = machines.mode:update({
                 input = input,
                 state = state,
                 navigationCommand = navigationCommand,
@@ -133,7 +133,7 @@ function control_task.run(shared)
             local command = machines.controller:update({
                 state = state,
                 target = target,
-                reset = modeStatus.reset,
+                reset = modeUpdate.reset,
                 dt = dt,
             })
             local controlTerms = machines.controller:terms()
@@ -160,11 +160,11 @@ function control_task.run(shared)
                     inputSender = shared.inputSender,
                     state = state,
                     flight = flight,
-                    mode = modeTerms.mode,
-                    navigation = modeTerms.navigation,
+                    mode = modeTerms,
+                    navigation = modeTerms.name == "navigation" and modeTerms.terms or nil,
                     navigationConfig = config.navigation,
-                    height = modeTerms.height,
-                    heading = modeTerms.heading,
+                    height = modeTerms.terms.height,
+                    heading = modeTerms.terms.heading,
                     command = command,
                     control = controlTerms,
                     rotor = rotorOutput.blades,

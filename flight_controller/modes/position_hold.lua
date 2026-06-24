@@ -45,48 +45,46 @@ function Hold:update(ctx)
         rate = ctx.state.world.velocity.y,
         dt = ctx.dt,
     })
-
-    return common.status(true)
 end
 
 function Hold:exit() end
 
-function Hold:terms()
+function Hold:terms(state)
     local terms = horizontalVector(self.position)
+    local height = self.lastHeight
+    local headingError = state == nil and 0.0
+        or mathx.wrapPi(self.heading - state.navigation.heading.angle)
 
-    terms.height = self.lastHeight
+    terms.height = {
+        target = height.target,
+        rate = height.rate,
+        error = height.error,
+    }
     terms.heading = {
         target = self.heading,
         rate = 0.0,
-        active = true,
-        pending = false,
-        source = "position_hold",
-    }
-    terms.lock = {
-        height = self.lastHeight.source,
-        heading = "position_hold",
+        error = headingError,
     }
 
     return terms
 end
 
-function Hold:target(input)
-    local positionError = self.position - horizontalVector(input.state.world.position)
+function Hold:target(ctx)
+    local positionError = self.position - horizontalVector(ctx.state.world.position)
     local position = common.frdFromWorld(positionError, self.heading)
+    local target = common.target()
 
-    return common.target({
-        position = {
-            forward = position.forward,
-            right = position.right,
-            down = self.lastHeight.active and input.state.body.pose.height - self.lastHeight.target or nil,
-        },
-        feedforward = {
-            down = -self.lastHeight.rate,
-        },
-        attitude = {
-            yaw = self.heading,
-        },
-    })
+    target.translation.position.forward = position.forward
+    target.translation.position.right = position.right
+
+    if self.lastHeight.active then
+        target.translation.position.down = ctx.state.body.pose.height - self.lastHeight.target
+    end
+
+    target.translation.feedforward.down = -self.lastHeight.rate
+    target.attitude.angle.yaw = self.heading
+
+    return target
 end
 
 return position_hold

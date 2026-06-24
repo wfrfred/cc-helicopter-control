@@ -138,43 +138,49 @@ function Manual:update(ctx)
         )
     end
 
-    return common.status(manual.active(input))
 end
 
 function Manual:terms()
+    local height = self.lastHeight
+    local heading = self.lastHeading
+
     return {
         roll = self.roll,
         pitch = self.pitch,
-        height = self.lastHeight,
-        heading = self.lastHeading,
-        lock = {
-            height = self.lastHeight.source,
-            heading = self.lastHeading.source,
+        height = {
+            target = height.target,
+            rate = height.rate,
+            error = height.error,
+        },
+        heading = {
+            target = heading.target,
+            rate = heading.rate,
+            error = heading.error,
         },
     }
 end
 
-function Manual:target(input)
+function Manual:target(ctx)
     local height = self.lastHeight
     local heading = self.lastHeading
-    local target = common.target({
-        position = {
-            down = height.active and input.state.body.pose.height - height.target or nil,
-        },
-        feedforward = {
-            down = -height.rate,
-        },
-        attitude = {
-            roll = self.roll,
-            pitch = self.pitch,
-            yaw = heading.active and heading.target or nil,
-        },
-    })
+    local target = common.target()
+
+    if height.active then
+        target.translation.position.down = ctx.state.body.pose.height - height.target
+    end
+
+    target.translation.feedforward.down = -height.rate
+    target.attitude.angle.roll = self.roll
+    target.attitude.angle.pitch = self.pitch
+
+    if heading.active then
+        target.attitude.angle.yaw = heading.target
+    end
 
     if heading.source == "manual" then
         target.attitude.feedforward.angle = attitude_math.bodyRatesFromEulerRates(
-            input.state.body.pose.roll,
-            input.state.body.pose.pitch,
+            ctx.state.body.pose.roll,
+            ctx.state.body.pose.pitch,
             {
                 heading = heading.rate,
             }

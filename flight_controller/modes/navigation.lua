@@ -37,19 +37,20 @@ local function assertPosition(value, name)
     return value
 end
 
-local function copyPosition(value)
-    return {
-        x = value.x,
-        y = value.y,
-        z = value.z,
-    }
+local function copy(value)
+    local out = {}
+
+    for key, item in pairs(value) do
+        out[key] = item
+    end
+
+    return out
 end
 
-local function horizontalTarget(value)
+local function horizontalPosition(value)
     return {
         x = value.x,
         z = value.z,
-        y = value.y,
     }
 end
 
@@ -77,7 +78,7 @@ local function waypointSummary(waypoint)
     return {
         id = waypoint.id,
         name = waypoint.name or waypoint.id,
-        position = copyPosition(waypoint.position),
+        position = copy(waypoint.position),
     }
 end
 
@@ -172,7 +173,7 @@ local function addLeg(legs, kind, position, heading, radius)
 
     legs[#legs + 1] = {
         kind = kind,
-        position = copyPosition(position),
+        position = copy(position),
         heading = heading,
         radius = radius,
     }
@@ -194,7 +195,7 @@ local function buildApproachLegs(waypoint, approach, config)
             addLeg(legs, "entry", routeStart(waypoint, approach, config), nil, waypointRadius)
         end
 
-        local finalPosition = copyPosition(waypoint.position)
+        local finalPosition = copy(waypoint.position)
 
         if approach.finalAltitude ~= nil then
             finalPosition.y = approach.finalAltitude
@@ -273,7 +274,7 @@ end
 local function targetForPhase(route, position, pose)
     if route.phase == "climb" then
         return {
-            position = horizontalTarget(route.holdPosition),
+            position = horizontalPosition(route.holdPosition),
             height = route.cruiseAltitude,
             heading = pose.heading,
         }
@@ -281,7 +282,7 @@ local function targetForPhase(route, position, pose)
 
     if route.phase == "turn" then
         return {
-            position = horizontalTarget(route.holdPosition),
+            position = horizontalPosition(route.holdPosition),
             height = route.cruiseAltitude,
             heading = legHeading(route, position),
         }
@@ -292,7 +293,7 @@ local function targetForPhase(route, position, pose)
         local hold = waypoint.hold or {}
 
         return {
-            position = horizontalTarget(waypoint.position),
+            position = horizontalPosition(waypoint.position),
             height = destinationHeight(route),
             heading = hold.heading or route.arrivalHeading,
         }
@@ -303,14 +304,14 @@ local function targetForPhase(route, position, pose)
         local hold = waypoint.hold or {}
 
         return {
-            position = horizontalTarget(route.destination),
+            position = horizontalPosition(route.destination),
             height = destinationHeight(route),
             heading = hold.heading or route.arrivalHeading,
         }
     end
 
     return {
-        position = horizontalTarget(currentLeg(route).position),
+        position = horizontalPosition(currentLeg(route).position),
         height = legHeight(route),
         heading = legHeading(route, position),
     }
@@ -318,13 +319,13 @@ end
 
 local function advanceLeg(route, position)
     if route.legIndex >= #route.legs then
-        route.holdPosition = copyPosition(position)
+        route.holdPosition = copy(position)
         route.phase = "descend"
         return
     end
 
     route.legIndex = route.legIndex + 1
-    route.holdPosition = copyPosition(position)
+    route.holdPosition = copy(position)
     route.phase = "turn"
 end
 
@@ -387,7 +388,7 @@ local function routeTerms(route)
             index = route.legIndex,
             count = #route.legs,
             kind = leg.kind,
-            position = copyPosition(leg.position),
+            position = copy(leg.position),
         } or nil,
         arrived = route.phase == "arrived",
         reason = nil,
@@ -427,17 +428,17 @@ local function activateRoute(self, id, state)
         legs = legs,
         legIndex = 1,
         phase = "climb",
-        holdPosition = copyPosition(position),
-        destination = copyPosition(legs[#legs].position),
+        holdPosition = copy(position),
+        destination = copy(legs[#legs].position),
         cruiseAltitude = cruiseAltitude(self.selected, approach, position.y, legs),
         arrivalHeading = approach and approach.heading or pose.heading,
     }
     self.inactiveReason = nil
 end
 
-local function cancelRoute(self, reason)
+local function cancelRoute(self)
     self.route = nil
-    self.inactiveReason = reason or "cancelled"
+    self.inactiveReason = "cancelled"
 end
 
 local function applyCommand(self, command, state)
@@ -446,12 +447,7 @@ local function applyCommand(self, command, state)
         return
     end
 
-    if command.action == "cancel" then
-        cancelRoute(self, "command")
-        return
-    end
-
-    error("navigation command action must be activate or cancel: " .. tostring(command.action))
+    error("navigation command action must be activate: " .. tostring(command.action))
 end
 
 local function targetForRoute(route, state)
@@ -491,10 +487,30 @@ function Navigation:terms(state)
     local phaseTarget = state ~= nil and targetForRoute(self.route, state) or nil
 
     terms.target = phaseTarget
-    terms.lock = route == nil and nil or {
-        height = "navigation_" .. route.phase,
-        heading = "navigation_" .. route.phase,
-    }
+
+    if route ~= nil and phaseTarget ~= nil then
+        terms.height = {
+            target = phaseTarget.height,
+            rate = 0.0,
+            error = phaseTarget.height - state.body.pose.height,
+        }
+        terms.heading = {
+            target = phaseTarget.heading,
+            rate = 0.0,
+            error = mathx.wrapPi(phaseTarget.heading - state.navigation.heading.angle),
+        }
+    else
+        terms.height = {
+            target = state and state.body.pose.height or nil,
+            rate = 0.0,
+            error = 0.0,
+        }
+        terms.heading = {
+            target = state and state.navigation.heading.angle or nil,
+            rate = 0.0,
+            error = 0.0,
+        }
+    end
 
     return terms
 end
@@ -503,17 +519,15 @@ function Navigation:enter(ctx)
     local command = ctx.command
 
     if command == nil or command.action == nil then
-        return common.status(self.route ~= nil)
+        return
     end
 
     applyCommand(self, command, ctx.state)
-
-    return common.status(self.route ~= nil)
 end
 
 function Navigation:update(ctx)
     if self.route == nil then
-        return common.status(false)
+        return
     end
 
     local routeMotion = motion(ctx.state)
@@ -521,33 +535,32 @@ function Navigation:update(ctx)
     local pose = ctx.state.body.pose
 
     updatePhase(self.route, position, pose, routeMotion, self.config)
-
-    return common.status(self.route ~= nil)
 end
 
 function Navigation:exit(ctx)
     if self.route ~= nil then
-        cancelRoute(self, ctx and ctx.reason or nil)
+        cancelRoute(self)
     end
 end
 
-function Navigation:target(input)
+function Navigation:target(ctx)
     assert(self.route ~= nil, "navigation target requires active route")
 
-    local phaseTarget = targetForRoute(self.route, input.state)
+    local phaseTarget = targetForRoute(self.route, ctx.state)
     local positionError = {
-        x = phaseTarget.position.x - input.state.world.position.x,
-        y = phaseTarget.height - input.state.body.pose.height,
-        z = phaseTarget.position.z - input.state.world.position.z,
+        x = phaseTarget.position.x - ctx.state.world.position.x,
+        y = phaseTarget.height - ctx.state.body.pose.height,
+        z = phaseTarget.position.z - ctx.state.world.position.z,
     }
     local position = common.frdFromWorld(positionError, phaseTarget.heading)
+    local target = common.target()
 
-    return common.target({
-        position = position,
-        attitude = {
-            yaw = phaseTarget.heading,
-        },
-    })
+    target.translation.position.forward = position.forward
+    target.translation.position.right = position.right
+    target.translation.position.down = position.down
+    target.attitude.angle.yaw = phaseTarget.heading
+
+    return target
 end
 
 return navigation

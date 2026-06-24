@@ -75,6 +75,30 @@ local function navigationView(runtime, navigationConfig)
     }
 end
 
+local function heightView(input)
+    local height = input.height or {}
+
+    return {
+        value = input.state.body.pose.height,
+        target = height.target,
+        rate = input.state.world.velocity.y,
+        targetRate = height.rate or 0.0,
+        error = height.error or 0.0,
+    }
+end
+
+local function headingView(input)
+    local heading = input.heading or {}
+
+    return {
+        angle = input.state.navigation.heading.angle,
+        target = heading.target,
+        rate = input.state.navigation.heading.rate,
+        targetRate = heading.rate or 0.0,
+        error = heading.error or 0.0,
+    }
+end
+
 function terms.running(input)
     return {
         status = "running",
@@ -94,12 +118,8 @@ function terms.running(input)
         },
         flight = input.flight,
         mode = input.mode,
-        lock = {
-            height = input.height.source,
-            heading = input.heading.source,
-        },
-        height = input.height,
-        heading = input.heading,
+        height = heightView(input),
+        heading = headingView(input),
         state = telemetryState(input.state),
         control = input.control,
         navigation = navigationView(input.navigation, input.navigationConfig),

@@ -717,8 +717,6 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     local position = raw.position
     local velocity = raw.velocity
     local heading = telemetry.heading
-    local mode = telemetry.mode
-    local lock = telemetry.lock
     local navigation = telemetry.navigation
     local navTarget = navigation.target
     local waypoint = navigation.waypoint or navigation.selected
@@ -776,16 +774,6 @@ local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
             draw.writeAt(mon, x, y, "no active target", MUTED, BG, width)
             y = y + 1
         end
-    end
-
-    if y <= limitY then
-        y = y + 1
-        section(mon, y, "locks", colors.black, HEADER)
-        y = y + 1
-        draw.writeAt(mon, x, y, "mode    " .. tostring(mode.name), TEXT, BG, width)
-        if y + 1 <= limitY then draw.writeAt(mon, x, y + 1, "heading " .. tostring(lock.heading), TEXT, BG, width) end
-        if y + 2 <= limitY then draw.writeAt(mon, x, y + 2, "height  " .. tostring(lock.height), TEXT, BG, width) end
-        y = y + 3
     end
 
     if y <= limitY then

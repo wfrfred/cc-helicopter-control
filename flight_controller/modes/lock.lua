@@ -54,11 +54,11 @@ function Lock:locked(value)
     return self:targetFor(value, 0.0, true, false, "locked")
 end
 
-function Lock:update(input)
-    local command = input.input or 0.0
-    local value = input.value
-    local rate = input.rate or 0.0
-    local dt = input.dt or 0.0
+function Lock:update(request)
+    local command = request.input or 0.0
+    local value = request.value
+    local rate = request.rate or 0.0
+    local dt = request.dt or 0.0
 
     if command ~= 0.0 then
         self.target = self.normalize(value)

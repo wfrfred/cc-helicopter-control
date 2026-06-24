@@ -150,7 +150,6 @@ function Attitude:update(input)
             roll = commanded.roll,
             pitch = commanded.pitch,
             heading = heading,
-            source = commanded.source,
         },
         target = {
             orientation = attitudeTarget.orientation,

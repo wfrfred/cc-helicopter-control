@@ -148,20 +148,22 @@ local navState = {
     body = {
         pose = {
             heading = 0.0,
+            height = 90.0,
         },
     },
     navigation = {
         heading = {
+            angle = 0.0,
             rate = 0.0,
         },
     },
 }
 local navMode = navigation.new(config.navigation)
-local navResult = navMode:enter({
+navMode:enter({
     command = { action = "activate", waypoint = "home" },
     state = navState,
     dt = config.control.loop.dt,
 })
-assert(navResult.active == true, "navigation should activate configured home waypoint")
+assert(navMode:terms(navState).active == true, "navigation should activate configured home waypoint")
 
 print("smoke ok")

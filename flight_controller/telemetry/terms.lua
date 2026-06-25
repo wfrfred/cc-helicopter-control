@@ -1,3 +1,5 @@
+local tablex = require("lib.tablex")
+
 local terms = {}
 
 function terms.waiting(input)
@@ -44,18 +46,13 @@ local function telemetryState(state)
 end
 
 local function waypointCatalog(navigationConfig)
-    local out = {}
     local waypoints = navigationConfig and navigationConfig.waypoints or {}
 
-    for index, waypoint in ipairs(waypoints) do
-        out[index] = {
-            id = waypoint.id,
+    return tablex.map(waypoints, function(waypoint)
+        return tablex.merge(tablex.pick(waypoint, { "id", "position" }), {
             name = waypoint.name or waypoint.id,
-            position = waypoint.position,
-        }
-    end
-
-    return out
+        })
+    end)
 end
 
 local function navigationView(runtime, navigationConfig)

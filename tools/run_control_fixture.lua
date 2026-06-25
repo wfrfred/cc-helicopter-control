@@ -11,6 +11,7 @@ local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
 local monitor_view = require("monitor_view")
 local sensor_task = require("tasks.sensor_task")
+local tablex = require("lib.tablex")
 local telemetryTerms = require("telemetry.terms")
 
 local function assertNumber(path, value)
@@ -87,6 +88,51 @@ local required = {
 
 for _, name in ipairs(required) do
     assert(seen[name], "missing fixture: " .. name)
+end
+
+local function checkTablex()
+    local mapped = tablex.map({ 2, 4, 6 }, function(value, index)
+        return value + index
+    end)
+
+    assert(mapped[1] == 3, "map should preserve sequence order")
+    assert(mapped[2] == 6, "map should pass sequence index")
+    assert(mapped[3] == 9, "map should return a sequence")
+
+    local filtered = tablex.filter({ 1, 2, 3, 4 }, function(value)
+        return value % 2 == 0
+    end)
+
+    assert(#filtered == 2, "filter should return a compact sequence")
+    assert(filtered[1] == 2, "filter should keep first matching item")
+    assert(filtered[2] == 4, "filter should keep second matching item")
+
+    local reduced = tablex.reduce({ "a", "b", "c" }, function(acc, value, index)
+        return acc .. index .. value
+    end, "")
+
+    assert(reduced == "1a2b3c", "reduce should traverse sequence order")
+
+    local rows = tablex.transpose({ "height", "heading" }, {
+        target = {
+            height = 10,
+            heading = 1.57,
+        },
+        error = {
+            height = 2,
+            heading = 0.1,
+        },
+    })
+
+    assert(rows.height.target == 10, "transpose should group height target")
+    assert(rows.height.error == 2, "transpose should group height error")
+    assert(rows.heading.target == 1.57, "transpose should group heading target")
+    assert(rows.heading.error == 0.1, "transpose should group heading error")
+
+    local columns = tablex.untranspose({ "height", "heading" }, rows)
+
+    assert(columns.target.height == 10, "untranspose should restore target height")
+    assert(columns.error.heading == 0.1, "untranspose should restore heading error")
 end
 
 local function canonicalState()
@@ -2031,6 +2077,7 @@ local function checkAttitudeExternalFeedforward()
 end
 
 checkFrozenBaseline()
+checkTablex()
 checkProtocolDecode()
 checkFlightState()
 checkModeUpdateShape()

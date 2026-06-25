@@ -1,4 +1,5 @@
 local mathx = require("lib.mathx")
+local tablex = require("lib.tablex")
 
 local allocation = {}
 
@@ -11,13 +12,15 @@ local AXIS_INDEX = {
     yaw = 3,
 }
 
+local COMMAND_KEYS = {
+    "collective",
+    "roll",
+    "pitch",
+    "yaw",
+}
+
 local function commandTerms(commands)
-    return {
-        collective = commands.collective,
-        roll = commands.roll,
-        pitch = commands.pitch,
-        yaw = commands.yaw,
-    }
+    return tablex.pick(commands, COMMAND_KEYS)
 end
 
 local function finalClampCommands(commands, limits)

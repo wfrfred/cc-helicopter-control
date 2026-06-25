@@ -1,5 +1,6 @@
 local common = require("modes.common")
 local mathx = require("lib.mathx")
+local tablex = require("lib.tablex")
 
 local navigation = {}
 
@@ -37,16 +38,6 @@ local function assertPosition(value, name)
     return value
 end
 
-local function copy(value)
-    local out = {}
-
-    for key, item in pairs(value) do
-        out[key] = item
-    end
-
-    return out
-end
-
 local function horizontalPosition(value)
     return {
         x = value.x,
@@ -78,7 +69,7 @@ local function waypointSummary(waypoint)
     return {
         id = waypoint.id,
         name = waypoint.name or waypoint.id,
-        position = copy(waypoint.position),
+        position = tablex.copy(waypoint.position),
     }
 end
 
@@ -173,7 +164,7 @@ local function addLeg(legs, kind, position, heading, radius)
 
     legs[#legs + 1] = {
         kind = kind,
-        position = copy(position),
+        position = tablex.copy(position),
         heading = heading,
         radius = radius,
     }
@@ -195,7 +186,7 @@ local function buildApproachLegs(waypoint, approach, config)
             addLeg(legs, "entry", routeStart(waypoint, approach, config), nil, waypointRadius)
         end
 
-        local finalPosition = copy(waypoint.position)
+        local finalPosition = tablex.copy(waypoint.position)
 
         if approach.finalAltitude ~= nil then
             finalPosition.y = approach.finalAltitude
@@ -319,13 +310,13 @@ end
 
 local function advanceLeg(route, position)
     if route.legIndex >= #route.legs then
-        route.holdPosition = copy(position)
+        route.holdPosition = tablex.copy(position)
         route.phase = "descend"
         return
     end
 
     route.legIndex = route.legIndex + 1
-    route.holdPosition = copy(position)
+    route.holdPosition = tablex.copy(position)
     route.phase = "turn"
 end
 
@@ -388,7 +379,7 @@ local function routeTerms(route)
             index = route.legIndex,
             count = #route.legs,
             kind = leg.kind,
-            position = copy(leg.position),
+            position = tablex.copy(leg.position),
         } or nil,
         arrived = route.phase == "arrived",
         reason = nil,
@@ -428,8 +419,8 @@ local function activateRoute(self, id, state)
         legs = legs,
         legIndex = 1,
         phase = "climb",
-        holdPosition = copy(position),
-        destination = copy(legs[#legs].position),
+        holdPosition = tablex.copy(position),
+        destination = tablex.copy(legs[#legs].position),
         cruiseAltitude = cruiseAltitude(self.selected, approach, position.y, legs),
         arrivalHeading = approach and approach.heading or pose.heading,
     }

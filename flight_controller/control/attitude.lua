@@ -1,5 +1,5 @@
 local attitude_math = require("lib.attitude_math")
-local feedforward = require("lib.feedforward")
+local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 local tablex = require("lib.tablex")
 
@@ -24,16 +24,9 @@ function attitude.new(control)
         },
     }
 
-    tablex.record.each(controllers, function(controller, axis)
-        local rateFeedforward = control.attitude.rate_feedforward[axis]
-
-        controller.rate:setFeedforward(
-            feedforward.linear(rateFeedforward.gain, rateFeedforward.bias)
-        )
-    end)
-
     return setmetatable({
         controllers = controllers,
+        rateFeedforward = control.attitude.rate_feedforward,
     }, Attitude)
 end
 
@@ -53,26 +46,21 @@ function Attitude:update(state, target, feedforwardInput, dt)
         target.orientation
     )
     local angleResults = tablex.record.map(self.controllers, function(controller, axis)
-        return controller.angle:update({
-            target = bodyAttitudeError[axis],
-            current = 0.0,
-            error = bodyAttitudeError[axis],
-            derivative = -rates[axis],
-            dt = dt,
-        })
+        return controller.angle:update(0.0, bodyAttitudeError[axis], dt, rates[axis])
     end)
     local rateTargets = tablex.record.map(angleResults, function(result, axis)
         return result.output + angleFeedforward[axis]
     end)
     local rateResults = tablex.record.map(self.controllers, function(controller, axis)
-        return controller.rate:update({
-            target = rateTargets[axis],
-            current = rates[axis],
-            dt = dt,
-        })
+        return controller.rate:update(rates[axis], rateTargets[axis], dt)
+    end)
+    local rateTargetFeedforward = tablex.record.map(rateTargets, function(targetRate, axis)
+        local config = self.rateFeedforward[axis]
+
+        return mathx.affine(targetRate, config.gain, config.bias)
     end)
     local commands = tablex.record.map(rateResults, function(result, axis)
-        return result.output + rateFeedforward[axis]
+        return result.output + rateTargetFeedforward[axis] + rateFeedforward[axis]
     end)
 
     return {
@@ -104,11 +92,12 @@ function Attitude:update(state, target, feedforwardInput, dt)
             feedforward = {
                 angle = tablex.record.copy(angleFeedforward),
                 rate = tablex.record.copy(rateFeedforward),
+                rateTarget = tablex.record.copy(rateTargetFeedforward),
             },
-            pid = tablex.record.map(self.controllers, function(controller)
+            pid = tablex.record.map(self.controllers, function(_controller, axis)
                 return {
-                    angle = controller.angle:terms(),
-                    rate = controller.rate:terms(),
+                    angle = angleResults[axis].terms,
+                    rate = rateResults[axis].terms,
                 }
             end),
         },

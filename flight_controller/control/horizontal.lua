@@ -1,4 +1,3 @@
-local feedforward = require("lib.feedforward")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 local tablex = require("lib.tablex")
@@ -16,22 +15,10 @@ function horizontal.new(control)
         velocityRight = pid.new(control.pid.velocity.right),
     }
 
-    controllers.velocityForward:setFeedforward(
-        feedforward.directionalLinear(
-            control.position_hold.velocity_feedforward.forward.gain_neg,
-            control.position_hold.velocity_feedforward.forward.gain_pos
-        )
-    )
-    controllers.velocityRight:setFeedforward(
-        feedforward.directionalLinear(
-            control.position_hold.velocity_feedforward.right.gain_neg,
-            control.position_hold.velocity_feedforward.right.gain_pos
-        )
-    )
-
     return setmetatable({
         control = control,
         controllers = controllers,
+        velocityFeedforward = control.position_hold.velocity_feedforward,
     }, Horizontal)
 end
 
@@ -50,49 +37,69 @@ function Horizontal:update(state, target, feedforwardInput, dt)
     }
     local forwardResult = nil
     local rightResult = nil
+    local forwardPositionTerms = nil
+    local rightPositionTerms = nil
 
     if target.position.forward ~= nil then
-        forwardResult = self.controllers.positionForward:update({
-            target = target.position.forward,
-            current = currentPosition.forward,
-            dt = dt,
-            derivative = -currentVelocity.forward,
-        })
+        forwardResult = self.controllers.positionForward:update(
+            currentPosition.forward,
+            target.position.forward,
+            dt,
+            currentVelocity.forward
+        )
+        forwardPositionTerms = forwardResult.terms
         targetVelocity.forward = targetVelocity.forward + forwardResult.output
     else
-        self.controllers.positionForward:reset()
+        forwardPositionTerms = self.controllers.positionForward:reset()
     end
 
     if target.position.right ~= nil then
-        rightResult = self.controllers.positionRight:update({
-            target = target.position.right,
-            current = currentPosition.right,
-            dt = dt,
-            derivative = -currentVelocity.right,
-        })
+        rightResult = self.controllers.positionRight:update(
+            currentPosition.right,
+            target.position.right,
+            dt,
+            currentVelocity.right
+        )
+        rightPositionTerms = rightResult.terms
         targetVelocity.right = targetVelocity.right + rightResult.output
     else
-        self.controllers.positionRight:reset()
+        rightPositionTerms = self.controllers.positionRight:reset()
     end
 
-    local forwardVelocityResult = self.controllers.velocityForward:update({
-        target = targetVelocity.forward,
-        current = currentVelocity.forward,
-        dt = dt,
-    })
-    local rightVelocityResult = self.controllers.velocityRight:update({
-        target = targetVelocity.right,
-        current = currentVelocity.right,
-        dt = dt,
-    })
+    local forwardVelocityResult = self.controllers.velocityForward:update(
+        currentVelocity.forward,
+        targetVelocity.forward,
+        dt
+    )
+    local rightVelocityResult = self.controllers.velocityRight:update(
+        currentVelocity.right,
+        targetVelocity.right,
+        dt
+    )
+    local forwardVelocityFeedforward = mathx.directionalAffine(
+        targetVelocity.forward,
+        self.velocityFeedforward.forward.gain_neg,
+        self.velocityFeedforward.forward.gain_pos
+    )
+    local rightVelocityFeedforward = mathx.directionalAffine(
+        targetVelocity.right,
+        self.velocityFeedforward.right.gain_neg,
+        self.velocityFeedforward.right.gain_pos
+    )
+    local roll = rightVelocityResult.output
+        + rightVelocityFeedforward
+        + feedforwardInput.velocity.right
+    local pitch = -(forwardVelocityResult.output
+        + forwardVelocityFeedforward
+        + feedforwardInput.velocity.forward)
     local angle = {
         roll = mathx.clamp(
-            rightVelocityResult.output + feedforwardInput.velocity.right,
+            roll,
             -self.control.attitude.limit.roll,
             self.control.attitude.limit.roll
         ),
         pitch = mathx.clamp(
-            -(forwardVelocityResult.output + feedforwardInput.velocity.forward),
+            pitch,
             -self.control.attitude.limit.pitch,
             self.control.attitude.limit.pitch
         ),
@@ -124,12 +131,12 @@ function Horizontal:update(state, target, feedforwardInput, dt)
             },
             pid = {
                 position = {
-                    forward = self.controllers.positionForward:terms(),
-                    right = self.controllers.positionRight:terms(),
+                    forward = forwardPositionTerms,
+                    right = rightPositionTerms,
                 },
                 velocity = {
-                    forward = self.controllers.velocityForward:terms(),
-                    right = self.controllers.velocityRight:terms(),
+                    forward = forwardVelocityResult.terms,
+                    right = rightVelocityResult.terms,
                 },
             },
         },

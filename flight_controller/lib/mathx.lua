@@ -28,6 +28,22 @@ function mathx.clamp(x, lo, hi)
     return x
 end
 
+function mathx.affine(x, gain, bias)
+    return (bias or 0.0) + (gain or 0.0) * x
+end
+
+function mathx.directionalAffine(x, gainNeg, gainPos, biasNeg, biasPos)
+    if x < 0.0 then
+        return mathx.affine(x, gainNeg, biasNeg)
+    end
+
+    if x > 0.0 then
+        return mathx.affine(x, gainPos, biasPos)
+    end
+
+    return 0.0
+end
+
 function mathx.signNonZero(x)
     if x < 0.0 then
         return -1.0

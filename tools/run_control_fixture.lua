@@ -11,6 +11,7 @@ local input_protocol = require("protocol.input")
 local mode_state = require("state.mode_state")
 local mixer = require("hardware.mixer")
 local monitor_view = require("monitor_view")
+local pid = require("lib.pid")
 local sensor_task = require("tasks.sensor_task")
 local tablex = require("lib.tablex")
 local telemetryTerms = require("telemetry.terms")
@@ -163,6 +164,44 @@ local function checkTablex()
 
     assert(columns.target.height == 10, "untranspose should restore target height")
     assert(columns.error.heading == 0.1, "untranspose should restore heading error")
+end
+
+local function checkPid()
+    local controller = pid.new({
+        kp = 2.0,
+        ki = 1.0,
+        kd = 0.5,
+        out_min = -100.0,
+        out_max = 100.0,
+    })
+
+    assert(controller.last == nil, "pid should not expose last()")
+    assert(controller.terms == nil, "pid should not expose terms()")
+
+    local first = controller:update(10.0, 13.0, 0.1)
+
+    assertClose("pid first error", first.error, 3.0)
+    assertClose("pid first derivative", first.derivative, 0.0)
+    assertClose("pid first integral", first.integral, 0.3)
+    assertClose("pid first output", first.output, 6.3)
+
+    local second = controller:update(12.0, 13.0, 0.1)
+
+    assertClose("pid current derivative", second.derivative, 20.0)
+    assertClose("pid trapezoid integral", second.integral, 0.5)
+    assertClose("pid measurement d term", second.terms.d, -10.0)
+    assertClose("pid second output", second.output, -7.5)
+
+    local explicit = controller:update(12.0, 13.0, 0.1, 4.0)
+
+    assertClose("pid explicit derivative", explicit.derivative, 4.0)
+    assertClose("pid explicit derivative output", explicit.output, 0.6)
+
+    local resetTerms = controller:reset()
+    local afterReset = controller:update(1.0, 2.0, 0.1)
+
+    assertClose("pid reset terms", resetTerms.output, 0.0)
+    assertClose("pid reset derivative", afterReset.derivative, 0.0)
 end
 
 local function canonicalState()
@@ -1913,7 +1952,11 @@ local function checkControllerTerms()
     assert(terms.attitude.current.roll.angle ~= state.body.pose.roll, "roll angle pid current should not be body pose roll")
     assert(math.abs(terms.attitude.target.roll.rate - terms.attitude.pid.roll.angle.output) < 1.0e-6, "roll rate target should come from angle pid output")
     assert(type(terms.attitude.pid.roll.rate.output) == "number", "attitude should own rate pid terms")
-    assert(math.abs(terms.allocation.rawCommands.roll - terms.attitude.pid.roll.rate.output) < 1.0e-6, "rate pid output should match raw roll command")
+    assert(math.abs(
+        terms.allocation.rawCommands.roll
+            - terms.attitude.pid.roll.rate.output
+            - terms.attitude.feedforward.rateTarget.roll
+    ) < 1.0e-6, "rate pid output plus feedforward should match raw roll command")
 end
 
 local function checkControllerResetInput()
@@ -2107,13 +2150,26 @@ local function checkAttitudeExternalFeedforward()
     assertClose("roll rate target feedforward", terms.attitude.target.roll.rate, terms.attitude.pid.roll.angle.output + 0.25)
     assertClose("pitch rate target feedforward", terms.attitude.target.pitch.rate, terms.attitude.pid.pitch.angle.output - 0.50)
     assertClose("yaw rate target feedforward", terms.attitude.target.yaw.rate, terms.attitude.pid.yaw.angle.output + 0.75)
-    assertClose("roll command feedforward", terms.allocation.rawCommands.roll, terms.attitude.pid.roll.rate.output + 0.125)
-    assertClose("pitch command feedforward", terms.allocation.rawCommands.pitch, terms.attitude.pid.pitch.rate.output - 0.250)
-    assertClose("yaw command feedforward", terms.allocation.rawCommands.yaw, terms.attitude.pid.yaw.rate.output + 0.375)
+    assertClose(
+        "roll command feedforward",
+        terms.allocation.rawCommands.roll,
+        terms.attitude.pid.roll.rate.output + terms.attitude.feedforward.rateTarget.roll + 0.125
+    )
+    assertClose(
+        "pitch command feedforward",
+        terms.allocation.rawCommands.pitch,
+        terms.attitude.pid.pitch.rate.output + terms.attitude.feedforward.rateTarget.pitch - 0.250
+    )
+    assertClose(
+        "yaw command feedforward",
+        terms.allocation.rawCommands.yaw,
+        terms.attitude.pid.yaw.rate.output + terms.attitude.feedforward.rateTarget.yaw + 0.375
+    )
 end
 
 checkFrozenBaseline()
 checkTablex()
+checkPid()
 checkProtocolDecode()
 checkFlightState()
 checkModeUpdateShape()

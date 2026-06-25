@@ -1,4 +1,3 @@
-local feedforward = require("lib.feedforward")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 local tablex = require("lib.tablex")
@@ -14,13 +13,10 @@ function vertical.new(control)
         speed = pid.new(control.pid.vertical.speed),
     }
 
-    controllers.speed:setFeedforward(
-        feedforward.linear(control.vertical.feedforward.gain, control.vertical.feedforward.bias)
-    )
-
     return setmetatable({
         collective = control.collective,
         controllers = controllers,
+        speedFeedforward = control.vertical.feedforward,
     }, Vertical)
 end
 
@@ -33,26 +29,29 @@ end
 function Vertical:update(state, target, feedforwardInput, dt)
     local targetVelocity = feedforwardInput.position
     local positionResult = nil
+    local positionTerms = nil
 
     if target.position ~= nil then
-        positionResult = self.controllers.height:update({
-            target = target.position,
-            current = state.position,
-            dt = dt,
-            derivative = -state.velocity,
-        })
+        positionResult = self.controllers.height:update(
+            state.position,
+            target.position,
+            dt,
+            state.velocity
+        )
 
+        positionTerms = positionResult.terms
         targetVelocity = targetVelocity + positionResult.output
     else
-        self.controllers.height:reset()
+        positionTerms = self.controllers.height:reset()
     end
 
-    local verticalSpeedResult = self.controllers.speed:update({
-        target = targetVelocity,
-        current = state.velocity,
-        dt = dt,
-    })
-    local collectiveOut = verticalSpeedResult.output + feedforwardInput.velocity
+    local verticalSpeedResult = self.controllers.speed:update(state.velocity, targetVelocity, dt)
+    local speedFeedforward = mathx.affine(
+        targetVelocity,
+        self.speedFeedforward.gain,
+        self.speedFeedforward.bias
+    )
+    local collectiveOut = verticalSpeedResult.output + speedFeedforward + feedforwardInput.velocity
     local tiltVerticalFactor = mathx.clamp(
         -state.downAxis.y,
         self.collective.tilt_compensation.min_factor,
@@ -97,8 +96,8 @@ function Vertical:update(state, target, feedforwardInput, dt)
                 verticalFactor = tiltVerticalFactor,
             },
             pid = {
-                position = self.controllers.height:terms(),
-                velocity = self.controllers.speed:terms(),
+                position = positionTerms,
+                velocity = verticalSpeedResult.terms,
             },
         },
     }

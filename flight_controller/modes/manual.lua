@@ -163,28 +163,32 @@ end
 function Manual:target(ctx)
     local height = self.lastHeight
     local heading = self.lastHeading
-    local target = common.target()
+    local target = common.target("attitude")
 
     if height.active then
-        target.translation.position.down = ctx.state.body.pose.height - height.target
+        target.altitude.position = ctx.state.body.pose.height - height.target
     end
 
-    target.translation.feedforward.down = -height.rate
-    target.attitude.angle.roll = self.roll
-    target.attitude.angle.pitch = self.pitch
+    target.altitude.feedforward.position = -height.rate
+    target.horizontal.angle.roll = self.roll
+    target.horizontal.angle.pitch = self.pitch
 
     if heading.active then
-        target.attitude.angle.yaw = heading.target
+        target.yaw.angle = heading.target
     end
 
     if heading.source == "manual" then
-        target.attitude.feedforward.angle = attitude_math.bodyRatesFromEulerRates(
+        local angleFeedforward = attitude_math.bodyRatesFromEulerRates(
             ctx.state.body.pose.roll,
             ctx.state.body.pose.pitch,
             {
                 heading = heading.rate,
             }
         )
+
+        target.horizontal.feedforward.angle.roll = angleFeedforward.roll
+        target.horizontal.feedforward.angle.pitch = angleFeedforward.pitch
+        target.yaw.feedforward.angle = angleFeedforward.yaw
     end
 
     return target

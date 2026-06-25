@@ -3,6 +3,7 @@ env.install()
 
 local baseline = require("tools.fixtures.control_baseline")
 local attitude_math = require("lib.attitude_math")
+local common = require("modes.common")
 local config = require("config")
 local Controller = require("control.controller")
 local flight_state = require("state.flight_state")
@@ -91,7 +92,7 @@ for _, name in ipairs(required) do
 end
 
 local function checkTablex()
-    local mapped = tablex.map({ 2, 4, 6 }, function(value, index)
+    local mapped = tablex.list.map({ 2, 4, 6 }, function(value, index)
         return value + index
     end)
 
@@ -99,7 +100,26 @@ local function checkTablex()
     assert(mapped[2] == 6, "map should pass sequence index")
     assert(mapped[3] == 9, "map should return a sequence")
 
-    local filtered = tablex.filter({ 1, 2, 3, 4 }, function(value)
+    local eachList = {}
+    tablex.list.each({ "a", "b" }, function(value, index)
+        eachList[#eachList + 1] = tostring(index) .. value
+    end)
+
+    assert(eachList[1] == "1a", "list.each should traverse sequence order")
+    assert(eachList[2] == "2b", "list.each should pass sequence index")
+
+    local eachRecord = {}
+    tablex.record.each({
+        height = 10,
+        heading = 1.57,
+    }, function(value, key)
+        eachRecord[key] = value
+    end)
+
+    assert(eachRecord.height == 10, "record.each should pass record key")
+    assert(eachRecord.heading == 1.57, "record.each should traverse record values")
+
+    local filtered = tablex.list.filter({ 1, 2, 3, 4 }, function(value)
         return value % 2 == 0
     end)
 
@@ -107,13 +127,13 @@ local function checkTablex()
     assert(filtered[1] == 2, "filter should keep first matching item")
     assert(filtered[2] == 4, "filter should keep second matching item")
 
-    local reduced = tablex.reduce({ "a", "b", "c" }, function(acc, value, index)
+    local reduced = tablex.list.reduce({ "a", "b", "c" }, function(acc, value, index)
         return acc .. index .. value
     end, "")
 
     assert(reduced == "1a2b3c", "reduce should traverse sequence order")
 
-    local rows = tablex.transpose({ "height", "heading" }, {
+    local rows = tablex.record.transpose({ "height", "heading" }, {
         target = {
             height = 10,
             heading = 1.57,
@@ -129,7 +149,7 @@ local function checkTablex()
     assert(rows.heading.target == 1.57, "transpose should group heading target")
     assert(rows.heading.error == 0.1, "transpose should group heading error")
 
-    local columns = tablex.untranspose({ "height", "heading" }, rows)
+    local columns = tablex.record.untranspose({ "height", "heading" }, rows)
 
     assert(columns.target.height == 10, "untranspose should restore target height")
     assert(columns.error.heading == 0.1, "untranspose should restore heading error")
@@ -294,61 +314,39 @@ local function worldFromFrd(value, heading)
 end
 
 local function legacyTarget(target, state)
-    local heading = target.attitude.angle.yaw or state.navigation.heading.angle
-    local translation = target.translation
-    local positionDelta = worldFromFrd(translation.position, heading)
+    local heading = target.yaw.angle or state.navigation.heading.angle
+    local horizontalPosition = target.horizontal.position or {}
+    local horizontalVelocity = target.horizontal.feedforward.position or {}
+    local horizontalAngle = target.horizontal.angle or {}
+    local positionDelta = worldFromFrd({
+        forward = horizontalPosition.forward,
+        right = horizontalPosition.right,
+        down = target.altitude.position,
+    }, heading)
     local height = nil
 
-    if translation.position.down ~= nil then
-        height = state.body.pose.height - translation.position.down
+    if target.altitude.position ~= nil then
+        height = state.body.pose.height - target.altitude.position
     end
 
     return {
         position = state.world.position + positionDelta,
-        velocity = worldFromFrd(translation.feedforward, heading),
+        velocity = worldFromFrd({
+            forward = horizontalVelocity.forward,
+            right = horizontalVelocity.right,
+            down = target.altitude.feedforward.position,
+        }, heading),
         height = height,
-        verticalSpeed = -translation.feedforward.down,
-        heightActive = translation.position.down ~= nil,
+        verticalSpeed = -target.altitude.feedforward.position,
+        heightActive = target.altitude.position ~= nil,
         heading = heading,
-        roll = target.attitude.angle.roll,
-        pitch = target.attitude.angle.pitch,
+        roll = horizontalAngle.roll,
+        pitch = horizontalAngle.pitch,
     }
 end
 
 local function neutralTarget()
-    return {
-        translation = {
-            position = {
-                forward = nil,
-                right = nil,
-                down = nil,
-            },
-            feedforward = {
-                forward = 0.0,
-                right = 0.0,
-                down = 0.0,
-            },
-        },
-        attitude = {
-            angle = {
-                roll = nil,
-                pitch = nil,
-                yaw = nil,
-            },
-            feedforward = {
-                angle = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                    yaw = 0.0,
-                },
-                rate = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                    yaw = 0.0,
-                },
-            },
-        },
-    }
+    return common.target("position")
 end
 
 local function runModeUpdate(machine, request)
@@ -426,19 +424,20 @@ local function runCurrentBaselineCase(case)
         dt = config.control.loop.dt,
     })
     local modeTerms = machines.mode:terms()
-    local command = machines.controller:update({
+    local control = machines.controller:update({
         state = state,
         target = target,
         reset = mode.reset,
         dt = config.control.loop.dt,
     })
-    local controlTerms = machines.controller:terms()
+    local command = control.output
+    local controlTerms = control.terms
 
     if case.name == "position_hold neutral" then
         return {
             mode = mode.name,
-            horizontalActive = controlTerms.horizontal.active,
-            target = controlTerms.horizontal.output.attitude,
+            horizontalKind = controlTerms.horizontal.kind,
+            target = controlTerms.horizontal.output.angle,
         }
     end
 
@@ -453,7 +452,7 @@ local function runCurrentBaselineCase(case)
                 height = terms.height.target,
                 heading = terms.heading.target,
             },
-            target = controlTerms.horizontal.output.attitude,
+            target = controlTerms.horizontal.output.angle,
         }
     end
 
@@ -697,15 +696,17 @@ local function checkModeTargetNavigationOverride()
 
     local legacy = legacyTarget(target, state)
 
+    assert(target.translation == nil, "controller target should not expose old translation target")
+    assert(target.attitude == nil, "controller target should not expose old attitude target")
     assert(target.world == nil, "controller target should not expose old world target")
     assert(target.vertical == nil, "controller target should not expose old vertical target")
     assert(target.heading == nil, "controller target should not expose old heading target")
     assert(math.abs(legacy.position.x - 10.0) < 1.0e-6, "navigation should set horizontal target x")
     assert(math.abs(legacy.position.z - -20.0) < 1.0e-6, "navigation should set horizontal target z")
-    assert(target.attitude.feedforward.angle.roll == 0.0, "controller target should default roll angle feedforward")
-    assert(target.attitude.feedforward.rate.yaw == 0.0, "controller target should default yaw rate feedforward")
+    assert(target.horizontal.feedforward.angle.roll == 0.0, "controller target should default roll angle feedforward")
+    assert(target.yaw.feedforward.rate == 0.0, "controller target should default yaw rate feedforward")
     assert(math.abs(legacy.height - 120.0) < 1.0e-6, "navigation should override height")
-    assert(target.attitude.angle.yaw == 0.75, "navigation should override yaw")
+    assert(target.yaw.angle == 0.75, "navigation should override yaw")
 end
 
 local function checkNavigationTargetRequiresRoute()
@@ -846,7 +847,7 @@ local function checkNavigationHeadingWrap()
     })
     local controller = Controller.new(config.control)
 
-    controller:update({
+    local control = controller:update({
         state = state,
         target = target,
         reset = {
@@ -856,10 +857,10 @@ local function checkNavigationHeadingWrap()
     })
 
     assert(
-        math.abs(target.attitude.angle.yaw - state.navigation.heading.angle) > math.pi,
+        math.abs(target.yaw.angle - state.navigation.heading.angle) > math.pi,
         "navigation target should expose raw yaw target, not wrapped debug error"
     )
-    assert(math.abs(controller:terms().attitude.error.yaw.angle) < math.pi, "attitude yaw error should wrap")
+    assert(math.abs(control.terms.attitude.error.yaw.angle) < math.pi, "attitude yaw error should wrap")
 end
 
 local function checkNavigationVelocityFrame()
@@ -946,20 +947,20 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
         }
     )
     local targetPoseRates = attitude_math.bodyRatesFromEulerRates(
-        target.attitude.angle.roll,
-        target.attitude.angle.pitch,
+        target.horizontal.angle.roll,
+        target.horizontal.angle.pitch,
         {
             heading = config.control.heading.target_rate,
         }
     )
 
     assert(target.heading == nil, "controller target should not expose old heading target")
-    assert(target.attitude.angle.yaw == nil, "manual heading rate should not lock yaw")
-    assertClose("manual heading roll feedforward", target.attitude.feedforward.angle.roll, expected.roll)
-    assertClose("manual heading pitch feedforward", target.attitude.feedforward.angle.pitch, expected.pitch)
-    assertClose("manual heading yaw feedforward", target.attitude.feedforward.angle.yaw, expected.yaw)
+    assert(target.yaw.angle == nil, "manual heading rate should not lock yaw")
+    assertClose("manual heading roll feedforward", target.horizontal.feedforward.angle.roll, expected.roll)
+    assertClose("manual heading pitch feedforward", target.horizontal.feedforward.angle.pitch, expected.pitch)
+    assertClose("manual heading yaw feedforward", target.yaw.feedforward.angle, expected.yaw)
     assert(
-        math.abs(target.attitude.feedforward.angle.roll - targetPoseRates.roll) > 1.0e-6,
+        math.abs(target.horizontal.feedforward.angle.roll - targetPoseRates.roll) > 1.0e-6,
         "manual heading feedforward should use current pose, not target attitude"
     )
 end
@@ -1200,8 +1201,8 @@ local function checkCruiseFreezesAxes()
     assertClose("cruise should keep entry velocity z", legacy.velocity.z, -1.0)
     assertClose("cruise should keep entry height", legacy.height, 80.0)
     assertClose("cruise height error should use current height", legacy.height - state.body.pose.height, -10.0)
-    assertClose("cruise should keep entry heading", target.attitude.angle.yaw, 0.0)
-    assertClose("cruise heading error should use current heading", target.attitude.angle.yaw - state.navigation.heading.angle, -1.0)
+    assertClose("cruise should keep entry heading", target.yaw.angle, 0.0)
+    assertClose("cruise heading error should use current heading", target.yaw.angle - state.navigation.heading.angle, -1.0)
 end
 
 local function checkNavigationCommandIgnoresManualOverride()
@@ -1368,8 +1369,8 @@ local function checkNavigationExitRelockTarget()
     assert(mode.name == "position_hold", "navigation cancel exit should return to position_hold")
     assertClose("navigation exit should relock target height to current height", legacy.height, 97.0)
     assertClose("navigation exit height target should start with zero error", legacy.height - state.body.pose.height, 0.0)
-    assertClose("navigation exit should relock target heading to current heading", target.attitude.angle.yaw, 1.25)
-    assertClose("navigation exit heading target should start with zero error", target.attitude.angle.yaw - state.navigation.heading.angle, 0.0)
+    assertClose("navigation exit should relock target heading to current heading", target.yaw.angle, 1.25)
+    assertClose("navigation exit heading target should start with zero error", target.yaw.angle - state.navigation.heading.angle, 0.0)
 end
 
 local function checkTelemetryPreservesConsumedCruiseEvent()
@@ -1551,28 +1552,32 @@ local function canonicalTelemetry()
         state = state,
         control = {
             vertical = {
-                target = {
-                    height = 80.0,
-                    speed = 0.0,
-                    active = true,
+                position = {
+                    target = 80.0,
+                    current = 80.0,
+                    error = 0.0,
                 },
-                current = {
-                    height = 80.0,
-                    speed = 0.0,
+                velocity = {
+                    target = 0.0,
+                    current = 0.0,
+                    error = 0.0,
                 },
-                error = {
-                    height = 0.0,
-                    speed = 0.0,
+                output = {
+                    collective = 1.0,
+                    uncompensated = 1.0,
+                    tiltCompensated = 1.0,
                 },
-                terms = {
-                    height = pidTerms(),
-                    speed = pidTerms(),
-                    tilt = {
-                        compensation = 1.0,
-                        verticalFactor = 1.0,
-                        uncompensated = 1.0,
-                        output = 1.0,
-                    },
+                feedforward = {
+                    position = 0.0,
+                    velocity = 0.0,
+                },
+                tilt = {
+                    compensation = 1.0,
+                    verticalFactor = 1.0,
+                },
+                pid = {
+                    position = pidTerms(),
+                    velocity = pidTerms(),
                 },
             },
             attitude = {
@@ -1600,7 +1605,12 @@ local function canonicalTelemetry()
                         rate = 0.0,
                     },
                 },
-                terms = {
+                output = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                    yaw = 0.0,
+                },
+                pid = {
                     roll = {
                         angle = pidTerms(),
                         rate = pidTerms(),
@@ -1628,52 +1638,24 @@ local function canonicalTelemetry()
                 },
             },
             horizontal = {
-                active = true,
-                worldPosition = {
-                    target = {
-                        x = -213.0,
-                        z = 304.0,
-                    },
-                    current = {
-                        x = -213.0,
-                        z = 304.0,
-                    },
-                    error = {
-                        x = 0.0,
-                        z = 0.0,
-                    },
-                },
-                framePosition = {
+                kind = "position",
+                position = {
                     target = positionAxis(),
                     current = positionAxis(),
                     error = positionAxis(),
                 },
-                worldVelocity = {
-                    target = {
-                        x = 0.0,
-                        z = 0.0,
-                    },
-                    current = {
-                        x = 0.0,
-                        z = 0.0,
-                    },
-                    error = {
-                        x = 0.0,
-                        z = 0.0,
-                    },
-                },
-                frameVelocity = {
+                velocity = {
                     target = positionAxis(),
                     current = positionAxis(),
                     error = positionAxis(),
                 },
                 output = {
-                    attitude = {
+                    angle = {
                         roll = 0.0,
                         pitch = 0.0,
                     },
                 },
-                terms = {
+                pid = {
                     position = {
                         forward = pidTerms(),
                         right = pidTerms(),
@@ -1870,24 +1852,22 @@ local function checkControllerTerms()
         state = state,
         dt = config.control.loop.dt,
     })
-    local command, oldDetails = machines.controller:update({
+    local control = machines.controller:update({
         state = state,
         target = target,
         reset = modeUpdate.reset,
         dt = config.control.loop.dt,
     })
-    local terms = machines.controller:terms()
+    local command = control.output
+    local terms = control.terms
 
-    assert(oldDetails == nil, "controller update should return command only")
+    assert(type(control.output) == "table", "controller update should return output")
+    assert(type(control.terms) == "table", "controller update should return terms")
     assert(type(command.collective) == "number", "controller command should contain collective")
     assert(type(terms.horizontal) == "table", "controller terms should include horizontal")
     assert(type(terms.vertical) == "table", "controller terms should include vertical")
     assert(type(terms.attitude) == "table", "controller terms should include attitude")
     assert(type(terms.allocation) == "table", "controller terms should include allocation")
-    assert(terms.horizontal == machines.controller.horizontal:terms(), "controller should compose horizontal terms from horizontal")
-    assert(terms.vertical == machines.controller.vertical:terms(), "controller should compose vertical terms from vertical")
-    assert(terms.attitude == machines.controller.attitude:terms(), "controller should compose attitude terms from attitude")
-    assert(terms.allocation == machines.controller.allocation:terms(), "controller should compose allocation terms from allocation")
     assert(terms.output == nil, "controller terms should not duplicate final command under output")
     assert(type(terms.allocation.rawCommands) == "table", "allocation terms should include raw commands")
     assert(type(terms.allocation.allocatedCommands) == "table", "allocation terms should include allocated commands")
@@ -1897,8 +1877,8 @@ local function checkControllerTerms()
     assert(math.abs(terms.allocation.finalCommands.roll - command.roll) < 1.0e-6, "final roll should match top-level command")
     assert(math.abs(terms.allocation.finalCommands.pitch - command.pitch) < 1.0e-6, "final pitch should match top-level command")
     assert(math.abs(terms.allocation.finalCommands.yaw - command.yaw) < 1.0e-6, "final yaw should match top-level command")
-    assert(type(terms.horizontal.terms.position.forward.output) == "number", "horizontal should own position pid terms")
-    assert(type(terms.vertical.terms.height.output) == "number", "vertical should own height pid terms")
+    assert(terms.horizontal.kind == "attitude", "manual target should bypass horizontal position controller")
+    assert(type(terms.vertical.pid.position.output) == "number", "vertical should own position pid terms")
     assert(config.control.attitude.time_constant == nil, "attitude time_constant should be removed")
     assertClose("heading target rate", config.control.heading.target_rate, math.rad(60))
     assert(type(config.control.pid.attitude.roll.angle) == "table", "roll angle pid config should exist")
@@ -1913,14 +1893,14 @@ local function checkControllerTerms()
     assertClose("yaw angle kp", config.control.pid.attitude.yaw.angle.kp, 0.85)
     assertClose("yaw angle ki", config.control.pid.attitude.yaw.angle.ki, 0.0)
     assertClose("yaw angle kd", config.control.pid.attitude.yaw.angle.kd, 0.25)
-    assert(type(terms.attitude.terms.roll.angle.output) == "number", "attitude should own roll angle pid terms")
-    assert(type(terms.attitude.terms.pitch.angle.output) == "number", "attitude should own pitch angle pid terms")
-    assert(type(terms.attitude.terms.yaw.angle.output) == "number", "attitude should own yaw angle pid terms")
+    assert(type(terms.attitude.pid.roll.angle.output) == "number", "attitude should own roll angle pid terms")
+    assert(type(terms.attitude.pid.pitch.angle.output) == "number", "attitude should own pitch angle pid terms")
+    assert(type(terms.attitude.pid.yaw.angle.output) == "number", "attitude should own yaw angle pid terms")
     assert(terms.attitude.current.roll.angle == 0.0, "roll angle pid current should be zero quaternion-error reference")
     assert(terms.attitude.current.roll.angle ~= state.body.pose.roll, "roll angle pid current should not be body pose roll")
-    assert(math.abs(terms.attitude.target.roll.rate - terms.attitude.terms.roll.angle.output) < 1.0e-6, "roll rate target should come from angle pid output")
-    assert(type(terms.attitude.terms.roll.rate.output) == "number", "attitude should own rate pid terms")
-    assert(math.abs(terms.allocation.rawCommands.roll - terms.attitude.terms.roll.rate.output) < 1.0e-6, "rate pid output should match raw roll command")
+    assert(math.abs(terms.attitude.target.roll.rate - terms.attitude.pid.roll.angle.output) < 1.0e-6, "roll rate target should come from angle pid output")
+    assert(type(terms.attitude.pid.roll.rate.output) == "number", "attitude should own rate pid terms")
+    assert(math.abs(terms.allocation.rawCommands.roll - terms.attitude.pid.roll.rate.output) < 1.0e-6, "rate pid output should match raw roll command")
 end
 
 local function checkControllerResetInput()
@@ -1954,7 +1934,7 @@ local function checkControllerTargetSemantics()
     state.body.orientation = attitude_math.quaternionFromFrame(
         attitude_math.frameFromPose(state.body.pose.roll, state.body.pose.pitch, 1.25)
     )
-    controller:update({
+    local control = controller:update({
         state = state,
         target = target,
         reset = {
@@ -1963,15 +1943,17 @@ local function checkControllerTargetSemantics()
         dt = config.control.loop.dt,
     })
 
-    local terms = controller:terms()
+    local terms = control.terms
 
-    assert(terms.vertical.target.active == false, "nil down position should disable height loop")
+    assert(terms.vertical.position.target == nil, "nil down position should not run position loop")
     assertClose("nil yaw target should hold current yaw", terms.attitude.error.yaw.angle, 0.0)
-    assert(terms.horizontal.active == false, "nil horizontal position and zero feedforward should disable horizontal loop")
+    assert(terms.horizontal.kind == "position", "position target should use horizontal position branch")
+    assert(terms.horizontal.position.error.forward == nil, "nil forward position should not run position pid")
+    assert(terms.horizontal.position.error.right == nil, "nil right position should not run position pid")
 
     target = neutralTarget()
-    target.translation.position.down = 0.0
-    controller:update({
+    target.altitude.position = 0.0
+    control = controller:update({
         state = state,
         target = target,
         reset = {
@@ -1980,14 +1962,14 @@ local function checkControllerTargetSemantics()
         dt = config.control.loop.dt,
     })
 
-    terms = controller:terms()
+    terms = control.terms
 
-    assert(terms.vertical.target.active == true, "zero down position should enable height hold")
-    assertClose("zero down height error", terms.vertical.error.height, 0.0)
+    assert(terms.vertical.position.target ~= nil, "zero down position should enable height hold")
+    assertClose("zero down height error", terms.vertical.position.error, 0.0)
 
     target = neutralTarget()
-    target.translation.feedforward.forward = 2.0
-    controller:update({
+    target.horizontal.feedforward.position.forward = 2.0
+    control = controller:update({
         state = state,
         target = target,
         reset = {
@@ -1996,32 +1978,43 @@ local function checkControllerTargetSemantics()
         dt = config.control.loop.dt,
     })
 
-    terms = controller:terms()
+    terms = control.terms
 
-    assert(terms.horizontal.active == true, "horizontal feedforward should activate horizontal velocity loop")
-    assertClose("nil forward position uses feedforward only", terms.horizontal.frameVelocity.target.forward, 2.0)
-    assertClose("nil right position uses zero feedforward only", terms.horizontal.frameVelocity.target.right, 0.0)
+    assertClose("nil forward position uses feedforward only", terms.horizontal.velocity.target.forward, 2.0)
+    assertClose("nil right position uses zero feedforward only", terms.horizontal.velocity.target.right, 0.0)
 
     target = neutralTarget()
-    target.attitude.angle.roll = 0.1
-    target.translation.feedforward.right = 1.0
+    target.horizontal.feedforward.velocity.right = 0.1
+    control = controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
 
-    local ok, err = pcall(function()
-        controller:update({
-            state = state,
-            target = target,
-            reset = {
-                horizontal = false,
-            },
-            dt = config.control.loop.dt,
-        })
-    end)
+    terms = control.terms
 
-    assert(not ok, "controller should reject mixed horizontal translation and roll/pitch target")
-    assert(
-        tostring(err):find("cannot combine horizontal translation", 1, true) ~= nil,
-        "controller conflict assert should describe the target contract"
-    )
+    assertClose("velocity feedforward adds to roll target", terms.horizontal.output.angle.roll, 0.1)
+
+    target = common.target("attitude")
+    target.horizontal.angle.roll = 0.1
+    target.horizontal.angle.pitch = -0.2
+    control = controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
+
+    terms = control.terms
+
+    assert(terms.horizontal.kind == "attitude", "direct attitude branch should bypass horizontal PID loops")
+    assertClose("direct attitude roll target", terms.horizontal.output.angle.roll, 0.1)
+    assertClose("direct attitude pitch target", terms.horizontal.output.angle.pitch, -0.2)
 end
 
 local function checkAttitudeExternalFeedforward()
@@ -2046,21 +2039,21 @@ local function checkAttitudeExternalFeedforward()
         dt = config.control.loop.dt,
     })
 
-    target.attitude.feedforward.angle.roll = 0.25
-    target.attitude.feedforward.angle.pitch = -0.50
-    target.attitude.feedforward.angle.yaw = 0.75
-    target.attitude.feedforward.rate.roll = 0.125
-    target.attitude.feedforward.rate.pitch = -0.250
-    target.attitude.feedforward.rate.yaw = 0.375
+    target.horizontal.feedforward.angle.roll = 0.25
+    target.horizontal.feedforward.angle.pitch = -0.50
+    target.yaw.feedforward.angle = 0.75
+    target.horizontal.feedforward.rate.roll = 0.125
+    target.horizontal.feedforward.rate.pitch = -0.250
+    target.yaw.feedforward.rate = 0.375
 
-    machines.controller:update({
+    local control = machines.controller:update({
         state = state,
         target = target,
         reset = modeUpdate.reset,
         dt = config.control.loop.dt,
     })
 
-    local terms = machines.controller:terms()
+    local terms = control.terms
 
     assertClose("roll angle feedforward term", terms.attitude.feedforward.angle.roll, 0.25)
     assertClose("pitch angle feedforward term", terms.attitude.feedforward.angle.pitch, -0.50)
@@ -2068,12 +2061,12 @@ local function checkAttitudeExternalFeedforward()
     assertClose("roll rate feedforward term", terms.attitude.feedforward.rate.roll, 0.125)
     assertClose("pitch rate feedforward term", terms.attitude.feedforward.rate.pitch, -0.250)
     assertClose("yaw rate feedforward term", terms.attitude.feedforward.rate.yaw, 0.375)
-    assertClose("roll rate target feedforward", terms.attitude.target.roll.rate, terms.attitude.terms.roll.angle.output + 0.25)
-    assertClose("pitch rate target feedforward", terms.attitude.target.pitch.rate, terms.attitude.terms.pitch.angle.output - 0.50)
-    assertClose("yaw rate target feedforward", terms.attitude.target.yaw.rate, terms.attitude.terms.yaw.angle.output + 0.75)
-    assertClose("roll command feedforward", terms.allocation.rawCommands.roll, terms.attitude.terms.roll.rate.output + 0.125)
-    assertClose("pitch command feedforward", terms.allocation.rawCommands.pitch, terms.attitude.terms.pitch.rate.output - 0.250)
-    assertClose("yaw command feedforward", terms.allocation.rawCommands.yaw, terms.attitude.terms.yaw.rate.output + 0.375)
+    assertClose("roll rate target feedforward", terms.attitude.target.roll.rate, terms.attitude.pid.roll.angle.output + 0.25)
+    assertClose("pitch rate target feedforward", terms.attitude.target.pitch.rate, terms.attitude.pid.pitch.angle.output - 0.50)
+    assertClose("yaw rate target feedforward", terms.attitude.target.yaw.rate, terms.attitude.pid.yaw.angle.output + 0.75)
+    assertClose("roll command feedforward", terms.allocation.rawCommands.roll, terms.attitude.pid.roll.rate.output + 0.125)
+    assertClose("pitch command feedforward", terms.allocation.rawCommands.pitch, terms.attitude.pid.pitch.rate.output - 0.250)
+    assertClose("yaw command feedforward", terms.allocation.rawCommands.yaw, terms.attitude.pid.yaw.rate.output + 0.375)
 end
 
 checkFrozenBaseline()

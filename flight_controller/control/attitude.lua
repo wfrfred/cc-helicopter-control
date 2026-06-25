@@ -8,14 +8,6 @@ local attitude = {}
 local Attitude = {}
 Attitude.__index = Attitude
 
-local function axisTable(fn)
-    return tablex.reduce({ "roll", "pitch", "yaw" }, function(out, axis)
-        out[axis] = fn(axis)
-
-        return out
-    end, {})
-end
-
 local function updateAngle(axisAnglePid, targetAngle, currentRate, dt)
     return axisAnglePid:update({
         target = targetAngle,
@@ -67,92 +59,100 @@ function attitude.new(control)
     )
 
     return setmetatable({
-        control = control,
         controllers = controllers,
-        lastTerms = {},
     }, Attitude)
 end
 
-function Attitude:update(input)
-    local state = input.state
-    local target = input.target
-    local externalFeedforward = input.feedforward
-    local dt = input.dt
-    local rates = state.body.angular.velocity
-    local angleFeedforward = externalFeedforward.angle
-    local rateFeedforward = externalFeedforward.rate
-    local bodyAttitudeError = attitude_math.attitudeError(
-        state.body.orientation,
-        target.orientation
-    )
-    local angleResults = axisTable(function(axis)
-        return updateAngle(
-            self.controllers[axis].angle,
-            bodyAttitudeError[axis],
-            rates[axis],
-            dt
-        )
+function Attitude:reset()
+    tablex.record.each(self.controllers, function(axis)
+        axis.angle:reset()
+        axis.rate:reset()
     end)
-    local rateTargets = axisTable(function(axis)
-        return angleResults[axis].output + angleFeedforward[axis]
-    end)
-    local rateResults = axisTable(function(axis)
-        return updateRate(
-            self.controllers[axis].rate,
-            rateTargets[axis],
-            rates[axis],
-            dt
-        )
-    end)
-    local commands = axisTable(function(axis)
-        return rateResults[axis].output + rateFeedforward[axis]
-    end)
-    local angleTargets = axisTable(function(axis)
-        return angleResults[axis].target
-    end)
-    local angleCurrent = axisTable(function(axis)
-        return angleResults[axis].current
-    end)
-    local angleErrors = axisTable(function(axis)
-        return angleResults[axis].error
-    end)
-    local rateErrors = axisTable(function(axis)
-        return rateResults[axis].error
-    end)
-    local controllerTerms = axisTable(function(axis)
-        return {
-            angle = self.controllers[axis].angle:terms(),
-            rate = self.controllers[axis].rate:terms(),
-        }
-    end)
-
-    self.lastTerms = {
-        target = tablex.merge({
-            orientation = target.orientation,
-        }, tablex.transpose({ "roll", "pitch", "yaw" }, {
-            angle = angleTargets,
-            rate = rateTargets,
-        })),
-        current = tablex.transpose({ "roll", "pitch", "yaw" }, {
-            angle = angleCurrent,
-            rate = tablex.pick(rates, { "roll", "pitch", "yaw" }),
-        }),
-        error = tablex.transpose({ "roll", "pitch", "yaw" }, {
-            angle = angleErrors,
-            rate = rateErrors,
-        }),
-        terms = controllerTerms,
-        feedforward = {
-            angle = tablex.copy(angleFeedforward),
-            rate = tablex.copy(rateFeedforward),
-        },
-    }
-
-    return commands
 end
 
-function Attitude:terms()
-    return self.lastTerms
+function Attitude:update(state, target, feedforwardInput, dt)
+    local rates = state.angularVelocity
+    local angleFeedforward = feedforwardInput.angle
+    local rateFeedforward = feedforwardInput.rate
+    local bodyAttitudeError = attitude_math.attitudeError(
+        state.orientation,
+        target.orientation
+    )
+    local angleResults = {
+        roll = updateAngle(self.controllers.roll.angle, bodyAttitudeError.roll, rates.roll, dt),
+        pitch = updateAngle(self.controllers.pitch.angle, bodyAttitudeError.pitch, rates.pitch, dt),
+        yaw = updateAngle(self.controllers.yaw.angle, bodyAttitudeError.yaw, rates.yaw, dt),
+    }
+    local rateTargets = {
+        roll = angleResults.roll.output + angleFeedforward.roll,
+        pitch = angleResults.pitch.output + angleFeedforward.pitch,
+        yaw = angleResults.yaw.output + angleFeedforward.yaw,
+    }
+    local rateResults = {
+        roll = updateRate(self.controllers.roll.rate, rateTargets.roll, rates.roll, dt),
+        pitch = updateRate(self.controllers.pitch.rate, rateTargets.pitch, rates.pitch, dt),
+        yaw = updateRate(self.controllers.yaw.rate, rateTargets.yaw, rates.yaw, dt),
+    }
+    local commands = {
+        roll = rateResults.roll.output + rateFeedforward.roll,
+        pitch = rateResults.pitch.output + rateFeedforward.pitch,
+        yaw = rateResults.yaw.output + rateFeedforward.yaw,
+    }
+
+    return {
+        output = commands,
+        terms = {
+            target = tablex.record.merge({
+                orientation = target.orientation,
+            }, tablex.record.transpose({ "roll", "pitch", "yaw" }, {
+                angle = {
+                    roll = angleResults.roll.target,
+                    pitch = angleResults.pitch.target,
+                    yaw = angleResults.yaw.target,
+                },
+                rate = rateTargets,
+            })),
+            current = tablex.record.transpose({ "roll", "pitch", "yaw" }, {
+                angle = {
+                    roll = angleResults.roll.current,
+                    pitch = angleResults.pitch.current,
+                    yaw = angleResults.yaw.current,
+                },
+                rate = tablex.record.pick(rates, { "roll", "pitch", "yaw" }),
+            }),
+            error = tablex.record.transpose({ "roll", "pitch", "yaw" }, {
+                angle = {
+                    roll = angleResults.roll.error,
+                    pitch = angleResults.pitch.error,
+                    yaw = angleResults.yaw.error,
+                },
+                rate = {
+                    roll = rateResults.roll.error,
+                    pitch = rateResults.pitch.error,
+                    yaw = rateResults.yaw.error,
+                },
+            }),
+            output = tablex.record.copy(commands),
+            feedforward = {
+                angle = tablex.record.copy(angleFeedforward),
+                rate = tablex.record.copy(rateFeedforward),
+            },
+            pid = {
+                roll = {
+                    angle = self.controllers.roll.angle:terms(),
+                    rate = self.controllers.roll.rate:terms(),
+                },
+                pitch = {
+                    angle = self.controllers.pitch.angle:terms(),
+                    rate = self.controllers.pitch.rate:terms(),
+                },
+                yaw = {
+                    angle = self.controllers.yaw.angle:terms(),
+                    rate = self.controllers.yaw.rate:terms(),
+                },
+            },
+        },
+    }
 end
 
 return attitude

@@ -2,6 +2,7 @@ local allocation_control = require("control.allocation")
 local attitude_math = require("lib.attitude_math")
 local attitude_control = require("control.attitude")
 local horizontal_control = require("control.horizontal")
+local tablex = require("lib.tablex")
 local vertical_control = require("control.vertical")
 
 local controller = {}
@@ -15,130 +16,153 @@ function controller.new(control)
         vertical = vertical_control.new(control),
         attitude = attitude_control.new(control),
         allocation = allocation_control.new(control),
-        lastTerms = {},
     }, Controller)
 end
 
-local function horizontalTranslationRequested(translation)
-    local position = translation.position
-    local feedforward = translation.feedforward
-
-    return position.forward ~= nil
-        or position.right ~= nil
-        or feedforward.forward ~= 0.0
-        or feedforward.right ~= 0.0
-end
-
-local function horizontalFrame(heading)
-    return {
-        forward = vector.new(math.sin(heading), 0.0, -math.cos(heading)),
-        right = vector.new(math.cos(heading), 0.0, math.sin(heading)),
-    }
-end
-
-local function updateHorizontal(self, state, target, heading, reset, dt)
-    local translation = target.translation
-
-    if reset.horizontal then
-        self.horizontal:reset()
-    end
-
-    if horizontalTranslationRequested(translation) then
-        return self.horizontal:update({
-            state = state,
-            frame = horizontalFrame(heading),
-            target = {
-                position = translation.position,
-            },
-            feedforward = {
-                velocity = {
-                    forward = translation.feedforward.forward,
-                    right = translation.feedforward.right,
-                },
-            },
-            dt = dt,
-        })
-    end
-
-    return self.horizontal:inactive()
-end
-
-local function desiredAttitudeAngle(target, horizontalResult, heading)
-    local angle = target.attitude.angle
-
-    return {
-        roll = angle.roll or horizontalResult.output.attitude.roll,
-        pitch = angle.pitch or horizontalResult.output.attitude.pitch,
-        yaw = angle.yaw or heading,
-    }
+function Controller:reset()
+    tablex.list.each({
+        self.horizontal,
+        self.vertical,
+        self.attitude,
+        self.allocation,
+    }, function(controller)
+        controller:reset()
+    end)
 end
 
 function Controller:update(input)
     local state = input.state
     local target = input.target
     local reset = input.reset or {}
-    local attitudeAngle = target.attitude.angle
-    local heading = attitudeAngle.yaw or state.navigation.heading.angle
+    local heading = target.yaw.angle or state.navigation.heading.angle
+    local horizontalAngle = nil
+    local horizontalTerms = nil
 
-    assert(
-        not ((attitudeAngle.roll ~= nil or attitudeAngle.pitch ~= nil)
-            and horizontalTranslationRequested(target.translation)),
-        "target cannot combine horizontal translation with roll/pitch attitude angles"
-    )
-
-    local horizontal = updateHorizontal(self, state, target, heading, reset, input.dt)
-    local height = nil
-
-    if target.translation.position.down ~= nil then
-        height = state.body.pose.height - target.translation.position.down
+    if reset.horizontal then
+        self.horizontal:reset()
     end
 
-    local vertical = self.vertical:update({
-        state = state,
-        target = {
-            height = height,
+    if target.horizontal.kind == "position" then
+        local sinHeading = math.sin(heading)
+        local cosHeading = math.cos(heading)
+        local horizontal = self.horizontal:update(
+            {
+                position = {
+                    forward = 0.0,
+                    right = 0.0,
+                },
+                velocity = {
+                    forward = state.world.velocity.x * sinHeading
+                        - state.world.velocity.z * cosHeading,
+                    right = state.world.velocity.x * cosHeading
+                        + state.world.velocity.z * sinHeading,
+                },
+            },
+            {
+                position = target.horizontal.position,
+            },
+            {
+                position = target.horizontal.feedforward.position,
+                velocity = target.horizontal.feedforward.velocity,
+            },
+            input.dt
+        )
+
+        horizontalAngle = horizontal.output.angle
+        horizontalTerms = tablex.record.merge({ kind = "position" }, horizontal.terms)
+    elseif target.horizontal.kind == "attitude" then
+        horizontalAngle = target.horizontal.angle
+        horizontalTerms = {
+            kind = "attitude",
+            output = {
+                angle = tablex.record.copy(horizontalAngle),
+            },
+        }
+    else
+        error("unknown horizontal target kind: " .. tostring(target.horizontal.kind))
+    end
+
+    local altitudePosition = nil
+    if target.altitude.position ~= nil then
+        altitudePosition = state.body.pose.height - target.altitude.position
+    end
+
+    local vertical = self.vertical:update(
+        {
+            position = state.body.pose.height,
+            velocity = state.world.velocity.y,
+            attitude = {
+                roll = state.body.pose.roll,
+                pitch = state.body.pose.pitch,
+            },
         },
-        feedforward = {
-            velocity = -target.translation.feedforward.down,
+        {
+            position = altitudePosition,
         },
-        dt = input.dt,
-    })
-    local attitudeAngleTarget = desiredAttitudeAngle(target, horizontal, heading)
+        {
+            position = -target.altitude.feedforward.position,
+            velocity = target.altitude.feedforward.velocity,
+        },
+        input.dt
+    )
+    local attitudeAngleTarget = {
+        roll = horizontalAngle.roll,
+        pitch = horizontalAngle.pitch,
+        yaw = heading,
+    }
     local attitudeFrame = attitude_math.frameFromPose(
         attitudeAngleTarget.roll,
         attitudeAngleTarget.pitch,
         attitudeAngleTarget.yaw
     )
-    local attitudeCommands = self.attitude:update({
-        state = state,
-        target = {
+    local attitudeCommands = self.attitude:update(
+        {
+            orientation = state.body.orientation,
+            angularVelocity = state.body.angular.velocity,
+        },
+        {
             orientation = attitude_math.quaternionFromFrame(attitudeFrame):normalize(),
         },
-        feedforward = target.attitude.feedforward,
-        dt = input.dt,
-    })
-    local command = self.allocation:update({
-        pose = state.body.pose,
-        rawCommands = {
-            collective = vertical.collective,
-            roll = attitudeCommands.roll,
-            pitch = attitudeCommands.pitch,
-            yaw = attitudeCommands.yaw,
+        {
+            angle = {
+                roll = target.horizontal.feedforward.angle.roll,
+                pitch = target.horizontal.feedforward.angle.pitch,
+                yaw = target.yaw.feedforward.angle,
+            },
+            rate = {
+                roll = target.horizontal.feedforward.rate.roll,
+                pitch = target.horizontal.feedforward.rate.pitch,
+                yaw = target.yaw.feedforward.rate,
+            },
         },
-    })
-
-    self.lastTerms = {
-        horizontal = self.horizontal:terms(),
-        vertical = self.vertical:terms(),
-        attitude = self.attitude:terms(),
-        allocation = self.allocation:terms(),
+        input.dt
+    )
+    local rawCommands = {
+        collective = vertical.output.collective,
+        roll = attitudeCommands.output.roll,
+        pitch = attitudeCommands.output.pitch,
+        yaw = attitudeCommands.output.yaw,
     }
+    local allocation = self.allocation:update(
+        {
+            pose = state.body.pose,
+        },
+        {
+            commands = rawCommands,
+        },
+        {},
+        input.dt
+    )
 
-    return command
-end
-
-function Controller:terms()
-    return self.lastTerms
+    return {
+        output = allocation.output,
+        terms = {
+            horizontal = horizontalTerms,
+            vertical = vertical.terms,
+            attitude = attitudeCommands.terms,
+            allocation = allocation.terms,
+        },
+    }
 end
 
 return controller

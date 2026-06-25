@@ -20,7 +20,7 @@ local COMMAND_KEYS = {
 }
 
 local function commandTerms(commands)
-    return tablex.pick(commands, COMMAND_KEYS)
+    return tablex.record.pick(commands, COMMAND_KEYS)
 end
 
 local function finalClampCommands(commands, limits)
@@ -108,29 +108,27 @@ function allocation.new(control)
     return setmetatable({
         attitudeTransform = control.attitude_allocator,
         outputLimits = control.output_limits,
-        lastTerms = {},
     }, Allocation)
 end
 
-function Allocation:update(input)
+function Allocation:reset() end
+
+function Allocation:update(state, target, feedforwardInput, dt)
     local allocated = allocatedCommands(
         self.attitudeTransform,
-        input.pose,
-        input.rawCommands
+        state.pose,
+        target.commands
     )
     local commands = finalClampCommands(allocated, self.outputLimits)
 
-    self.lastTerms = {
-        rawCommands = commandTerms(input.rawCommands),
-        allocatedCommands = commandTerms(allocated),
-        finalCommands = commands,
+    return {
+        output = commands,
+        terms = {
+            rawCommands = commandTerms(target.commands),
+            allocatedCommands = commandTerms(allocated),
+            finalCommands = commands,
+        },
     }
-
-    return commands
-end
-
-function Allocation:terms()
-    return self.lastTerms
 end
 
 return allocation

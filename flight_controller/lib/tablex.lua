@@ -1,6 +1,9 @@
-local tablex = {}
+local tablex = {
+    list = {},
+    record = {},
+}
 
-function tablex.copy(value)
+function tablex.record.copy(value)
     local out = {}
 
     for key, item in pairs(value) do
@@ -10,7 +13,7 @@ function tablex.copy(value)
     return out
 end
 
-function tablex.deepCopy(value, seen)
+function tablex.record.deepCopy(value, seen)
     if type(value) ~= "table" then
         return value
     end
@@ -25,13 +28,13 @@ function tablex.deepCopy(value, seen)
     seen[value] = out
 
     for key, item in pairs(value) do
-        out[tablex.deepCopy(key, seen)] = tablex.deepCopy(item, seen)
+        out[tablex.record.deepCopy(key, seen)] = tablex.record.deepCopy(item, seen)
     end
 
     return out
 end
 
-function tablex.keys(value)
+function tablex.record.keys(value)
     local out = {}
 
     for key in pairs(value) do
@@ -41,7 +44,7 @@ function tablex.keys(value)
     return out
 end
 
-function tablex.values(value)
+function tablex.record.values(value)
     local out = {}
 
     for _, item in pairs(value) do
@@ -51,7 +54,7 @@ function tablex.values(value)
     return out
 end
 
-function tablex.entries(value)
+function tablex.record.entries(value)
     local out = {}
 
     for key, item in pairs(value) do
@@ -64,45 +67,15 @@ function tablex.entries(value)
     return out
 end
 
-function tablex.map(value, fn)
-    local out = {}
-
-    for index, item in ipairs(value) do
-        out[index] = fn(item, index)
+function tablex.record.each(value, fn)
+    for key, item in pairs(value) do
+        fn(item, key)
     end
 
-    return out
+    return value
 end
 
-function tablex.filter(value, fn)
-    local out = {}
-
-    for index, item in ipairs(value) do
-        if fn(item, index) then
-            out[#out + 1] = item
-        end
-    end
-
-    return out
-end
-
-function tablex.reduce(value, fn, initial)
-    local acc = initial
-    local haveAcc = initial ~= nil
-
-    for index, item in ipairs(value) do
-        if haveAcc then
-            acc = fn(acc, item, index)
-        else
-            acc = item
-            haveAcc = true
-        end
-    end
-
-    return acc
-end
-
-function tablex.merge(...)
+function tablex.record.merge(...)
     local out = {}
 
     for index = 1, select("#", ...) do
@@ -118,7 +91,7 @@ function tablex.merge(...)
     return out
 end
 
-function tablex.pick(value, keys)
+function tablex.record.pick(value, keys)
     local out = {}
 
     for _, key in ipairs(keys) do
@@ -132,7 +105,7 @@ end
 -- Example:
 -- transpose({ "height" }, { target = { height = 10 }, error = { height = 2 } })
 -- returns { height = { target = 10, error = 2 } }.
-function tablex.transpose(keys, columns)
+function tablex.record.transpose(keys, columns)
     local out = {}
 
     for _, key in ipairs(keys) do
@@ -148,7 +121,7 @@ function tablex.transpose(keys, columns)
     return out
 end
 
-function tablex.untranspose(keys, rows)
+function tablex.record.untranspose(keys, rows)
     local out = {}
 
     for _, key in ipairs(keys) do
@@ -163,6 +136,52 @@ function tablex.untranspose(keys, rows)
     end
 
     return out
+end
+
+function tablex.list.each(value, fn)
+    for index, item in ipairs(value) do
+        fn(item, index)
+    end
+
+    return value
+end
+
+function tablex.list.map(value, fn)
+    local out = {}
+
+    for index, item in ipairs(value) do
+        out[index] = fn(item, index)
+    end
+
+    return out
+end
+
+function tablex.list.filter(value, fn)
+    local out = {}
+
+    for index, item in ipairs(value) do
+        if fn(item, index) then
+            out[#out + 1] = item
+        end
+    end
+
+    return out
+end
+
+function tablex.list.reduce(value, fn, initial)
+    local acc = initial
+    local haveAcc = initial ~= nil
+
+    for index, item in ipairs(value) do
+        if haveAcc then
+            acc = fn(acc, item, index)
+        else
+            acc = item
+            haveAcc = true
+        end
+    end
+
+    return acc
 end
 
 return tablex

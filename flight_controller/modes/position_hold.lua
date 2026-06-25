@@ -72,17 +72,17 @@ end
 function Hold:target(ctx)
     local positionError = self.position - horizontalVector(ctx.state.world.position)
     local position = common.frdFromWorld(positionError, self.heading)
-    local target = common.target()
+    local target = common.target("position")
 
-    target.translation.position.forward = position.forward
-    target.translation.position.right = position.right
+    target.horizontal.position.forward = position.forward
+    target.horizontal.position.right = position.right
 
     if self.lastHeight.active then
-        target.translation.position.down = ctx.state.body.pose.height - self.lastHeight.target
+        target.altitude.position = ctx.state.body.pose.height - self.lastHeight.target
     end
 
-    target.translation.feedforward.down = -self.lastHeight.rate
-    target.attitude.angle.yaw = self.heading
+    target.altitude.feedforward.position = -self.lastHeight.rate
+    target.yaw.angle = self.heading
 
     return target
 end

@@ -1,59 +1,102 @@
 local common = {}
 
---- Returns an empty controller target.
+--- Returns an empty controller target for the selected horizontal branch.
 ---
 --- Target contract:
 ---
---- - A mode either controls horizontal translation or controls roll/pitch directly.
----   If `attitude.angle.roll` or `attitude.angle.pitch` is set, the mode must leave
----   `translation.position.forward/right` nil and `translation.feedforward.forward/right`
----   at 0.0. The controller asserts this contract instead of silently ignoring the
----   conflicting translation request.
+--- - `horizontal.kind` is the only union:
+---   - "position" uses the horizontal position/velocity controller to produce
+---     roll/pitch attitude targets.
+---   - "attitude" bypasses the horizontal position/velocity controller and uses
+---     `horizontal.angle.roll/pitch` directly.
 ---
---- - `translation.position.forward/right` are heading-level FRD position errors.
----   nil disables that position axis; `translation.feedforward.forward/right` are
----   heading-level FRD velocity feedforward.
+--- - `horizontal.position.forward/right` are heading-level local FRD positions
+---   with the current aircraft position as origin. nil disables that axis'
+---   position PID. In the "position" branch:
+---   - `feedforward.position.forward/right` is added to the position loop output,
+---     forming the velocity target.
+---   - `feedforward.velocity.forward/right` is added to the velocity loop output,
+---     forming the roll/pitch angle target.
+---   - `feedforward.angle/rate.roll/pitch` are passed to the roll/pitch attitude
+---     loops.
 ---
---- - Vertical control is independent. `translation.position.down` is a down-axis
----   position error; nil disables height hold, while `translation.feedforward.down`
----   remains a down-axis velocity feedforward.
+--- - `altitude.position` is a down-axis local position. nil disables the height
+---   PID. `altitude.feedforward.position` is a down-axis velocity contribution;
+---   `altitude.feedforward.velocity` is a collective command contribution.
 ---
---- - Heading control is independent. `attitude.angle.yaw` explicitly controls yaw;
----   nil makes the controller use the current heading as its yaw reference.
-function common.target()
-    return {
-        translation = {
+--- - `yaw.angle` explicitly controls yaw; nil uses the current heading as the yaw
+---   reference. `yaw.feedforward.angle/rate` feed the yaw attitude loops.
+function common.target(kind)
+    local target = {
+        altitude = {
+            position = nil,
+            feedforward = {
+                position = 0.0,
+                velocity = 0.0,
+            },
+        },
+        yaw = {
+            angle = nil,
+            feedforward = {
+                angle = 0.0,
+                rate = 0.0,
+            },
+        },
+    }
+
+    if kind == "position" then
+        target.horizontal = {
+            kind = kind,
             position = {
                 forward = nil,
                 right = nil,
-                down = nil,
             },
             feedforward = {
-                forward = 0.0,
-                right = 0.0,
-                down = 0.0,
+                position = {
+                    forward = 0.0,
+                    right = 0.0,
+                },
+                velocity = {
+                    forward = 0.0,
+                    right = 0.0,
+                },
+                angle = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                },
+                rate = {
+                    roll = 0.0,
+                    pitch = 0.0,
+                },
             },
-        },
-        attitude = {
+        }
+
+        return target
+    end
+
+    if kind == "attitude" then
+        target.horizontal = {
+            kind = kind,
             angle = {
-                roll = nil,
-                pitch = nil,
-                yaw = nil,
+                roll = 0.0,
+                pitch = 0.0,
             },
             feedforward = {
                 angle = {
                     roll = 0.0,
                     pitch = 0.0,
-                    yaw = 0.0,
                 },
                 rate = {
                     roll = 0.0,
                     pitch = 0.0,
-                    yaw = 0.0,
                 },
             },
-        },
-    }
+        }
+
+        return target
+    end
+
+    error("target kind must be position or attitude")
 end
 
 function common.frdFromWorld(value, heading)

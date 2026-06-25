@@ -4,6 +4,7 @@ env.install()
 local config = require("config")
 local Controller = require("control.controller")
 local attitude_math = require("lib.attitude_math")
+local common = require("modes.common")
 local horizontal = require("control.horizontal")
 local lock = require("modes.lock")
 local navigation = require("modes.navigation")
@@ -19,7 +20,14 @@ end
 local frame = attitude_math.frameFromPose(0.0, 0.0, 0.0)
 local orientation = attitude_math.quaternionFromFrame(frame)
 local controller = Controller.new(config.control)
-local command = controller:update({
+local controllerTarget = common.target("attitude")
+
+controllerTarget.altitude.position = 0.0
+controllerTarget.horizontal.angle.roll = 0.0
+controllerTarget.horizontal.angle.pitch = 0.0
+controllerTarget.yaw.angle = 0.0
+
+local control = controller:update({
     state = {
         raw = {},
         world = {
@@ -60,45 +68,14 @@ local command = controller:update({
             angularVelocity = 0.0,
         },
     },
-    target = {
-        translation = {
-            position = {
-                forward = nil,
-                right = nil,
-                down = 0.0,
-            },
-            feedforward = {
-                forward = 0.0,
-                right = 0.0,
-                down = 0.0,
-            },
-        },
-        attitude = {
-            angle = {
-                roll = 0.0,
-                pitch = 0.0,
-                yaw = 0.0,
-            },
-            feedforward = {
-                angle = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                    yaw = 0.0,
-                },
-                rate = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                    yaw = 0.0,
-                },
-            },
-        },
-    },
+    target = controllerTarget,
     reset = {
         horizontal = false,
     },
     dt = config.control.loop.dt,
 })
-local controlTerms = controller:terms()
+local command = control.output
+local controlTerms = control.terms
 local oldYawPriority = "yaw" .. "_priority"
 local oldYawPriorityTerm = "yaw" .. "Priority"
 local oldReducedOrientation = "reduced" .. "Orientation"
@@ -115,33 +92,30 @@ assertClose("neutral pitch", command.pitch, -0.33031404)
 assertClose("neutral yaw", command.yaw, 0.00813396)
 
 local hold = horizontal.new(config.control)
-local holdResult = hold:update({
-    state = {
-        world = {
-            velocity = vector.new(0.0, 0.0, 0.0),
-        },
-    },
-    frame = {
-        forward = vector.new(0.0, 0.0, -1.0),
-        right = vector.new(1.0, 0.0, 0.0),
-    },
-    target = {
+local holdTarget = common.target("position").horizontal
+
+holdTarget.position.forward = 0.0
+holdTarget.position.right = 0.0
+
+local holdResult = hold:update(
+    {
         position = {
             forward = 0.0,
             right = 0.0,
         },
-    },
-    feedforward = {
         velocity = {
             forward = 0.0,
             right = 0.0,
         },
     },
-    dt = config.control.loop.dt,
-})
-assert(holdResult.active == true, "position_hold should produce an active result")
-assertClose("position_hold roll", holdResult.output.attitude.roll, 0.0)
-assertClose("position_hold pitch", holdResult.output.attitude.pitch, 0.0)
+    {
+        position = holdTarget.position,
+    },
+    holdTarget.feedforward,
+    config.control.loop.dt
+)
+assertClose("position_hold roll", holdResult.output.angle.roll, 0.0)
+assertClose("position_hold pitch", holdResult.output.angle.pitch, 0.0)
 
 local heightLock = lock.new({
     initial = 80.0,

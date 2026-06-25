@@ -48,8 +48,8 @@ end
 local function waypointCatalog(navigationConfig)
     local waypoints = navigationConfig and navigationConfig.waypoints or {}
 
-    return tablex.map(waypoints, function(waypoint)
-        return tablex.merge(tablex.pick(waypoint, { "id", "position" }), {
+    return tablex.list.map(waypoints, function(waypoint)
+        return tablex.record.merge(tablex.record.pick(waypoint, { "id", "position" }), {
             name = waypoint.name or waypoint.id,
         })
     end)

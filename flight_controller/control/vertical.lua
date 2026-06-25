@@ -1,6 +1,7 @@
 local feedforward = require("lib.feedforward")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
+local tablex = require("lib.tablex")
 
 local vertical = {}
 
@@ -26,41 +27,41 @@ function vertical.new(control)
     return setmetatable({
         collective = control.collective,
         controllers = controllers,
-        lastTerms = {},
     }, Vertical)
 end
 
-function Vertical:update(input)
-    local state = input.state
-    local target = input.target
-    local externalFeedforward = input.feedforward
-    local dt = input.dt
-    local pose = state.body.pose
-    local targetVerticalSpeed = externalFeedforward.velocity
-    local heightErr = target.height == nil and 0.0 or target.height - pose.height
+function Vertical:reset()
+    tablex.record.each(self.controllers, function(controller)
+        controller:reset()
+    end)
+end
 
-    if target.height ~= nil then
-        local heightResult = self.controllers.height:update({
-            target = target.height,
-            current = pose.height,
+function Vertical:update(state, target, feedforwardInput, dt)
+    local targetVelocity = feedforwardInput.position
+    local positionResult = nil
+
+    if target.position ~= nil then
+        positionResult = self.controllers.height:update({
+            target = target.position,
+            current = state.position,
             dt = dt,
-            derivative = -state.world.velocity.y,
+            derivative = -state.velocity,
         })
-        targetVerticalSpeed = heightResult.output
-        heightErr = heightResult.error
+
+        targetVelocity = targetVelocity + positionResult.output
     else
         self.controllers.height:reset()
     end
 
     local verticalSpeedResult = self.controllers.speed:update({
-        target = targetVerticalSpeed,
-        current = state.world.velocity.y,
+        target = targetVelocity,
+        current = state.velocity,
         dt = dt,
     })
-    local collectiveOut = verticalSpeedResult.output
+    local collectiveOut = verticalSpeedResult.output + feedforwardInput.velocity
     local tiltVerticalFactor = attitudeVerticalFactor(
-        pose.roll,
-        pose.pitch,
+        state.attitude.roll,
+        state.attitude.pitch,
         self.collective.tilt_compensation.min_factor
     )
     local tiltCompensation = 1.0 / tiltVerticalFactor
@@ -71,39 +72,40 @@ function Vertical:update(input)
         self.collective.max
     )
 
-    self.lastTerms = {
-        target = {
-            height = target.height,
-            speed = targetVerticalSpeed,
-            active = target.height ~= nil,
-        },
-        current = {
-            height = pose.height,
-            speed = state.world.velocity.y,
-        },
-        error = {
-            height = heightErr,
-            speed = verticalSpeedResult.error,
+    return {
+        output = {
+            collective = collective,
         },
         terms = {
-            height = self.controllers.height:terms(),
-            speed = self.controllers.speed:terms(),
+            position = {
+                target = target.position,
+                current = state.position,
+                error = positionResult and positionResult.error or nil,
+            },
+            velocity = {
+                target = targetVelocity,
+                current = state.velocity,
+                error = verticalSpeedResult.error,
+            },
+            output = {
+                collective = collective,
+                uncompensated = collectiveOut,
+                tiltCompensated = tiltCompensatedCollectiveOut,
+            },
+            feedforward = {
+                position = feedforwardInput.position,
+                velocity = feedforwardInput.velocity,
+            },
             tilt = {
                 compensation = tiltCompensation,
                 verticalFactor = tiltVerticalFactor,
-                uncompensated = collectiveOut,
-                output = tiltCompensatedCollectiveOut,
+            },
+            pid = {
+                position = self.controllers.height:terms(),
+                velocity = self.controllers.speed:terms(),
             },
         },
     }
-
-    return {
-        collective = collective,
-    }
-end
-
-function Vertical:terms()
-    return self.lastTerms
 end
 
 return vertical

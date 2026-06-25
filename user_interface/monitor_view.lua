@@ -462,15 +462,26 @@ end
 local function positionOutputRows(telemetry)
     local control = telemetry.control
     local horizontal = control.horizontal
-    local frameVelocity = horizontal.frameVelocity
-    local output = horizontal.output
-    local targetFrameVelocity = frameVelocity.target
+    local velocity = horizontal.velocity or {
+        target = {},
+    }
+    local output = horizontal.output or {
+        angle = {},
+    }
+    local targetVelocity = velocity.target
 
     return {
-        { label = "VF", value = targetFrameVelocity.forward, limit = 20.0 },
-        { label = "VR", value = targetFrameVelocity.right, limit = 20.0 },
-        { label = "ROL", value = deg(output.attitude.roll or 0.0), limit = 30.0 },
-        { label = "PIT", value = deg(output.attitude.pitch or 0.0), limit = 30.0 },
+        { label = "VF", value = targetVelocity.forward, limit = 20.0 },
+        { label = "VR", value = targetVelocity.right, limit = 20.0 },
+        { label = "ROL", value = deg(output.angle.roll or 0.0), limit = 30.0 },
+        { label = "PIT", value = deg(output.angle.pitch or 0.0), limit = 30.0 },
+    }
+end
+
+local function mapPointFromHorizontal(position)
+    return {
+        x = position.right or 0.0,
+        z = -(position.forward or 0.0),
     }
 end
 
@@ -512,9 +523,6 @@ end
 local function drawOverview(mon, x, y, width, limitY, telemetry)
     local control = telemetry.control
     local horizontal = control.horizontal
-    local worldPosition = horizontal.worldPosition
-    local targetPosition = worldPosition.target
-    local currentPosition = worldPosition.current
 
     section(mon, y, "flight state", colors.black, CURRENT)
     y = y + 1
@@ -531,14 +539,21 @@ local function drawOverview(mon, x, y, width, limitY, telemetry)
         section(mon, y, "position hold", colors.black, TARGET)
         y = y + 1
 
-        local mapWidth = math.min(24, math.max(12, math.floor(width * 0.25)))
-        local outputX = x + mapWidth + GAP
-        local outputWidth = width - mapWidth - GAP
-        local mapHeight = math.min(5, math.max(3, limitY - y + 1))
+        if horizontal.kind == "position" then
+            local position = horizontal.position
+            local targetPosition = mapPointFromHorizontal(position.target)
+            local currentPosition = mapPointFromHorizontal(position.current)
+            local mapWidth = math.min(24, math.max(12, math.floor(width * 0.25)))
+            local outputX = x + mapWidth + GAP
+            local outputWidth = width - mapWidth - GAP
+            local mapHeight = math.min(5, math.max(3, limitY - y + 1))
 
-        drawPositionMap(mon, x, y, mapWidth, mapHeight, targetPosition, currentPosition)
-        drawOutputGrid(mon, outputX, y, outputWidth, limitY, positionOutputRows(telemetry))
-        y = y + mapHeight
+            drawPositionMap(mon, x, y, mapWidth, mapHeight, targetPosition, currentPosition)
+            drawOutputGrid(mon, outputX, y, outputWidth, limitY, positionOutputRows(telemetry))
+            y = y + mapHeight
+        else
+            y = drawOutputGrid(mon, x, y, width, limitY, positionOutputRows(telemetry))
+        end
     end
 
     if y <= limitY then
@@ -555,7 +570,7 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
     local targetAttitude = attitude.target
     local currentAttitude = attitude.current
     local errorAttitude = attitude.error
-    local attitudeTerms = attitude.terms
+    local attitudePid = attitude.pid
     local targetRoll = targetAttitude.roll
     local targetPitch = targetAttitude.pitch
     local targetYaw = targetAttitude.yaw
@@ -588,9 +603,9 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
         section(mon, y, "attitude angle pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)
-        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RANG", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudeTerms.roll.angle, false) end
-        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PANG", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudeTerms.pitch.angle, false) end
-        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YANG", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudeTerms.yaw.angle, false) end
+        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RANG", targetRoll.angle, currentRoll.angle, errorRoll.angle, true, attitudePid.roll.angle, false) end
+        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PANG", targetPitch.angle, currentPitch.angle, errorPitch.angle, true, attitudePid.pitch.angle, false) end
+        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YANG", targetYaw.angle, currentYaw.angle, errorYaw.angle, true, attitudePid.yaw.angle, false) end
         y = y + 4
     end
 
@@ -599,9 +614,9 @@ local function drawAttitudePid(mon, x, y, width, limitY, telemetry)
         section(mon, y, "attitude rate pid", colors.black, HEADER)
         y = y + 1
         drawPidHeader(mon, x, y, width)
-        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudeTerms.roll.rate, false) end
-        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudeTerms.pitch.rate, false) end
-        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudeTerms.yaw.rate, false) end
+        if y + 1 <= limitY then drawPidRow(mon, x, y + 1, width, "RRAT", targetRoll.rate, currentRoll.rate, errorRoll.rate, true, attitudePid.roll.rate, false) end
+        if y + 2 <= limitY then drawPidRow(mon, x, y + 2, width, "PRAT", targetPitch.rate, currentPitch.rate, errorPitch.rate, true, attitudePid.pitch.rate, false) end
+        if y + 3 <= limitY then drawPidRow(mon, x, y + 3, width, "YRAT", targetYaw.rate, currentYaw.rate, errorYaw.rate, true, attitudePid.yaw.rate, false) end
         y = y + 4
     end
 
@@ -611,20 +626,24 @@ end
 local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     local control = telemetry.control
     local horizontal = control.horizontal
-    local worldPosition = horizontal.worldPosition
-    local framePosition = horizontal.framePosition
-    local frameVelocity = horizontal.frameVelocity
-    local targetWorldPosition = worldPosition.target
-    local currentWorldPosition = worldPosition.current
-    local targetFramePosition = framePosition.target
-    local currentFramePosition = framePosition.current
-    local errorFramePosition = framePosition.error
-    local targetFrameVelocity = frameVelocity.target
-    local currentFrameVelocity = frameVelocity.current
-    local errorFrameVelocity = frameVelocity.error
-    local horizontalTerms = horizontal.terms
-    local positionPid = horizontalTerms.position
-    local velocityPid = horizontalTerms.velocity
+
+    if horizontal.kind ~= "position" then
+        section(mon, y, "horizontal attitude", colors.black, TARGET)
+        return drawOutputGrid(mon, x, y + 1, width, limitY, positionOutputRows(telemetry))
+    end
+
+    local position = horizontal.position
+    local velocity = horizontal.velocity
+    local mapTargetPosition = mapPointFromHorizontal(position.target)
+    local mapCurrentPosition = mapPointFromHorizontal(position.current)
+    local targetPosition = position.target
+    local currentPosition = position.current
+    local errorPosition = position.error
+    local targetVelocity = velocity.target
+    local currentVelocity = velocity.current
+    local errorVelocity = velocity.error
+    local positionPid = horizontal.pid.position
+    local velocityPid = horizontal.pid.velocity
 
     section(mon, y, "position output", colors.black, TARGET)
     y = y + 1
@@ -634,7 +653,7 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     local outputWidth = width - mapWidth - GAP
     local mapHeight = math.min(5, math.max(1, limitY - y + 1))
 
-    drawPositionMap(mon, x, y, mapWidth, mapHeight, targetWorldPosition, currentWorldPosition)
+    drawPositionMap(mon, x, y, mapWidth, mapHeight, mapTargetPosition, mapCurrentPosition)
     drawOutputGrid(mon, outputX, y, outputWidth, limitY, positionOutputRows(telemetry))
     y = y + mapHeight
 
@@ -651,9 +670,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 1,
                 width,
                 "FPOS",
-                targetFramePosition.forward,
-                currentFramePosition.forward,
-                errorFramePosition.forward,
+                targetPosition.forward,
+                currentPosition.forward,
+                errorPosition.forward,
                 false,
                 positionPid.forward,
                 false
@@ -666,9 +685,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 2,
                 width,
                 "RPOS",
-                targetFramePosition.right,
-                currentFramePosition.right,
-                errorFramePosition.right,
+                targetPosition.right,
+                currentPosition.right,
+                errorPosition.right,
                 false,
                 positionPid.right,
                 false
@@ -681,9 +700,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 3,
                 width,
                 "FVEL",
-                targetFrameVelocity.forward,
-                currentFrameVelocity.forward,
-                errorFrameVelocity.forward,
+                targetVelocity.forward,
+                currentVelocity.forward,
+                errorVelocity.forward,
                 false,
                 velocityPid.forward,
                 true
@@ -696,9 +715,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 4,
                 width,
                 "RVEL",
-                targetFrameVelocity.right,
-                currentFrameVelocity.right,
-                errorFrameVelocity.right,
+                targetVelocity.right,
+                currentVelocity.right,
+                errorVelocity.right,
                 false,
                 velocityPid.right,
                 true

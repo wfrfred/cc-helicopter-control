@@ -130,13 +130,14 @@ function control_task.run(shared)
                 dt = dt,
             })
             local modeTerms = machines.mode:terms()
-            local command = machines.controller:update({
+            local control = machines.controller:update({
                 state = state,
                 target = target,
                 reset = modeUpdate.reset,
                 dt = dt,
             })
-            local controlTerms = machines.controller:terms()
+            local command = control.output
+            local controlTerms = control.terms
             local rotorOutput = machines.mixer:update({
                 commands = command,
                 phase = machines.phase:read(),

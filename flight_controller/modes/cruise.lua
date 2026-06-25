@@ -54,12 +54,12 @@ end
 
 function Cruise:target(ctx)
     local feedforward = common.frdFromWorld(self.velocity, self.heading)
-    local target = common.target()
+    local target = common.target("position")
 
-    target.translation.position.down = ctx.state.body.pose.height - self.height
-    target.translation.feedforward.forward = feedforward.forward
-    target.translation.feedforward.right = feedforward.right
-    target.attitude.angle.yaw = self.heading
+    target.altitude.position = ctx.state.body.pose.height - self.height
+    target.horizontal.feedforward.position.forward = feedforward.forward
+    target.horizontal.feedforward.position.right = feedforward.right
+    target.yaw.angle = self.heading
 
     return target
 end

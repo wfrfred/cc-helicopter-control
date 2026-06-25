@@ -69,7 +69,7 @@ local function waypointSummary(waypoint)
     return {
         id = waypoint.id,
         name = waypoint.name or waypoint.id,
-        position = tablex.copy(waypoint.position),
+        position = tablex.record.copy(waypoint.position),
     }
 end
 
@@ -164,7 +164,7 @@ local function addLeg(legs, kind, position, heading, radius)
 
     legs[#legs + 1] = {
         kind = kind,
-        position = tablex.copy(position),
+        position = tablex.record.copy(position),
         heading = heading,
         radius = radius,
     }
@@ -186,7 +186,7 @@ local function buildApproachLegs(waypoint, approach, config)
             addLeg(legs, "entry", routeStart(waypoint, approach, config), nil, waypointRadius)
         end
 
-        local finalPosition = tablex.copy(waypoint.position)
+        local finalPosition = tablex.record.copy(waypoint.position)
 
         if approach.finalAltitude ~= nil then
             finalPosition.y = approach.finalAltitude
@@ -310,13 +310,13 @@ end
 
 local function advanceLeg(route, position)
     if route.legIndex >= #route.legs then
-        route.holdPosition = tablex.copy(position)
+        route.holdPosition = tablex.record.copy(position)
         route.phase = "descend"
         return
     end
 
     route.legIndex = route.legIndex + 1
-    route.holdPosition = tablex.copy(position)
+    route.holdPosition = tablex.record.copy(position)
     route.phase = "turn"
 end
 
@@ -379,7 +379,7 @@ local function routeTerms(route)
             index = route.legIndex,
             count = #route.legs,
             kind = leg.kind,
-            position = tablex.copy(leg.position),
+            position = tablex.record.copy(leg.position),
         } or nil,
         arrived = route.phase == "arrived",
         reason = nil,
@@ -419,8 +419,8 @@ local function activateRoute(self, id, state)
         legs = legs,
         legIndex = 1,
         phase = "climb",
-        holdPosition = tablex.copy(position),
-        destination = tablex.copy(legs[#legs].position),
+        holdPosition = tablex.record.copy(position),
+        destination = tablex.record.copy(legs[#legs].position),
         cruiseAltitude = cruiseAltitude(self.selected, approach, position.y, legs),
         arrivalHeading = approach and approach.heading or pose.heading,
     }
@@ -544,12 +544,12 @@ function Navigation:target(ctx)
         z = phaseTarget.position.z - ctx.state.world.position.z,
     }
     local position = common.frdFromWorld(positionError, phaseTarget.heading)
-    local target = common.target()
+    local target = common.target("position")
 
-    target.translation.position.forward = position.forward
-    target.translation.position.right = position.right
-    target.translation.position.down = position.down
-    target.attitude.angle.yaw = phaseTarget.heading
+    target.horizontal.position.forward = position.forward
+    target.horizontal.position.right = position.right
+    target.altitude.position = position.down
+    target.yaw.angle = phaseTarget.heading
 
     return target
 end

@@ -91,10 +91,7 @@ function Controller:update(input)
         {
             position = state.body.pose.height,
             velocity = state.world.velocity.y,
-            attitude = {
-                roll = state.body.pose.roll,
-                pitch = state.body.pose.pitch,
-            },
+            downAxis = state.body.frame.down,
         },
         {
             position = altitudePosition,

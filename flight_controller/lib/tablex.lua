@@ -75,6 +75,16 @@ function tablex.record.each(value, fn)
     return value
 end
 
+function tablex.record.map(value, fn)
+    local out = {}
+
+    for key, item in pairs(value) do
+        out[key] = fn(item, key)
+    end
+
+    return out
+end
+
 function tablex.record.merge(...)
     local out = {}
 

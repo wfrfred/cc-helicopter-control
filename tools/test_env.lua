@@ -128,6 +128,23 @@ function matrixMethods:trace()
     return out
 end
 
+function matrixMethods:clone()
+    local out = {
+        rows = self.rows,
+        columns = self.columns,
+    }
+
+    for row = 1, out.rows do
+        out[row] = {}
+
+        for column = 1, out.columns do
+            out[row][column] = self[row][column]
+        end
+    end
+
+    return setmetatable(out, matrixMetatable)
+end
+
 function matrixMethods:mul(other)
     local out = {
         rows = self.rows,

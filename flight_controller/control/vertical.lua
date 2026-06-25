@@ -8,12 +8,6 @@ local vertical = {}
 local Vertical = {}
 Vertical.__index = Vertical
 
-local function attitudeVerticalFactor(roll, pitch, minFactor)
-    local factor = math.cos(roll) * math.cos(pitch)
-
-    return mathx.clamp(factor, minFactor, 1.0)
-end
-
 function vertical.new(control)
     local controllers = {
         height = pid.new(control.pid.vertical.height),
@@ -59,10 +53,10 @@ function Vertical:update(state, target, feedforwardInput, dt)
         dt = dt,
     })
     local collectiveOut = verticalSpeedResult.output + feedforwardInput.velocity
-    local tiltVerticalFactor = attitudeVerticalFactor(
-        state.attitude.roll,
-        state.attitude.pitch,
-        self.collective.tilt_compensation.min_factor
+    local tiltVerticalFactor = mathx.clamp(
+        -state.downAxis.y,
+        self.collective.tilt_compensation.min_factor,
+        1.0
     )
     local tiltCompensation = 1.0 / tiltVerticalFactor
     local tiltCompensatedCollectiveOut = collectiveOut * tiltCompensation

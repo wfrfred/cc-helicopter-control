@@ -151,6 +151,7 @@ config.control = {
             },
             yaw = {
                 gain = 1.5,
+                bias = 0.0,
             },
         },
     },

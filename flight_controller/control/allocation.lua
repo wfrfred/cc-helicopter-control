@@ -19,113 +19,108 @@ local COMMAND_KEYS = {
     "yaw",
 }
 
-local function commandTerms(commands)
-    return tablex.record.pick(commands, COMMAND_KEYS)
-end
-
-local function finalClampCommands(commands, limits)
-    return {
-        collective = commands.collective,
-        roll = mathx.clamp(commands.roll, limits.roll_min, limits.roll_max),
-        pitch = mathx.clamp(commands.pitch, limits.pitch_min, limits.pitch_max),
-        yaw = mathx.clamp(commands.yaw, limits.yaw_min, limits.yaw_max),
-    }
-end
-
-local function axisIndex(axis)
-    local index = AXIS_INDEX[axis]
-
-    assert(index ~= nil, "unknown allocation axis: " .. tostring(axis))
-
-    return index
-end
-
-local function attitudeSignal(config, pose, name)
-    local limitDeg = config.attitude_limit_deg or {}
-
-    if name == "roll" then
-        return mathx.clamp(pose.roll / math.rad(limitDeg.roll or 30.0), -1.0, 1.0)
+local function scheduledMatrix(transform, pose)
+    if #transform.terms == 0 then
+        return transform.baseMatrix
     end
 
-    if name == "pitch" then
-        return mathx.clamp(pose.pitch / math.rad(limitDeg.pitch or 25.0), -1.0, 1.0)
+    local out = transform.baseMatrix:clone()
+
+    for _, term in ipairs(transform.terms) do
+        local attitude = nil
+
+        if term.axis == "roll" then
+            attitude = pose.roll
+        elseif term.axis == "pitch" then
+            attitude = pose.pitch
+        end
+
+        out[term.row][term.col] = out[term.row][term.col]
+            + term.gain * mathx.clamp(attitude / term.limit, -1.0, 1.0)
     end
 
-    error("unknown allocation attitude: " .. tostring(name))
-end
-
-local function scheduledRows(config, pose)
-    local base = config.base_matrix
-    local rows = {
-        { base[1][1], base[1][2], base[1][3] },
-        { base[2][1], base[2][2], base[2][3] },
-        { base[3][1], base[3][2], base[3][3] },
-    }
-
-    for _, term in ipairs(config.terms or {}) do
-        local row = axisIndex(term.out)
-        local col = axisIndex(term.input)
-        local attitude = attitudeSignal(config, pose, term.attitude)
-
-        rows[row][col] = rows[row][col] + term.gain * attitude
-    end
-
-    return rows
-end
-
-local function transformAttitudeCommands(rows, commands)
-    return {
-        roll = rows[1][1] * commands.roll
-            + rows[1][2] * commands.pitch
-            + rows[1][3] * commands.yaw,
-        pitch = rows[2][1] * commands.roll
-            + rows[2][2] * commands.pitch
-            + rows[2][3] * commands.yaw,
-        yaw = rows[3][1] * commands.roll
-            + rows[3][2] * commands.pitch
-            + rows[3][3] * commands.yaw,
-    }
-end
-
-local function allocatedCommands(config, pose, rawCommands)
-    if config.enabled ~= true then
-        return commandTerms(rawCommands)
-    end
-
-    assert(config.model == "affine_tensor", "unsupported allocation model: " .. tostring(config.model))
-
-    local transformed = transformAttitudeCommands(scheduledRows(config, pose), rawCommands)
-
-    return {
-        collective = rawCommands.collective,
-        roll = transformed.roll,
-        pitch = transformed.pitch,
-        yaw = transformed.yaw,
-    }
+    return out
 end
 
 function allocation.new(control)
+    local config = control.attitude_allocator
+    local enabled = config.enabled == true
+    local transform = {
+        enabled = enabled,
+    }
+
+    if enabled then
+        assert(config.model == "affine_tensor", "unsupported allocation model: " .. tostring(config.model))
+
+        local limitDeg = config.attitude_limit_deg or {}
+
+        transform.baseMatrix = matrix.from2DArray(config.base_matrix)
+        transform.terms = tablex.list.map(config.terms or {}, function(term)
+            local row = AXIS_INDEX[term.out]
+            local col = AXIS_INDEX[term.input]
+            local limit = nil
+
+            assert(row ~= nil, "unknown allocation axis: " .. tostring(term.out))
+            assert(col ~= nil, "unknown allocation axis: " .. tostring(term.input))
+
+            if term.attitude == "roll" then
+                limit = math.rad(limitDeg.roll or 30.0)
+            elseif term.attitude == "pitch" then
+                limit = math.rad(limitDeg.pitch or 25.0)
+            else
+                error("unknown allocation attitude: " .. tostring(term.attitude))
+            end
+
+            return {
+                row = row,
+                col = col,
+                axis = term.attitude,
+                gain = term.gain,
+                limit = limit,
+            }
+        end)
+    end
+
     return setmetatable({
-        attitudeTransform = control.attitude_allocator,
+        attitudeTransform = transform,
         outputLimits = control.output_limits,
     }, Allocation)
 end
 
 function Allocation:reset() end
 
-function Allocation:update(state, target, feedforwardInput, dt)
-    local allocated = allocatedCommands(
-        self.attitudeTransform,
-        state.pose,
-        target.commands
-    )
-    local commands = finalClampCommands(allocated, self.outputLimits)
+function Allocation:update(state, target, _feedforwardInput, _dt)
+    local rawCommands = target.commands
+    local allocated = tablex.record.pick(rawCommands, COMMAND_KEYS)
+
+    if self.attitudeTransform.enabled == true then
+        local transformed = scheduledMatrix(self.attitudeTransform, state.pose)
+            * matrix.from2DArray({
+                { rawCommands.roll },
+                { rawCommands.pitch },
+                { rawCommands.yaw },
+            })
+
+        allocated = {
+            collective = rawCommands.collective,
+            roll = transformed[1][1],
+            pitch = transformed[2][1],
+            yaw = transformed[3][1],
+        }
+    end
+
+    local commands = {
+        collective = allocated.collective,
+        roll = mathx.clamp(allocated.roll, self.outputLimits.roll_min, self.outputLimits.roll_max),
+        pitch = mathx.clamp(allocated.pitch, self.outputLimits.pitch_min, self.outputLimits.pitch_max),
+        yaw = mathx.clamp(allocated.yaw, self.outputLimits.yaw_min, self.outputLimits.yaw_max),
+    }
 
     return {
         output = commands,
         terms = {
-            rawCommands = commandTerms(target.commands),
-            allocatedCommands = commandTerms(allocated),
+            rawCommands = tablex.record.pick(rawCommands, COMMAND_KEYS),
+            allocatedCommands = tablex.record.pick(allocated, COMMAND_KEYS),
             finalCommands = commands,
         },
     }

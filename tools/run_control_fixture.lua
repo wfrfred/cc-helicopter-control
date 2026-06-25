@@ -119,6 +119,16 @@ local function checkTablex()
     assert(eachRecord.height == 10, "record.each should pass record key")
     assert(eachRecord.heading == 1.57, "record.each should traverse record values")
 
+    local mappedRecord = tablex.record.map({
+        height = 10,
+        heading = 1.57,
+    }, function(value, key)
+        return tostring(key) .. "=" .. tostring(value)
+    end)
+
+    assert(mappedRecord.height == "height=10", "record.map should preserve record key")
+    assert(mappedRecord.heading == "heading=1.57", "record.map should map record value")
+
     local filtered = tablex.list.filter({ 1, 2, 3, 4 }, function(value)
         return value % 2 == 0
     end)
@@ -1893,6 +1903,7 @@ local function checkControllerTerms()
     assertClose("yaw angle kp", config.control.pid.attitude.yaw.angle.kp, 0.85)
     assertClose("yaw angle ki", config.control.pid.attitude.yaw.angle.ki, 0.0)
     assertClose("yaw angle kd", config.control.pid.attitude.yaw.angle.kd, 0.25)
+    assertClose("yaw rate feedforward bias", config.control.attitude.rate_feedforward.yaw.bias, 0.0)
     assert(type(terms.attitude.pid.roll.angle.output) == "number", "attitude should own roll angle pid terms")
     assert(type(terms.attitude.pid.pitch.angle.output) == "number", "attitude should own pitch angle pid terms")
     assert(type(terms.attitude.pid.yaw.angle.output) == "number", "attitude should own yaw angle pid terms")
@@ -1922,6 +1933,36 @@ local function checkControllerResetInput()
     })
 
     assert(resetCalled, "controller should read horizontal reset from lifecycle input")
+end
+
+local function checkVerticalTiltUsesBodyFrame()
+    local state = runtimeState()
+    local controller = Controller.new(config.control)
+    local frame = attitude_math.frameFromPose(0.4, -0.3, 0.8)
+    local target = common.target("attitude")
+
+    state.body.frame = frame
+    state.body.orientation = attitude_math.quaternionFromFrame(frame)
+    state.body.pose.roll = 0.0
+    state.body.pose.pitch = 0.0
+    target.horizontal.angle.roll = 0.0
+    target.horizontal.angle.pitch = 0.0
+
+    local control = controller:update({
+        state = state,
+        target = target,
+        reset = {
+            horizontal = false,
+        },
+        dt = config.control.loop.dt,
+    })
+    local expected = math.max(
+        config.control.collective.tilt_compensation.min_factor,
+        math.min(1.0, -frame.down.y)
+    )
+
+    assert(math.abs(expected - 1.0) > 1.0e-6, "test frame should be tilted")
+    assertClose("vertical tilt factor should come from body frame", control.terms.vertical.tilt.verticalFactor, expected)
 end
 
 local function checkControllerTargetSemantics()
@@ -2102,6 +2143,7 @@ checkUiNavigationCommands()
 checkMixerFormula()
 checkControllerTerms()
 checkControllerResetInput()
+checkVerticalTiltUsesBodyFrame()
 checkControllerTargetSemantics()
 checkAttitudeExternalFeedforward()
 

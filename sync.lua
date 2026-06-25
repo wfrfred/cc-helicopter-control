@@ -73,16 +73,74 @@ local function safeSourceName(name)
         and not name:find("%z")
 end
 
+local function syncSources(config)
+    local sync = config and config.sync
+
+    if sync == nil then
+        return nil
+    end
+
+    assert(type(sync.sources) == "table", "config sync.sources must be table")
+
+    return sync.sources
+end
+
+local function loadConfigChunk(source, env)
+    if setfenv then
+        local chunk, err = loadstring(source, "@" .. CONFIG_NAME)
+
+        if not chunk then
+            return nil, err
+        end
+
+        setfenv(chunk, env)
+
+        return chunk
+    end
+
+    return load(source, "@" .. CONFIG_NAME, "t", env)
+end
+
+local function partialConfig()
+    local file = fs.open(CONFIG_NAME, "r")
+
+    if not file then
+        return nil
+    end
+
+    local source = file.readAll()
+    file.close()
+
+    local patched, count = source:gsub("local%s+config%s*=%s*{%s*}", "config = {}", 1)
+
+    if count ~= 1 then
+        return nil
+    end
+
+    local env = setmetatable({}, { __index = _G })
+    local chunk = loadConfigChunk(patched, env)
+
+    if not chunk then
+        return nil
+    end
+
+    pcall(chunk)
+
+    return env.config
+end
+
 local function defaultSourceNames()
     if not fs.exists(CONFIG_NAME) then
         return nil
     end
 
-    local config = require("config")
-    local sync = config.sync
-    assert(sync and type(sync.sources) == "table", "config sync.sources must be table")
+    local ok, config = pcall(require, "config")
 
-    return sync.sources
+    if not ok then
+        config = partialConfig()
+    end
+
+    return syncSources(config)
 end
 
 if selfUpdate and (#sourceNames > 0 or modeSet or dryRun) then

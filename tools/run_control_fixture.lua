@@ -1574,7 +1574,9 @@ local function canonicalTelemetry()
                 },
                 output = {
                     collective = 1.0,
-                    uncompensated = 1.0,
+                },
+                collective = {
+                    raw = 1.0,
                     tiltCompensated = 1.0,
                 },
                 feedforward = {

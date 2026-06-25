@@ -83,7 +83,9 @@ function Vertical:update(state, target, feedforwardInput, dt)
             },
             output = {
                 collective = collective,
-                uncompensated = collectiveOut,
+            },
+            collective = {
+                raw = collectiveOut,
                 tiltCompensated = tiltCompensatedCollectiveOut,
             },
             feedforward = {

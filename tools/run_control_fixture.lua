@@ -813,7 +813,7 @@ local function checkNavigationHeadingWrap()
         math.abs(target.attitude.angle.yaw - state.navigation.heading.angle) > math.pi,
         "navigation target should expose raw yaw target, not wrapped debug error"
     )
-    assert(math.abs(controller:terms().attitude.error.heading.angle) < 1.0, "controller heading error should wrap")
+    assert(math.abs(controller:terms().attitude.error.yaw.angle) < math.pi, "attitude yaw error should wrap")
 end
 
 local function checkNavigationVelocityFrame()
@@ -1530,11 +1530,6 @@ local function canonicalTelemetry()
                 },
             },
             attitude = {
-                commanded = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                    heading = 0.0,
-                },
                 target = {
                     roll = axisRate(),
                     pitch = axisRate(),
@@ -1544,9 +1539,6 @@ local function canonicalTelemetry()
                     roll = axisRate(),
                     pitch = axisRate(),
                     yaw = axisRate(),
-                    heading = {
-                        angle = 0.0,
-                    },
                 },
                 error = {
                     roll = {
@@ -1560,9 +1552,6 @@ local function canonicalTelemetry()
                     yaw = {
                         angle = 0.0,
                         rate = 0.0,
-                    },
-                    heading = {
-                        angle = 0.0,
                     },
                 },
                 terms = {
@@ -1608,7 +1597,7 @@ local function canonicalTelemetry()
                         z = 0.0,
                     },
                 },
-                navigationPosition = {
+                framePosition = {
                     target = positionAxis(),
                     current = positionAxis(),
                     error = positionAxis(),
@@ -1627,7 +1616,7 @@ local function canonicalTelemetry()
                         z = 0.0,
                     },
                 },
-                navigationVelocity = {
+                frameVelocity = {
                     target = positionAxis(),
                     current = positionAxis(),
                     error = positionAxis(),
@@ -1915,6 +1904,10 @@ local function checkControllerTargetSemantics()
     local target = neutralTarget()
 
     state.navigation.heading.angle = 1.25
+    state.body.pose.heading = 1.25
+    state.body.orientation = attitude_math.quaternionFromFrame(
+        attitude_math.frameFromPose(state.body.pose.roll, state.body.pose.pitch, 1.25)
+    )
     controller:update({
         state = state,
         target = target,
@@ -1927,7 +1920,7 @@ local function checkControllerTargetSemantics()
     local terms = controller:terms()
 
     assert(terms.vertical.target.active == false, "nil down position should disable height loop")
-    assertClose("nil yaw heading error", terms.attitude.error.heading.angle, 0.0)
+    assertClose("nil yaw target should hold current yaw", terms.attitude.error.yaw.angle, 0.0)
     assert(terms.horizontal.active == false, "nil horizontal position and zero feedforward should disable horizontal loop")
 
     target = neutralTarget()
@@ -1960,8 +1953,29 @@ local function checkControllerTargetSemantics()
     terms = controller:terms()
 
     assert(terms.horizontal.active == true, "horizontal feedforward should activate horizontal velocity loop")
-    assertClose("nil forward position uses feedforward only", terms.horizontal.navigationVelocity.target.forward, 2.0)
-    assertClose("nil right position uses zero feedforward only", terms.horizontal.navigationVelocity.target.right, 0.0)
+    assertClose("nil forward position uses feedforward only", terms.horizontal.frameVelocity.target.forward, 2.0)
+    assertClose("nil right position uses zero feedforward only", terms.horizontal.frameVelocity.target.right, 0.0)
+
+    target = neutralTarget()
+    target.attitude.angle.roll = 0.1
+    target.translation.feedforward.right = 1.0
+
+    local ok, err = pcall(function()
+        controller:update({
+            state = state,
+            target = target,
+            reset = {
+                horizontal = false,
+            },
+            dt = config.control.loop.dt,
+        })
+    end)
+
+    assert(not ok, "controller should reject mixed horizontal translation and roll/pitch target")
+    assert(
+        tostring(err):find("cannot combine horizontal translation", 1, true) ~= nil,
+        "controller conflict assert should describe the target contract"
+    )
 end
 
 local function checkAttitudeExternalFeedforward()

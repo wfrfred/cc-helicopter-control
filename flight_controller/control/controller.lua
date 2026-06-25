@@ -1,7 +1,7 @@
 local allocation_control = require("control.allocation")
+local attitude_math = require("lib.attitude_math")
 local attitude_control = require("control.attitude")
 local horizontal_control = require("control.horizontal")
-local mathx = require("lib.mathx")
 local vertical_control = require("control.vertical")
 
 local controller = {}
@@ -19,32 +19,51 @@ function controller.new(control)
     }, Controller)
 end
 
-local function updateHorizontal(self, state, target, heading, reset, dt)
-    local translation = target.translation
+local function horizontalTranslationRequested(translation)
     local position = translation.position
     local feedforward = translation.feedforward
+
+    return position.forward ~= nil
+        or position.right ~= nil
+        or feedforward.forward ~= 0.0
+        or feedforward.right ~= 0.0
+end
+
+local function horizontalFrame(heading)
+    return {
+        forward = vector.new(math.sin(heading), 0.0, -math.cos(heading)),
+        right = vector.new(math.cos(heading), 0.0, math.sin(heading)),
+    }
+end
+
+local function updateHorizontal(self, state, target, heading, reset, dt)
+    local translation = target.translation
 
     if reset.horizontal then
         self.horizontal:reset()
     end
 
-    if position.forward ~= nil
-        or position.right ~= nil
-        or feedforward.forward ~= 0.0
-        or feedforward.right ~= 0.0 then
-        return self.horizontal:updateTranslation(
-            position,
-            feedforward,
-            state.world.velocity,
-            heading,
-            dt
-        )
+    if horizontalTranslationRequested(translation) then
+        return self.horizontal:update({
+            state = state,
+            frame = horizontalFrame(heading),
+            target = {
+                position = translation.position,
+            },
+            feedforward = {
+                velocity = {
+                    forward = translation.feedforward.forward,
+                    right = translation.feedforward.right,
+                },
+            },
+            dt = dt,
+        })
     end
 
     return self.horizontal:inactive()
 end
 
-local function desiredAttitude(target, horizontalResult, heading)
+local function desiredAttitudeAngle(target, horizontalResult, heading)
     local angle = target.attitude.angle
 
     return {
@@ -60,6 +79,13 @@ function Controller:update(input)
     local reset = input.reset or {}
     local attitudeAngle = target.attitude.angle
     local heading = attitudeAngle.yaw or state.navigation.heading.angle
+
+    assert(
+        not ((attitudeAngle.roll ~= nil or attitudeAngle.pitch ~= nil)
+            and horizontalTranslationRequested(target.translation)),
+        "target cannot combine horizontal translation with roll/pitch attitude angles"
+    )
+
     local horizontal = updateHorizontal(self, state, target, heading, reset, input.dt)
     local height = nil
 
@@ -71,18 +97,24 @@ function Controller:update(input)
         state = state,
         target = {
             height = height,
+        },
+        feedforward = {
             velocity = -target.translation.feedforward.down,
         },
         dt = input.dt,
     })
+    local attitudeAngleTarget = desiredAttitudeAngle(target, horizontal, heading)
+    local attitudeFrame = attitude_math.frameFromPose(
+        attitudeAngleTarget.roll,
+        attitudeAngleTarget.pitch,
+        attitudeAngleTarget.yaw
+    )
     local attitudeCommands = self.attitude:update({
         state = state,
-        commanded = desiredAttitude(target, horizontal, heading),
+        target = {
+            orientation = attitude_math.quaternionFromFrame(attitudeFrame):normalize(),
+        },
         feedforward = target.attitude.feedforward,
-        heading = heading,
-        headingError = attitudeAngle.yaw == nil
-            and 0.0
-            or mathx.wrapPi(attitudeAngle.yaw - state.navigation.heading.angle),
         dt = input.dt,
     })
     local command = self.allocation:update({

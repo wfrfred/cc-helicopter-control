@@ -1,5 +1,25 @@
 local common = {}
 
+--- Returns an empty controller target.
+---
+--- Target contract:
+---
+--- - A mode either controls horizontal translation or controls roll/pitch directly.
+---   If `attitude.angle.roll` or `attitude.angle.pitch` is set, the mode must leave
+---   `translation.position.forward/right` nil and `translation.feedforward.forward/right`
+---   at 0.0. The controller asserts this contract instead of silently ignoring the
+---   conflicting translation request.
+---
+--- - `translation.position.forward/right` are heading-level FRD position errors.
+---   nil disables that position axis; `translation.feedforward.forward/right` are
+---   heading-level FRD velocity feedforward.
+---
+--- - Vertical control is independent. `translation.position.down` is a down-axis
+---   position error; nil disables height hold, while `translation.feedforward.down`
+---   remains a down-axis velocity feedforward.
+---
+--- - Heading control is independent. `attitude.angle.yaw` explicitly controls yaw;
+---   nil makes the controller use the current heading as its yaw reference.
 function common.target()
     return {
         translation = {

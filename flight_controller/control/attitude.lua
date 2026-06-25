@@ -7,14 +7,6 @@ local attitude = {}
 local Attitude = {}
 Attitude.__index = Attitude
 
-local function feedforwardValue(feedforward, layer, axis)
-    if type(feedforward) ~= "table" or type(feedforward[layer]) ~= "table" then
-        return 0.0
-    end
-
-    return feedforward[layer][axis] or 0.0
-end
-
 local function updateAngle(axisAnglePid, targetAngle, currentRate, dt)
     return axisAnglePid:update({
         target = targetAngle,
@@ -31,17 +23,6 @@ local function updateRate(axisRatePid, targetRate, currentRate, dt)
         current = currentRate,
         dt = dt,
     })
-end
-
-local function targetOrientation(commanded, heading)
-    local fullFrame = attitude_math.frameFromPose(commanded.roll, commanded.pitch, heading)
-    local full = attitude_math.quaternionFromFrame(fullFrame):normalize()
-
-    return {
-        roll = commanded.roll,
-        pitch = commanded.pitch,
-        orientation = full,
-    }
 end
 
 function attitude.new(control)
@@ -85,22 +66,19 @@ end
 
 function Attitude:update(input)
     local state = input.state
-    local commanded = input.commanded
-    local externalFeedforward = input.feedforward or {}
-    local heading = input.heading
-    local headingError = input.headingError
+    local target = input.target
+    local externalFeedforward = input.feedforward
     local dt = input.dt
     local rates = state.body.angular.velocity
-    local rollAngleFf = feedforwardValue(externalFeedforward, "angle", "roll")
-    local pitchAngleFf = feedforwardValue(externalFeedforward, "angle", "pitch")
-    local yawAngleFf = feedforwardValue(externalFeedforward, "angle", "yaw")
-    local rollRateFf = feedforwardValue(externalFeedforward, "rate", "roll")
-    local pitchRateFf = feedforwardValue(externalFeedforward, "rate", "pitch")
-    local yawRateFf = feedforwardValue(externalFeedforward, "rate", "yaw")
-    local attitudeTarget = targetOrientation(commanded, heading)
+    local rollAngleFf = externalFeedforward.angle.roll
+    local pitchAngleFf = externalFeedforward.angle.pitch
+    local yawAngleFf = externalFeedforward.angle.yaw
+    local rollRateFf = externalFeedforward.rate.roll
+    local pitchRateFf = externalFeedforward.rate.pitch
+    local yawRateFf = externalFeedforward.rate.yaw
     local bodyAttitudeError = attitude_math.attitudeError(
         state.body.orientation,
-        attitudeTarget.orientation
+        target.orientation
     )
     local rollAngleResult = updateAngle(
         self.controllers.roll.angle,
@@ -146,13 +124,8 @@ function Attitude:update(input)
     local yawCommand = yawRateResult.output + yawRateFf
 
     self.lastTerms = {
-        commanded = {
-            roll = commanded.roll,
-            pitch = commanded.pitch,
-            heading = heading,
-        },
         target = {
-            orientation = attitudeTarget.orientation,
+            orientation = target.orientation,
             roll = {
                 angle = rollAngleResult.target,
                 rate = rollRateTarget,
@@ -179,9 +152,6 @@ function Attitude:update(input)
                 angle = yawAngleResult.current,
                 rate = rates.yaw,
             },
-            heading = {
-                angle = state.navigation.heading.angle,
-            },
         },
         error = {
             roll = {
@@ -195,9 +165,6 @@ function Attitude:update(input)
             yaw = {
                 angle = yawAngleResult.error,
                 rate = yawRateResult.error,
-            },
-            heading = {
-                angle = headingError,
             },
         },
         terms = {

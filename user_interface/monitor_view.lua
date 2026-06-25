@@ -462,13 +462,13 @@ end
 local function positionOutputRows(telemetry)
     local control = telemetry.control
     local horizontal = control.horizontal
-    local navigationVelocity = horizontal.navigationVelocity
+    local frameVelocity = horizontal.frameVelocity
     local output = horizontal.output
-    local targetNavigationVelocity = navigationVelocity.target
+    local targetFrameVelocity = frameVelocity.target
 
     return {
-        { label = "VF", value = targetNavigationVelocity.forward, limit = 20.0 },
-        { label = "VR", value = targetNavigationVelocity.right, limit = 20.0 },
+        { label = "VF", value = targetFrameVelocity.forward, limit = 20.0 },
+        { label = "VR", value = targetFrameVelocity.right, limit = 20.0 },
         { label = "ROL", value = deg(output.attitude.roll or 0.0), limit = 30.0 },
         { label = "PIT", value = deg(output.attitude.pitch or 0.0), limit = 30.0 },
     }
@@ -494,18 +494,17 @@ end
 local function drawTargetAttitude(mon, x, y, width, telemetry)
     local control = telemetry.control
     local attitude = control.attitude
-    local commanded = attitude.commanded
     local target = attitude.target
     local roll = target.roll
     local pitch = target.pitch
     local yaw = target.yaw
 
     drawValueGrid(mon, x, y, width, {
-        { label = "ROLL", value = deg(commanded.roll), pattern = "%+.1f" },
+        { label = "ROLL", value = deg(roll.angle), pattern = "%+.1f" },
         { label = "RRATE", value = deg(roll.rate), pattern = "%+.1f" },
-        { label = "PITCH", value = deg(commanded.pitch), pattern = "%+.1f" },
+        { label = "PITCH", value = deg(pitch.angle), pattern = "%+.1f" },
         { label = "PRATE", value = deg(pitch.rate), pattern = "%+.1f" },
-        { label = "HEAD", value = deg(commanded.heading), pattern = "%+.1f" },
+        { label = "YAW", value = deg(yaw.angle), pattern = "%+.1f" },
         { label = "YRATE", value = deg(yaw.rate), pattern = "%+.1f" },
     })
 end
@@ -613,16 +612,16 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
     local control = telemetry.control
     local horizontal = control.horizontal
     local worldPosition = horizontal.worldPosition
-    local navigationPosition = horizontal.navigationPosition
-    local navigationVelocity = horizontal.navigationVelocity
+    local framePosition = horizontal.framePosition
+    local frameVelocity = horizontal.frameVelocity
     local targetWorldPosition = worldPosition.target
     local currentWorldPosition = worldPosition.current
-    local targetNavigationPosition = navigationPosition.target
-    local currentNavigationPosition = navigationPosition.current
-    local errorNavigationPosition = navigationPosition.error
-    local targetNavigationVelocity = navigationVelocity.target
-    local currentNavigationVelocity = navigationVelocity.current
-    local errorNavigationVelocity = navigationVelocity.error
+    local targetFramePosition = framePosition.target
+    local currentFramePosition = framePosition.current
+    local errorFramePosition = framePosition.error
+    local targetFrameVelocity = frameVelocity.target
+    local currentFrameVelocity = frameVelocity.current
+    local errorFrameVelocity = frameVelocity.error
     local horizontalTerms = horizontal.terms
     local positionPid = horizontalTerms.position
     local velocityPid = horizontalTerms.velocity
@@ -652,9 +651,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 1,
                 width,
                 "FPOS",
-                targetNavigationPosition.forward,
-                currentNavigationPosition.forward,
-                errorNavigationPosition.forward,
+                targetFramePosition.forward,
+                currentFramePosition.forward,
+                errorFramePosition.forward,
                 false,
                 positionPid.forward,
                 false
@@ -667,9 +666,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 2,
                 width,
                 "RPOS",
-                targetNavigationPosition.right,
-                currentNavigationPosition.right,
-                errorNavigationPosition.right,
+                targetFramePosition.right,
+                currentFramePosition.right,
+                errorFramePosition.right,
                 false,
                 positionPid.right,
                 false
@@ -682,9 +681,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 3,
                 width,
                 "FVEL",
-                targetNavigationVelocity.forward,
-                currentNavigationVelocity.forward,
-                errorNavigationVelocity.forward,
+                targetFrameVelocity.forward,
+                currentFrameVelocity.forward,
+                errorFrameVelocity.forward,
                 false,
                 velocityPid.forward,
                 true
@@ -697,9 +696,9 @@ local function drawPositionPid(mon, x, y, width, limitY, telemetry)
                 y + 4,
                 width,
                 "RVEL",
-                targetNavigationVelocity.right,
-                currentNavigationVelocity.right,
-                errorNavigationVelocity.right,
+                targetFrameVelocity.right,
+                currentFrameVelocity.right,
+                errorFrameVelocity.right,
                 false,
                 velocityPid.right,
                 true

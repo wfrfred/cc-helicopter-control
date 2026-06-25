@@ -4,8 +4,8 @@ local pid = require("lib.pid")
 
 local horizontal = {}
 
-local Hold = {}
-Hold.__index = Hold
+local Horizontal = {}
+Horizontal.__index = Horizontal
 
 local function resetAll(controllers)
     for _, controller in pairs(controllers) do
@@ -28,7 +28,7 @@ local function worldHorizontalFromVector(value)
     return worldHorizontal(value.x, value.z)
 end
 
-local function navigationHorizontal(forward, right)
+local function frameHorizontal(forward, right)
     return {
         forward = forward,
         right = right,
@@ -43,44 +43,34 @@ local function emptyWorldState()
     }
 end
 
-local function emptyNavigationState()
+local function emptyFrameState()
     return {
-        target = navigationHorizontal(0.0, 0.0),
-        current = navigationHorizontal(0.0, 0.0),
-        error = navigationHorizontal(0.0, 0.0),
+        target = frameHorizontal(0.0, 0.0),
+        current = frameHorizontal(0.0, 0.0),
+        error = frameHorizontal(0.0, 0.0),
     }
 end
 
-local function navigationHorizontalAxes(heading)
-    return {
-        right = vector.new(math.cos(heading), 0.0, math.sin(heading)),
-        forward = vector.new(math.sin(heading), 0.0, -math.cos(heading)),
-    }
-end
-
-local function projectWorldHorizontalToNavigation(value, heading)
+local function projectWorldHorizontalToFrame(value, frame)
     local horizontal = horizontalVector(value)
-    local axes = navigationHorizontalAxes(heading)
 
-    return navigationHorizontal(
-        horizontal:dot(axes.forward),
-        horizontal:dot(axes.right)
+    return frameHorizontal(
+        horizontal:dot(frame.forward),
+        horizontal:dot(frame.right)
     )
 end
 
-local function projectNavigationHorizontalToWorld(value, heading)
-    local axes = navigationHorizontalAxes(heading)
-
-    return axes.right * value.right + axes.forward * value.forward
+local function projectFrameHorizontalToWorld(value, frame)
+    return frame.right * value.right + frame.forward * value.forward
 end
 
 local function makeInactiveResult()
     return {
         active = false,
         worldPosition = emptyWorldState(),
-        navigationPosition = emptyNavigationState(),
+        framePosition = emptyFrameState(),
         worldVelocity = emptyWorldState(),
-        navigationVelocity = emptyNavigationState(),
+        frameVelocity = emptyFrameState(),
         output = {
             worldTilt = {
                 x = {
@@ -90,7 +80,7 @@ local function makeInactiveResult()
                     value = 0.0,
                 },
             },
-            navigationTilt = {
+            frameTilt = {
                 forward = {
                     value = 0.0,
                     feedforward = 0.0,
@@ -118,10 +108,10 @@ local function axisOutput(result)
     }
 end
 
-local function attitudeFromNavigationTilt(navigationTilt, limit)
+local function attitudeFromFrameTilt(frameTilt, limit)
     return {
-        roll = mathx.clamp(navigationTilt.right, -limit.roll, limit.roll),
-        pitch = mathx.clamp(-navigationTilt.forward, -limit.pitch, limit.pitch),
+        roll = mathx.clamp(frameTilt.right, -limit.roll, limit.roll),
+        pitch = mathx.clamp(-frameTilt.forward, -limit.pitch, limit.pitch),
     }
 end
 
@@ -150,10 +140,10 @@ function horizontal.new(control)
         control = control,
         controllers = controllers,
         lastTerms = makeInactiveResult(),
-    }, Hold)
+    }, Horizontal)
 end
 
-function Hold:reset()
+function Horizontal:reset()
     resetAll(self.controllers)
 end
 
@@ -173,49 +163,49 @@ local function attachTerms(self, result)
     return result
 end
 
-function Hold:inactive()
+function Horizontal:inactive()
     return attachTerms(self, makeInactiveResult())
 end
 
-local function updateNavigationVelocity(
+local function updateFrameVelocity(
     self,
-    targetNavigationVelocity,
-    currentNavigationVelocity,
+    targetFrameVelocity,
+    currentFrameVelocity,
     targetWorldVelocity,
     worldVelocity,
-    heading,
+    frame,
     dt,
     worldPosition,
-    navigationPosition
+    framePosition
 )
     local forwardResult = self.controllers.velocityForward:update({
-        target = targetNavigationVelocity.forward,
-        current = currentNavigationVelocity.forward,
+        target = targetFrameVelocity.forward,
+        current = currentFrameVelocity.forward,
         dt = dt,
     })
     local rightResult = self.controllers.velocityRight:update({
-        target = targetNavigationVelocity.right,
-        current = currentNavigationVelocity.right,
+        target = targetFrameVelocity.right,
+        current = currentFrameVelocity.right,
         dt = dt,
     })
-    local navigationTilt = navigationHorizontal(forwardResult.output, rightResult.output)
-    local worldTilt = projectNavigationHorizontalToWorld(navigationTilt, heading)
-    local attitude = attitudeFromNavigationTilt(navigationTilt, self.control.attitude.limit)
+    local frameTilt = frameHorizontal(forwardResult.output, rightResult.output)
+    local worldTilt = projectFrameHorizontalToWorld(frameTilt, frame)
+    local attitude = attitudeFromFrameTilt(frameTilt, self.control.attitude.limit)
     local worldVelocityError = targetWorldVelocity - worldVelocity
 
     return attachTerms(self, {
         active = true,
         worldPosition = worldPosition or emptyWorldState(),
-        navigationPosition = navigationPosition or emptyNavigationState(),
+        framePosition = framePosition or emptyFrameState(),
         worldVelocity = {
             target = worldHorizontalFromVector(targetWorldVelocity),
             current = worldHorizontalFromVector(worldVelocity),
             error = worldHorizontalFromVector(worldVelocityError),
         },
-        navigationVelocity = {
-            target = targetNavigationVelocity,
-            current = currentNavigationVelocity,
-            error = navigationHorizontal(forwardResult.error, rightResult.error),
+        frameVelocity = {
+            target = targetFrameVelocity,
+            current = currentFrameVelocity,
+            error = frameHorizontal(forwardResult.error, rightResult.error),
         },
         output = {
             worldTilt = {
@@ -226,7 +216,7 @@ local function updateNavigationVelocity(
                     value = worldTilt.z,
                 },
             },
-            navigationTilt = {
+            frameTilt = {
                 forward = axisOutput(forwardResult),
                 right = axisOutput(rightResult),
             },
@@ -235,51 +225,36 @@ local function updateNavigationVelocity(
     })
 end
 
-function Hold:updateVelocity(targetWorldVelocity, worldVelocity, heading, dt, position)
-    local targetWorld = horizontalVector(targetWorldVelocity)
-    local currentWorld = horizontalVector(worldVelocity)
-    local targetNavigationVelocity = projectWorldHorizontalToNavigation(
-        targetWorld,
-        heading
-    )
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(currentWorld, heading)
-
-    return updateNavigationVelocity(
-        self,
-        targetNavigationVelocity,
-        currentNavigationVelocity,
-        targetWorld,
-        currentWorld,
-        heading,
-        dt,
-        position,
-        nil
-    )
-end
-
-function Hold:updateTranslation(position, feedforward, worldVelocity, heading, dt)
-    local currentWorldVelocity = horizontalVector(worldVelocity)
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(currentWorldVelocity, heading)
+function Horizontal:update(input)
+    local state = input.state
+    local frame = input.frame
+    local target = input.target
+    local feedforward = input.feedforward
+    local dt = input.dt
+    local position = target.position
+    local velocity = feedforward.velocity
+    local currentWorldVelocity = horizontalVector(state.world.velocity)
+    local currentFrameVelocity = projectWorldHorizontalToFrame(currentWorldVelocity, frame)
     local forwardResult = nil
     local rightResult = nil
-    local targetNavigationVelocity = {
-        forward = feedforward.forward,
-        right = feedforward.right,
+    local targetFrameVelocity = {
+        forward = velocity.forward,
+        right = velocity.right,
     }
     local worldPosition = emptyWorldState()
-    local navigationPosition = emptyNavigationState()
+    local framePosition = emptyFrameState()
 
     if position.forward ~= nil then
         forwardResult = self.controllers.positionForward:update({
             target = position.forward,
             current = 0.0,
             dt = dt,
-            derivative = -currentNavigationVelocity.forward,
+            derivative = -currentFrameVelocity.forward,
         })
-        targetNavigationVelocity.forward = targetNavigationVelocity.forward + forwardResult.output
-        navigationPosition.target.forward = 0.0
-        navigationPosition.current.forward = -position.forward
-        navigationPosition.error.forward = forwardResult.error
+        targetFrameVelocity.forward = targetFrameVelocity.forward + forwardResult.output
+        framePosition.target.forward = 0.0
+        framePosition.current.forward = -position.forward
+        framePosition.error.forward = forwardResult.error
     end
 
     if position.right ~= nil then
@@ -287,82 +262,28 @@ function Hold:updateTranslation(position, feedforward, worldVelocity, heading, d
             target = position.right,
             current = 0.0,
             dt = dt,
-            derivative = -currentNavigationVelocity.right,
+            derivative = -currentFrameVelocity.right,
         })
-        targetNavigationVelocity.right = targetNavigationVelocity.right + rightResult.output
-        navigationPosition.target.right = 0.0
-        navigationPosition.current.right = -position.right
-        navigationPosition.error.right = rightResult.error
+        targetFrameVelocity.right = targetFrameVelocity.right + rightResult.output
+        framePosition.target.right = 0.0
+        framePosition.current.right = -position.right
+        framePosition.error.right = rightResult.error
     end
 
-    return updateNavigationVelocity(
+    return updateFrameVelocity(
         self,
-        targetNavigationVelocity,
-        currentNavigationVelocity,
-        projectNavigationHorizontalToWorld(targetNavigationVelocity, heading),
+        targetFrameVelocity,
+        currentFrameVelocity,
+        projectFrameHorizontalToWorld(targetFrameVelocity, frame),
         currentWorldVelocity,
-        heading,
+        frame,
         dt,
         worldPosition,
-        navigationPosition
+        framePosition
     )
 end
 
-function Hold:updatePosition(targetWorldPosition, currentWorldPosition, worldVelocity, heading, dt)
-    local worldPositionError = horizontalVector(targetWorldPosition) - horizontalVector(currentWorldPosition)
-    local currentWorldVelocity = horizontalVector(worldVelocity)
-    local navigationPositionError = projectWorldHorizontalToNavigation(
-        worldPositionError,
-        heading
-    )
-    local currentNavigationVelocity = projectWorldHorizontalToNavigation(currentWorldVelocity, heading)
-    local forwardResult = self.controllers.positionForward:update({
-        target = navigationPositionError.forward,
-        current = 0.0,
-        dt = dt,
-        derivative = -currentNavigationVelocity.forward,
-    })
-    local rightResult = self.controllers.positionRight:update({
-        target = navigationPositionError.right,
-        current = 0.0,
-        dt = dt,
-        derivative = -currentNavigationVelocity.right,
-    })
-    local targetNavigationVelocity = navigationHorizontal(forwardResult.output, rightResult.output)
-    local targetWorldVelocity = projectNavigationHorizontalToWorld(
-        targetNavigationVelocity,
-        heading
-    )
-
-    return updateNavigationVelocity(
-        self,
-        targetNavigationVelocity,
-        currentNavigationVelocity,
-        targetWorldVelocity,
-        currentWorldVelocity,
-        heading,
-        dt,
-        {
-            target = worldHorizontal(0.0, 0.0),
-            current = worldHorizontalFromVector(-worldPositionError),
-            error = worldHorizontalFromVector(worldPositionError),
-        },
-        {
-            target = navigationHorizontal(0.0, 0.0),
-            current = navigationHorizontal(
-                -navigationPositionError.forward,
-                -navigationPositionError.right
-            ),
-            error = navigationHorizontal(forwardResult.error, rightResult.error),
-        }
-    )
-end
-
-function Hold:pidControllers()
-    return self.controllers
-end
-
-function Hold:terms()
+function Horizontal:terms()
     return self.lastTerms
 end
 

@@ -115,13 +115,30 @@ assertClose("neutral pitch", command.pitch, -0.33031404)
 assertClose("neutral yaw", command.yaw, 0.00813396)
 
 local hold = horizontal.new(config.control)
-local holdResult = hold:updatePosition(
-    vector.new(0.0, 80.0, 0.0),
-    vector.new(0.0, 80.0, 0.0),
-    vector.new(0.0, 0.0, 0.0),
-    0.0,
-    config.control.loop.dt
-)
+local holdResult = hold:update({
+    state = {
+        world = {
+            velocity = vector.new(0.0, 0.0, 0.0),
+        },
+    },
+    frame = {
+        forward = vector.new(0.0, 0.0, -1.0),
+        right = vector.new(1.0, 0.0, 0.0),
+    },
+    target = {
+        position = {
+            forward = 0.0,
+            right = 0.0,
+        },
+    },
+    feedforward = {
+        velocity = {
+            forward = 0.0,
+            right = 0.0,
+        },
+    },
+    dt = config.control.loop.dt,
+})
 assert(holdResult.active == true, "position_hold should produce an active result")
 assertClose("position_hold roll", holdResult.output.attitude.roll, 0.0)
 assertClose("position_hold pitch", holdResult.output.attitude.pitch, 0.0)

@@ -33,9 +33,10 @@ end
 function Vertical:update(input)
     local state = input.state
     local target = input.target
+    local externalFeedforward = input.feedforward
     local dt = input.dt
     local pose = state.body.pose
-    local targetVerticalSpeed = target.velocity
+    local targetVerticalSpeed = externalFeedforward.velocity
     local heightErr = target.height == nil and 0.0 or target.height - pose.height
 
     if target.height ~= nil then

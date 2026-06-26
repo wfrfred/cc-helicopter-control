@@ -56,6 +56,18 @@ function attitude_math.frameFromPose(roll, pitch, heading)
     }
 end
 
+function attitude_math.levelFrdFromWorld(value, yaw)
+    local horizontal = vector.new(value.x or 0.0, 0.0, value.z or 0.0)
+    local forward = vector.new(math.sin(yaw), 0.0, -math.cos(yaw))
+    local right = vector.new(math.cos(yaw), 0.0, math.sin(yaw))
+
+    return {
+        forward = horizontal:dot(forward),
+        right = horizontal:dot(right),
+        down = -(value.y or 0.0),
+    }
+end
+
 function attitude_math.bodyRatesFromEulerRates(roll, pitch, rates)
     local rollRate = rates.roll or 0.0
     local pitchRate = rates.pitch or 0.0

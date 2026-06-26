@@ -1,3 +1,5 @@
+local attitude_math = require("lib.attitude_math")
+
 local common = {}
 
 --- Returns an empty controller target for the selected horizontal branch.
@@ -101,15 +103,7 @@ function common.target(kind)
 end
 
 function common.frdFromWorld(value, heading)
-    local horizontal = vector.new(value.x or 0.0, 0.0, value.z or 0.0)
-    local forward = vector.new(math.sin(heading), 0.0, -math.cos(heading))
-    local right = vector.new(math.cos(heading), 0.0, math.sin(heading))
-
-    return {
-        forward = horizontal:dot(forward),
-        right = horizontal:dot(right),
-        down = -(value.y or 0.0),
-    }
+    return attitude_math.levelFrdFromWorld(value, heading)
 end
 
 return common

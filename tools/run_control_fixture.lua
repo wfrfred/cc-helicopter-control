@@ -2120,6 +2120,24 @@ local function checkControllerTargetSemantics()
     assertClose("nil right position uses zero feedforward only", terms.horizontal.velocity.right.target, 0.0)
 
     target = neutralTarget(state)
+    target.yaw.angle = math.pi / 2
+    local velocityController = Controller.new(config.control)
+    local savedVelocity = state.world.velocity
+
+    state.world.velocity = vector.new(2.0, 0.0, 0.0)
+    control = velocityController:update({
+        state = state,
+        target = target,
+        dt = config.control.loop.dt,
+    })
+    state.world.velocity = savedVelocity
+
+    terms = control.terms
+
+    assertClose("horizontal current velocity should use target yaw forward", terms.horizontal.velocity.forward.current, 2.0)
+    assertClose("horizontal current velocity should use target yaw right", terms.horizontal.velocity.right.current, 0.0)
+
+    target = neutralTarget(state)
     target.horizontal.feedforward.velocity.right = 0.1
     control = controller:update({
         state = state,

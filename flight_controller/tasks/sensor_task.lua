@@ -49,14 +49,12 @@ function sensor_task.headingRateFromAngular(bodyFrame, angular)
 end
 
 function sensor_task.navigationVelocity(worldVelocity, heading)
-    local horizontal = vector.new(worldVelocity.x, 0.0, worldVelocity.z)
-    local right = vector.new(math.cos(heading), 0.0, math.sin(heading))
-    local forward = vector.new(math.sin(heading), 0.0, -math.cos(heading))
+    local frd = attitude_math.levelFrdFromWorld(worldVelocity, heading)
 
     return {
-        forward = horizontal:dot(forward),
-        right = horizontal:dot(right),
-        up = worldVelocity.y,
+        forward = frd.forward,
+        right = frd.right,
+        up = -frd.down,
     }
 end
 

@@ -9,10 +9,14 @@ Horizontal.__index = Horizontal
 
 function horizontal.new(control)
     local controllers = {
-        positionForward = pid.new(control.pid.position.forward),
-        positionRight = pid.new(control.pid.position.right),
-        velocityForward = pid.new(control.pid.velocity.forward),
-        velocityRight = pid.new(control.pid.velocity.right),
+        forward = {
+            position = pid.new(control.pid.position.forward),
+            velocity = pid.new(control.pid.velocity.forward),
+        },
+        right = {
+            position = pid.new(control.pid.position.right),
+            velocity = pid.new(control.pid.velocity.right),
+        },
     }
 
     return setmetatable({
@@ -24,81 +28,51 @@ end
 
 function Horizontal:reset()
     tablex.record.each(self.controllers, function(controller)
-        controller:reset()
+        controller.position:reset()
+        controller.velocity:reset()
     end)
 end
 
 function Horizontal:update(state, target, feedforwardInput, dt)
     local currentVelocity = state.velocity
-    local targetVelocity = {
-        forward = feedforwardInput.position.forward,
-        right = feedforwardInput.position.right,
-    }
-    local forwardResult = nil
-    local rightResult = nil
-    local forwardPositionTerms = nil
-    local rightPositionTerms = nil
+    local targetVelocity = tablex.record.copy(feedforwardInput.position)
+    local positionResults = tablex.record.map(self.controllers, function(controller, axis)
+        if target.position[axis] == nil then
+            controller.position:reset()
 
-    if target.position.forward ~= nil then
-        forwardResult = self.controllers.positionForward:update(
-            target.position.forward,
+            return nil
+        end
+
+        local result = controller.position:update(
+            target.position[axis],
             0.0,
             dt,
-            currentVelocity.forward
+            currentVelocity[axis]
         )
-        forwardPositionTerms = forwardResult.terms
-        targetVelocity.forward = targetVelocity.forward + forwardResult.output
-    else
-        self.controllers.positionForward:reset()
-    end
 
-    if target.position.right ~= nil then
-        rightResult = self.controllers.positionRight:update(
-            target.position.right,
-            0.0,
-            dt,
-            currentVelocity.right
-        )
-        rightPositionTerms = rightResult.terms
-        targetVelocity.right = targetVelocity.right + rightResult.output
-    else
-        self.controllers.positionRight:reset()
-    end
+        targetVelocity[axis] = targetVelocity[axis] + result.output
 
-    local forwardVelocityResult = self.controllers.velocityForward:update(
-        targetVelocity.forward,
-        currentVelocity.forward,
-        dt
-    )
-    local rightVelocityResult = self.controllers.velocityRight:update(
-        targetVelocity.right,
-        currentVelocity.right,
-        dt
-    )
-    local forwardVelocityFeedforward = mathx.directionalAffine(
-        targetVelocity.forward,
-        self.velocityFeedforward.forward.gain_neg,
-        self.velocityFeedforward.forward.gain_pos
-    )
-    local rightVelocityFeedforward = mathx.directionalAffine(
-        targetVelocity.right,
-        self.velocityFeedforward.right.gain_neg,
-        self.velocityFeedforward.right.gain_pos
-    )
-    local roll = rightVelocityResult.output
-        + rightVelocityFeedforward
-        + feedforwardInput.velocity.right
-    local pitch = -(forwardVelocityResult.output
-        + forwardVelocityFeedforward
-        + feedforwardInput.velocity.forward)
+        return result
+    end)
+    local velocityResults = tablex.record.map(self.controllers, function(controller, axis)
+        return controller.velocity:update(targetVelocity[axis], currentVelocity[axis], dt)
+    end)
+    local velocityTargetFeedforward = tablex.record.map(targetVelocity, function(value, axis)
+        local config = self.velocityFeedforward[axis]
+
+        return mathx.directionalAffine(value, config.gain_neg, config.gain_pos)
+    end)
+    local tiltCommand = tablex.record.map(velocityResults, function(result, axis)
+        return result.output + velocityTargetFeedforward[axis] + feedforwardInput.velocity[axis]
+    end)
     local angle = {
         roll = mathx.clamp(
-            roll,
+            tiltCommand.right,
             -self.control.attitude.limit.roll,
             self.control.attitude.limit.roll
         ),
         pitch = mathx.clamp(
-            pitch,
+            -tiltCommand.forward,
             -self.control.attitude.limit.pitch,
             self.control.attitude.limit.pitch
         ),
@@ -109,44 +83,31 @@ function Horizontal:update(state, target, feedforwardInput, dt)
             angle = angle,
         },
         terms = {
-            position = {
-                forward = {
-                    target = target.position.forward,
+            position = tablex.record.map(self.controllers, function(_, axis)
+                local result = positionResults[axis]
+
+                return {
+                    target = target.position[axis],
                     current = 0.0,
-                    output = forwardResult and forwardResult.output or nil,
-                    pid = forwardPositionTerms,
-                },
-                right = {
-                    target = target.position.right,
-                    current = 0.0,
-                    output = rightResult and rightResult.output or nil,
-                    pid = rightPositionTerms,
-                },
-            },
-            velocity = {
-                forward = {
-                    target = targetVelocity.forward,
-                    current = currentVelocity.forward,
-                    output = forwardVelocityResult.output,
-                    pid = forwardVelocityResult.terms,
-                },
-                right = {
-                    target = targetVelocity.right,
-                    current = currentVelocity.right,
-                    output = rightVelocityResult.output,
-                    pid = rightVelocityResult.terms,
-                },
-            },
+                    output = result and result.output or nil,
+                    pid = result and result.terms or nil,
+                }
+            end),
+            velocity = tablex.record.map(velocityResults, function(result, axis)
+                return {
+                    target = targetVelocity[axis],
+                    current = currentVelocity[axis],
+                    output = result.output,
+                    pid = result.terms,
+                }
+            end),
             output = {
                 angle = tablex.record.copy(angle),
             },
             feedforward = {
                 position = tablex.record.copy(feedforwardInput.position),
                 velocity = tablex.record.copy(feedforwardInput.velocity),
-                velocityTarget = {
-                    forward = forwardVelocityFeedforward,
-                    right = rightVelocityFeedforward,
-                },
+                velocityTarget = tablex.record.copy(velocityTargetFeedforward),
             },
         },
     }

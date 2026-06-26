@@ -43,15 +43,12 @@ function Controller:update(input)
     end
 
     if target.horizontal.kind == "position" then
-        local sinYaw = math.sin(target.yaw.angle)
-        local cosYaw = math.cos(target.yaw.angle)
+        local currentVelocity = attitude_math.levelFrdFromWorld(state.world.velocity, target.yaw.angle)
         local horizontal = self.horizontal:update(
             {
                 velocity = {
-                    forward = state.world.velocity.x * sinYaw
-                        - state.world.velocity.z * cosYaw,
-                    right = state.world.velocity.x * cosYaw
-                        + state.world.velocity.z * sinYaw,
+                    forward = currentVelocity.forward,
+                    right = currentVelocity.right,
                 },
             },
             {

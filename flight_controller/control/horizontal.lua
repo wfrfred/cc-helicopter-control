@@ -65,7 +65,7 @@ function Horizontal:update(state, target, feedforwardInput, dt)
     local tiltCommand = tablex.record.map(velocityResults, function(result, axis)
         return result.output + velocityTargetFeedforward[axis] + feedforwardInput.velocity[axis]
     end)
-    local angle = {
+    local commands = {
         roll = mathx.clamp(
             tiltCommand.right,
             -self.control.attitude.limit.roll,
@@ -79,9 +79,7 @@ function Horizontal:update(state, target, feedforwardInput, dt)
     }
 
     return {
-        output = {
-            angle = angle,
-        },
+        output = commands,
         terms = {
             position = tablex.record.map(self.controllers, function(_, axis)
                 local result = positionResults[axis]
@@ -102,7 +100,8 @@ function Horizontal:update(state, target, feedforwardInput, dt)
                 }
             end),
             output = {
-                angle = tablex.record.copy(angle),
+                roll = commands.roll,
+                pitch = commands.pitch,
             },
             feedforward = {
                 position = tablex.record.copy(feedforwardInput.position),

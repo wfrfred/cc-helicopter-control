@@ -460,22 +460,9 @@ local function motion(state)
     }
 end
 
-function navigation.new(config)
-    config = config or {}
-
-    return setmetatable({
-        config = config,
-        waypoints = config.waypoints or {},
-        selected = nil,
-        route = nil,
-        inactiveReason = nil,
-    }, Navigation)
-end
-
-function Navigation:terms(state)
+local function buildTerms(self, state, phaseTarget)
     local route = self.route
     local terms = route == nil and inactiveTerms(self) or routeTerms(route)
-    local phaseTarget = state ~= nil and targetForRoute(self.route, state) or nil
 
     terms.target = phaseTarget
 
@@ -506,38 +493,7 @@ function Navigation:terms(state)
     return terms
 end
 
-function Navigation:enter(ctx)
-    local command = ctx.command
-
-    if command == nil or command.action == nil then
-        return
-    end
-
-    applyCommand(self, command, ctx.state)
-end
-
-function Navigation:update(ctx)
-    if self.route == nil then
-        return
-    end
-
-    local routeMotion = motion(ctx.state)
-    local position = ctx.state.world.position
-    local pose = ctx.state.body.pose
-
-    updatePhase(self.route, position, pose, routeMotion, self.config)
-end
-
-function Navigation:exit(ctx)
-    if self.route ~= nil then
-        cancelRoute(self)
-    end
-end
-
-function Navigation:target(ctx)
-    assert(self.route ~= nil, "navigation target requires active route")
-
-    local phaseTarget = targetForRoute(self.route, ctx.state)
+local function buildTarget(ctx, phaseTarget)
     local positionError = {
         x = phaseTarget.position.x - ctx.state.world.position.x,
         y = phaseTarget.height - ctx.state.body.pose.height,
@@ -552,6 +508,51 @@ function Navigation:target(ctx)
     target.yaw.angle = phaseTarget.heading
 
     return target
+end
+
+function navigation.new(config)
+    config = config or {}
+
+    return setmetatable({
+        config = config,
+        waypoints = config.waypoints or {},
+        selected = nil,
+        route = nil,
+        inactiveReason = nil,
+    }, Navigation)
+end
+
+function Navigation:enter(ctx)
+    local command = ctx.command
+
+    if command == nil or command.action == nil then
+        return
+    end
+
+    applyCommand(self, command, ctx.state)
+end
+
+function Navigation:update(ctx)
+    assert(self.route ~= nil, "navigation target requires active route")
+
+    local routeMotion = motion(ctx.state)
+    local position = ctx.state.world.position
+    local pose = ctx.state.body.pose
+
+    updatePhase(self.route, position, pose, routeMotion, self.config)
+
+    local phaseTarget = targetForRoute(self.route, ctx.state)
+
+    return {
+        target = buildTarget(ctx, phaseTarget),
+        terms = buildTerms(self, ctx.state, phaseTarget),
+    }
+end
+
+function Navigation:exit(ctx)
+    if self.route ~= nil then
+        cancelRoute(self)
+    end
 end
 
 return navigation

@@ -115,7 +115,7 @@ function control_task.run(shared)
 
             local navigationCommand = takeNavigationCommand(shared)
             local inputEvent = inputEventSnapshot(input)
-            machines.mode:update({
+            local modeResult = machines.mode:update({
                 input = input,
                 state = state,
                 navigationCommand = navigationCommand,
@@ -124,15 +124,9 @@ function control_task.run(shared)
 
             consumeCruiseToggle(shared, input)
 
-            local target = machines.mode:target({
-                input = input,
-                state = state,
-                dt = dt,
-            })
-            local modeTerms = machines.mode:terms()
             local control = machines.controller:update({
                 state = state,
-                target = target,
+                target = modeResult.target,
                 dt = dt,
             })
             local command = control.output
@@ -160,11 +154,14 @@ function control_task.run(shared)
                     inputSender = shared.inputSender,
                     state = state,
                     flight = flight,
-                    mode = modeTerms,
-                    navigation = modeTerms.name == "navigation" and modeTerms.terms or nil,
+                    mode = {
+                        name = modeResult.name,
+                        terms = modeResult.terms,
+                    },
+                    navigation = modeResult.name == "navigation" and modeResult.terms or nil,
                     navigationConfig = config.navigation,
-                    height = modeTerms.terms.height,
-                    heading = modeTerms.terms.heading,
+                    height = modeResult.terms.height,
+                    heading = modeResult.terms.heading,
                     command = command,
                     control = controlTerms,
                     rotor = rotorOutput.blades,

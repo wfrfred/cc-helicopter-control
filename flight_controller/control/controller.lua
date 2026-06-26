@@ -32,17 +32,14 @@ function Controller:reset()
     self.horizontalKind = nil
 end
 
-function Controller:update(input)
-    local state = input.state
-    local target = input.target
-    local horizontalAngle = nil
-    local horizontalTerms = nil
+local function updateHorizontal(self, state, target, dt)
+    local horizontalTarget = target.horizontal
 
-    if target.horizontal.kind == "position" and self.horizontalKind ~= "position" then
-        self.horizontal:reset()
-    end
+    if horizontalTarget.kind == "position" then
+        if self.horizontalKind ~= "position" then
+            self.horizontal:reset()
+        end
 
-    if target.horizontal.kind == "position" then
         local currentVelocity = attitude_math.levelFrdFromWorld(state.world.velocity, target.yaw.angle)
         local horizontal = self.horizontal:update(
             {
@@ -52,36 +49,44 @@ function Controller:update(input)
                 },
             },
             {
-                position = target.horizontal.position,
+                position = horizontalTarget.position,
             },
             {
-                position = target.horizontal.feedforward.position,
-                velocity = target.horizontal.feedforward.velocity,
+                position = horizontalTarget.feedforward.position,
+                velocity = horizontalTarget.feedforward.velocity,
             },
-            input.dt
+            dt
         )
 
-        horizontalAngle = horizontal.output.angle
-        horizontalTerms = tablex.record.merge({ kind = "position" }, horizontal.terms)
-    elseif target.horizontal.kind == "attitude" then
-        horizontalAngle = target.horizontal.angle
-        horizontalTerms = {
-            kind = "attitude",
-            output = {
-                angle = tablex.record.copy(horizontalAngle),
+        horizontal.terms = tablex.record.merge({ kind = "position" }, horizontal.terms)
+        self.horizontalKind = "position"
+
+        return horizontal
+    end
+
+    if horizontalTarget.kind == "attitude" then
+        self.horizontalKind = "attitude"
+
+        return {
+            output = horizontalTarget.angle,
+            terms = {
+                kind = "attitude",
+                output = tablex.record.copy(horizontalTarget.angle),
             },
         }
-    else
-        error("unknown horizontal target kind: " .. tostring(target.horizontal.kind))
     end
-    self.horizontalKind = target.horizontal.kind
 
+    error("unknown horizontal target kind: " .. tostring(horizontalTarget.kind))
+end
+
+local function updateVertical(self, state, target, dt)
     local altitudePosition = nil
+
     if target.altitude.position ~= nil then
         altitudePosition = state.body.pose.height - target.altitude.position
     end
 
-    local vertical = self.vertical:update(
+    return self.vertical:update(
         {
             position = state.body.pose.height,
             velocity = state.world.velocity.y,
@@ -94,14 +99,18 @@ function Controller:update(input)
             position = -target.altitude.feedforward.position,
             velocity = target.altitude.feedforward.velocity,
         },
-        input.dt
+        dt
     )
+end
+
+local function updateAttitude(self, state, target, horizontal, dt)
     local attitudeFrame = attitude_math.frameFromPose(
-        horizontalAngle.roll,
-        horizontalAngle.pitch,
+        horizontal.output.roll,
+        horizontal.output.pitch,
         target.yaw.angle
     )
-    local attitudeCommands = self.attitude:update(
+
+    return self.attitude:update(
         {
             orientation = state.body.orientation,
             angularVelocity = state.body.angular.velocity,
@@ -121,15 +130,19 @@ function Controller:update(input)
                 yaw = target.yaw.feedforward.rate,
             },
         },
-        input.dt
+        dt
     )
+end
+
+local function updateAllocation(self, state, vertical, attitude, dt)
     local rawCommands = {
         collective = vertical.output.collective,
-        roll = attitudeCommands.output.roll,
-        pitch = attitudeCommands.output.pitch,
-        yaw = attitudeCommands.output.yaw,
+        roll = attitude.output.roll,
+        pitch = attitude.output.pitch,
+        yaw = attitude.output.yaw,
     }
-    local allocation = self.allocation:update(
+
+    return self.allocation:update(
         {
             pose = state.body.pose,
         },
@@ -137,15 +150,24 @@ function Controller:update(input)
             commands = rawCommands,
         },
         {},
-        input.dt
+        dt
     )
+end
+
+function Controller:update(input)
+    local state = input.state
+    local target = input.target
+    local horizontal = updateHorizontal(self, state, target, input.dt)
+    local vertical = updateVertical(self, state, target, input.dt)
+    local attitude = updateAttitude(self, state, target, horizontal, input.dt)
+    local allocation = updateAllocation(self, state, vertical, attitude, input.dt)
 
     return {
         output = allocation.output,
         terms = {
-            horizontal = horizontalTerms,
+            horizontal = horizontal.terms,
             vertical = vertical.terms,
-            attitude = attitudeCommands.terms,
+            attitude = attitude.terms,
             allocation = allocation.terms,
         },
     }

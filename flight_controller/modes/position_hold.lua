@@ -11,6 +11,44 @@ local function horizontalVector(value)
     return vector.new(value.x, 0.0, value.z)
 end
 
+local function buildTerms(self, state)
+    local terms = horizontalVector(self.position)
+    local height = self.lastHeight
+    local headingError = state == nil and 0.0
+        or mathx.wrapPi(self.heading - state.navigation.heading.angle)
+
+    terms.height = {
+        target = height.target,
+        rate = height.rate,
+        error = height.error,
+    }
+    terms.heading = {
+        target = self.heading,
+        rate = 0.0,
+        error = headingError,
+    }
+
+    return terms
+end
+
+local function buildTarget(self, ctx)
+    local positionError = self.position - horizontalVector(ctx.state.world.position)
+    local position = common.frdFromWorld(positionError, self.heading)
+    local target = common.target("position")
+
+    target.horizontal.position.forward = position.forward
+    target.horizontal.position.right = position.right
+
+    if self.lastHeight.active then
+        target.altitude.position = ctx.state.body.pose.height - self.lastHeight.target
+    end
+
+    target.altitude.feedforward.position = -self.lastHeight.rate
+    target.yaw.angle = self.heading
+
+    return target
+end
+
 function position_hold.new(initialState, control)
     local self = setmetatable({
         height = lock.new({
@@ -45,46 +83,13 @@ function Hold:update(ctx)
         rate = ctx.state.world.velocity.y,
         dt = ctx.dt,
     })
+
+    return {
+        target = buildTarget(self, ctx),
+        terms = buildTerms(self, ctx.state),
+    }
 end
 
 function Hold:exit() end
-
-function Hold:terms(state)
-    local terms = horizontalVector(self.position)
-    local height = self.lastHeight
-    local headingError = state == nil and 0.0
-        or mathx.wrapPi(self.heading - state.navigation.heading.angle)
-
-    terms.height = {
-        target = height.target,
-        rate = height.rate,
-        error = height.error,
-    }
-    terms.heading = {
-        target = self.heading,
-        rate = 0.0,
-        error = headingError,
-    }
-
-    return terms
-end
-
-function Hold:target(ctx)
-    local positionError = self.position - horizontalVector(ctx.state.world.position)
-    local position = common.frdFromWorld(positionError, self.heading)
-    local target = common.target("position")
-
-    target.horizontal.position.forward = position.forward
-    target.horizontal.position.right = position.right
-
-    if self.lastHeight.active then
-        target.altitude.position = ctx.state.body.pose.height - self.lastHeight.target
-    end
-
-    target.altitude.feedforward.position = -self.lastHeight.rate
-    target.yaw.angle = self.heading
-
-    return target
-end
 
 return position_hold

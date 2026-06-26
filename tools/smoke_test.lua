@@ -112,8 +112,8 @@ local holdResult = hold:update(
     holdTarget.feedforward,
     config.control.loop.dt
 )
-assertClose("position_hold roll", holdResult.output.angle.roll, 0.0)
-assertClose("position_hold pitch", holdResult.output.angle.pitch, 0.0)
+assertClose("position_hold roll", holdResult.output.roll, 0.0)
+assertClose("position_hold pitch", holdResult.output.pitch, 0.0)
 
 local heightLock = lock.new({
     initial = 80.0,
@@ -153,6 +153,10 @@ navMode:enter({
     state = navState,
     dt = config.control.loop.dt,
 })
-assert(navMode:terms(navState).active == true, "navigation should activate configured home waypoint")
+assert(navMode:update({
+    input = {},
+    state = navState,
+    dt = config.control.loop.dt,
+}).terms.active == true, "navigation should activate configured home waypoint")
 
 print("smoke ok")

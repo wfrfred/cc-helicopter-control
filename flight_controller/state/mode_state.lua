@@ -10,17 +10,12 @@ local position_hold_mode = require("modes.position_hold")
 --- - `enter(ctx)`
 ---   Called when the mode becomes active. May update internal mode state.
 ---
---- - `update(ctx)`
----   Advances mode-local state for one control tick.
+--- - `update(ctx) -> { target, terms }`
+---   Advances mode-local state for one control tick and returns this frame's
+---   controller target plus mode-local telemetry/debug terms.
 ---
 --- - `exit(ctx)`
 ---   Called when the mode is deactivated.
----
---- - `target(ctx) -> controller target`
----   Const method. Returns the controller target for the active mode. See common.target()
----
---- - `terms(state) -> telemetry/debug terms`
----   Const method. Returns mode-local telemetry/debug data only.
 ---
 --- mode_state owns all mode transitions.
 --- Modes must not choose or enter another mode directly.
@@ -51,7 +46,6 @@ function mode_state.new(initialState, config)
             navigation = navigation_mode.new(config.navigation),
         },
         lastManualLateral = false,
-        lastState = initialState,
     }, State)
 end
 
@@ -71,8 +65,6 @@ function State:update(request)
     local overrideActive = manualOverrideActive(manualInput)
     local lateralEdge = lateralActive and not self.lastManualLateral
     local nextMode = self.name
-
-    self.lastState = request.state
 
     if self.name == modes.navigation and overrideActive then
         if lateralActive then
@@ -122,33 +114,12 @@ function State:update(request)
         })
     end
 
-    self.modes[self.name]:update(ctx)
+    local result = self.modes[self.name]:update(ctx)
+    result.name = self.name
 
     self.lastManualLateral = lateralActive
 
-    return {
-        name = self.name,
-    }
-end
-
-function State:target(request)
-    local ctx = {
-        input = request.input,
-        state = request.state,
-        dt = request.dt,
-    }
-
-    return self.modes[self.name]:target(ctx)
-end
-
-function State:terms()
-    local mode = self.modes[self.name]
-    local activeTerms = mode:terms(self.lastState)
-
-    return {
-        name = self.name,
-        terms = activeTerms,
-    }
+    return result
 end
 
 return mode_state

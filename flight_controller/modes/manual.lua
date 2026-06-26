@@ -29,6 +29,58 @@ function manual.active(input)
         or input.manual.heading.rate ~= 0.0
 end
 
+local function buildTerms(self)
+    local height = self.lastHeight
+    local heading = self.lastHeading
+
+    return {
+        roll = self.roll,
+        pitch = self.pitch,
+        height = {
+            target = height.target,
+            rate = height.rate,
+            error = height.error,
+        },
+        heading = {
+            target = heading.target,
+            rate = heading.rate,
+            error = heading.error,
+        },
+    }
+end
+
+local function buildTarget(self, ctx)
+    local height = self.lastHeight
+    local heading = self.lastHeading
+    local target = common.target("attitude")
+
+    if height.active then
+        target.altitude.position = ctx.state.body.pose.height - height.target
+    end
+
+    target.altitude.feedforward.position = -height.rate
+    target.horizontal.angle.roll = self.roll
+    target.horizontal.angle.pitch = self.pitch
+    target.yaw.angle = heading.active and heading.target or ctx.state.navigation.heading.angle
+
+    if heading.source == "manual" then
+        local pose = ctx.state.body.pose
+        local angleFeedforward = attitude_math.bodyRatesFromEulerRates(
+            pose.roll or self.control.attitude.home.roll,
+            pose.pitch or self.control.attitude.home.pitch,
+            {
+                heading = heading.rate,
+            }
+        )
+
+        target.horizontal.feedforward.angle.roll = angleFeedforward.roll
+        target.horizontal.feedforward.angle.pitch = angleFeedforward.pitch
+        target.yaw.feedforward.angle = angleFeedforward.yaw
+    end
+
+    return target
+end
+
 function manual.new(initialState, control)
     local self = setmetatable({
         control = control,
@@ -85,8 +137,6 @@ function Manual:enter(ctx)
     end
 end
 
-function Manual:exit() end
-
 function Manual:update(ctx)
     local input = ctx.input
 
@@ -138,57 +188,12 @@ function Manual:update(ctx)
         )
     end
 
-end
-
-function Manual:terms()
-    local height = self.lastHeight
-    local heading = self.lastHeading
-
     return {
-        roll = self.roll,
-        pitch = self.pitch,
-        height = {
-            target = height.target,
-            rate = height.rate,
-            error = height.error,
-        },
-        heading = {
-            target = heading.target,
-            rate = heading.rate,
-            error = heading.error,
-        },
+        target = buildTarget(self, ctx),
+        terms = buildTerms(self),
     }
 end
 
-function Manual:target(ctx)
-    local height = self.lastHeight
-    local heading = self.lastHeading
-    local target = common.target("attitude")
-
-    if height.active then
-        target.altitude.position = ctx.state.body.pose.height - height.target
-    end
-
-    target.altitude.feedforward.position = -height.rate
-    target.horizontal.angle.roll = self.roll
-    target.horizontal.angle.pitch = self.pitch
-    target.yaw.angle = heading.active and heading.target or ctx.state.navigation.heading.angle
-
-    if heading.source == "manual" then
-        local angleFeedforward = attitude_math.bodyRatesFromEulerRates(
-            ctx.state.body.pose.roll,
-            ctx.state.body.pose.pitch,
-            {
-                heading = heading.rate,
-            }
-        )
-
-        target.horizontal.feedforward.angle.roll = angleFeedforward.roll
-        target.horizontal.feedforward.angle.pitch = angleFeedforward.pitch
-        target.yaw.feedforward.angle = angleFeedforward.yaw
-    end
-
-    return target
-end
+function Manual:exit() end
 
 return manual

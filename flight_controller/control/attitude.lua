@@ -67,11 +67,10 @@ function Attitude:update(state, target, feedforwardInput, dt)
         output = commands,
         terms = {
             orientation = target.orientation,
-            angle = tablex.record.map(angleResults, function(result)
+            angle = tablex.record.map(angleResults, function(result, axis)
                 return {
-                    target = result.terms.target,
-                    current = result.terms.current,
-                    error = result.terms.error,
+                    target = bodyAttitudeError[axis],
+                    current = 0.0,
                     output = result.output,
                     pid = result.terms,
                 }
@@ -80,7 +79,6 @@ function Attitude:update(state, target, feedforwardInput, dt)
                 return {
                     target = rateTargets[axis],
                     current = rates[axis],
-                    error = result.terms.error,
                     output = result.output,
                     pid = result.terms,
                 }

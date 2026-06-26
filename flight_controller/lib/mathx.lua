@@ -17,11 +17,11 @@ function mathx.wrapPi(x)
 end
 
 function mathx.clamp(x, lo, hi)
-    if x < lo then
+    if lo and x < lo then
         return lo
     end
 
-    if x > hi then
+    if hi and x > hi then
         return hi
     end
 

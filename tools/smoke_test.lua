@@ -69,9 +69,6 @@ local control = controller:update({
         },
     },
     target = controllerTarget,
-    reset = {
-        horizontal = false,
-    },
     dt = config.control.loop.dt,
 })
 local command = control.output

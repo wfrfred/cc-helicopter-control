@@ -172,10 +172,7 @@ function Manual:target(ctx)
     target.altitude.feedforward.position = -height.rate
     target.horizontal.angle.roll = self.roll
     target.horizontal.angle.pitch = self.pitch
-
-    if heading.active then
-        target.yaw.angle = heading.target
-    end
+    target.yaw.angle = heading.active and heading.target or ctx.state.navigation.heading.angle
 
     if heading.source == "manual" then
         local angleFeedforward = attitude_math.bodyRatesFromEulerRates(

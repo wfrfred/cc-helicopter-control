@@ -16,6 +16,7 @@ function controller.new(control)
         vertical = vertical_control.new(control),
         attitude = attitude_control.new(control),
         allocation = allocation_control.new(control),
+        horizontalKind = nil,
     }, Controller)
 end
 
@@ -28,34 +29,29 @@ function Controller:reset()
     }, function(controller)
         controller:reset()
     end)
+    self.horizontalKind = nil
 end
 
 function Controller:update(input)
     local state = input.state
     local target = input.target
-    local reset = input.reset or {}
-    local heading = target.yaw.angle or state.navigation.heading.angle
     local horizontalAngle = nil
     local horizontalTerms = nil
 
-    if reset.horizontal then
+    if target.horizontal.kind == "position" and self.horizontalKind ~= "position" then
         self.horizontal:reset()
     end
 
     if target.horizontal.kind == "position" then
-        local sinHeading = math.sin(heading)
-        local cosHeading = math.cos(heading)
+        local sinYaw = math.sin(target.yaw.angle)
+        local cosYaw = math.cos(target.yaw.angle)
         local horizontal = self.horizontal:update(
             {
-                position = {
-                    forward = 0.0,
-                    right = 0.0,
-                },
                 velocity = {
-                    forward = state.world.velocity.x * sinHeading
-                        - state.world.velocity.z * cosHeading,
-                    right = state.world.velocity.x * cosHeading
-                        + state.world.velocity.z * sinHeading,
+                    forward = state.world.velocity.x * sinYaw
+                        - state.world.velocity.z * cosYaw,
+                    right = state.world.velocity.x * cosYaw
+                        + state.world.velocity.z * sinYaw,
                 },
             },
             {
@@ -81,6 +77,7 @@ function Controller:update(input)
     else
         error("unknown horizontal target kind: " .. tostring(target.horizontal.kind))
     end
+    self.horizontalKind = target.horizontal.kind
 
     local altitudePosition = nil
     if target.altitude.position ~= nil then
@@ -102,15 +99,10 @@ function Controller:update(input)
         },
         input.dt
     )
-    local attitudeAngleTarget = {
-        roll = horizontalAngle.roll,
-        pitch = horizontalAngle.pitch,
-        yaw = heading,
-    }
     local attitudeFrame = attitude_math.frameFromPose(
-        attitudeAngleTarget.roll,
-        attitudeAngleTarget.pitch,
-        attitudeAngleTarget.yaw
+        horizontalAngle.roll,
+        horizontalAngle.pitch,
+        target.yaw.angle
     )
     local attitudeCommands = self.attitude:update(
         {

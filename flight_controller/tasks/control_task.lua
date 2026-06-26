@@ -115,7 +115,7 @@ function control_task.run(shared)
 
             local navigationCommand = takeNavigationCommand(shared)
             local inputEvent = inputEventSnapshot(input)
-            local modeUpdate = machines.mode:update({
+            machines.mode:update({
                 input = input,
                 state = state,
                 navigationCommand = navigationCommand,
@@ -133,7 +133,6 @@ function control_task.run(shared)
             local control = machines.controller:update({
                 state = state,
                 target = target,
-                reset = modeUpdate.reset,
                 dt = dt,
             })
             local command = control.output

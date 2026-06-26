@@ -24,8 +24,9 @@ local common = {}
 ---   PID. `altitude.feedforward.position` is a down-axis velocity contribution;
 ---   `altitude.feedforward.velocity` is a collective command contribution.
 ---
---- - `yaw.angle` explicitly controls yaw; nil uses the current heading as the yaw
----   reference. `yaw.feedforward.angle/rate` feed the yaw attitude loops.
+--- - `yaw.angle` is the yaw target passed to the attitude controller. Modes must
+---   set it before returning the target; using current heading is the zero-error
+---   yaw target. `yaw.feedforward.angle/rate` feed the yaw attitude loops.
 function common.target(kind)
     local target = {
         altitude = {

@@ -1,27 +1,9 @@
+local mathx = require("lib.mathx")
+
 local pid = {}
 
 local Controller = {}
 Controller.__index = Controller
-
-local function clamp(x, lo, hi)
-    if lo and x < lo then
-        return lo
-    end
-    if hi and x > hi then
-        return hi
-    end
-    return x
-end
-
-local function zeroTerms()
-    return {
-        p = 0.0,
-        i = 0.0,
-        d = 0.0,
-        raw = 0.0,
-        output = 0.0,
-    }
-end
 
 function pid.new(config)
     local self = {
@@ -49,8 +31,6 @@ function Controller:reset()
     self.integral = 0.0
     self.last_error = nil
     self.last_current = nil
-
-    return zeroTerms()
 end
 
 function Controller:update(target, current, dt, derivative)
@@ -70,7 +50,7 @@ function Controller:update(target, current, dt, derivative)
         self.integral = self.integral + error * dt
     end
 
-    self.integral = clamp(self.integral, self.i_min, self.i_max)
+    self.integral = mathx.clamp(self.integral, self.i_min, self.i_max)
 
     local currentDerivative = derivative
     if currentDerivative == nil then
@@ -85,10 +65,8 @@ function Controller:update(target, current, dt, derivative)
     local i_term = self.ki * self.integral
     local d_term = -self.kd * currentDerivative
     local raw_output = p_term + i_term + d_term
-    local output = clamp(raw_output, self.out_min, self.out_max)
+    local output = mathx.clamp(raw_output, self.out_min, self.out_max)
     local terms = {
-        target = target,
-        current = current,
         error = error,
         derivative = currentDerivative,
         integral = self.integral,
@@ -96,7 +74,6 @@ function Controller:update(target, current, dt, derivative)
         i = i_term,
         d = d_term,
         raw = raw_output,
-        output = output,
     }
 
     self.last_error = error

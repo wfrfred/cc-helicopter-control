@@ -100,17 +100,36 @@ local function axisFields(axes, field)
     axes = axes or {}
 
     return {
-        forward = axes.forward and axes.forward[field] or nil,
-        right = axes.right and axes.right[field] or nil,
+        forward = axes.forward and (
+            field == "error" and axes.forward.pid and axes.forward.pid.error or axes.forward[field]
+        ) or nil,
+        right = axes.right and (
+            field == "error" and axes.right.pid and axes.right.pid.error or axes.right[field]
+        ) or nil,
     }
+end
+
+local function displayPid(loop)
+    if loop == nil or loop.pid == nil then
+        return {
+            p = 0.0,
+            i = 0.0,
+            d = 0.0,
+            output = 0.0,
+        }
+    end
+
+    return tablex.record.merge(loop.pid, {
+        output = loop.output,
+    })
 end
 
 local function pidAxes(axes)
     axes = axes or {}
 
     return {
-        forward = axes.forward and axes.forward.pid or nil,
-        right = axes.right and axes.right.pid or nil,
+        forward = displayPid(axes.forward),
+        right = displayPid(axes.right),
     }
 end
 
@@ -145,10 +164,10 @@ local function attitudeAxisFields(attitude, field)
 
     return tablex.record.transpose({ "roll", "pitch", "yaw" }, {
         angle = tablex.record.map(attitude.angle or {}, function(loop)
-            return loop[field]
+            return field == "error" and loop.pid and loop.pid.error or loop[field]
         end),
         rate = tablex.record.map(attitude.rate or {}, function(loop)
-            return loop[field]
+            return field == "error" and loop.pid and loop.pid.error or loop[field]
         end),
     })
 end
@@ -160,8 +179,8 @@ local function attitudePidView(attitude)
         local rateLoop = attitude.rate and attitude.rate[axis] or {}
 
         return {
-            angle = angleLoop.pid,
-            rate = rateLoop.pid,
+            angle = displayPid(angleLoop),
+            rate = displayPid(rateLoop),
         }
     end)
 end
@@ -192,16 +211,16 @@ local function verticalControlView(vertical)
         position = {
             target = vertical.position and vertical.position.target or nil,
             current = vertical.position and vertical.position.current or nil,
-            error = vertical.position and vertical.position.error or nil,
+            error = vertical.position and vertical.position.pid and vertical.position.pid.error or nil,
         },
         velocity = {
             target = vertical.velocity and vertical.velocity.target or nil,
             current = vertical.velocity and vertical.velocity.current or nil,
-            error = vertical.velocity and vertical.velocity.error or nil,
+            error = vertical.velocity and vertical.velocity.pid and vertical.velocity.pid.error or nil,
         },
         pid = {
-            position = vertical.position and vertical.position.pid or nil,
-            velocity = vertical.velocity and vertical.velocity.pid or nil,
+            position = displayPid(vertical.position),
+            velocity = displayPid(vertical.velocity),
         },
     })
 end

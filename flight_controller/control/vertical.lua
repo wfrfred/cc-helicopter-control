@@ -42,7 +42,7 @@ function Vertical:update(state, target, feedforwardInput, dt)
         positionTerms = positionResult.terms
         targetVelocity = targetVelocity + positionResult.output
     else
-        positionTerms = self.controllers.height:reset()
+        self.controllers.height:reset()
     end
 
     local verticalSpeedResult = self.controllers.speed:update(targetVelocity, state.velocity, dt)
@@ -73,14 +73,12 @@ function Vertical:update(state, target, feedforwardInput, dt)
             position = {
                 target = target.position,
                 current = state.position,
-                error = positionResult and positionResult.terms.error or nil,
                 output = positionResult and positionResult.output or nil,
                 pid = positionTerms,
             },
             velocity = {
                 target = targetVelocity,
                 current = state.velocity,
-                error = verticalSpeedResult.terms.error,
                 output = verticalSpeedResult.output,
                 pid = verticalSpeedResult.terms,
             },

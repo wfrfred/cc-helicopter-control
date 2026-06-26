@@ -29,7 +29,6 @@ function Horizontal:reset()
 end
 
 function Horizontal:update(state, target, feedforwardInput, dt)
-    local currentPosition = state.position
     local currentVelocity = state.velocity
     local targetVelocity = {
         forward = feedforwardInput.position.forward,
@@ -43,27 +42,27 @@ function Horizontal:update(state, target, feedforwardInput, dt)
     if target.position.forward ~= nil then
         forwardResult = self.controllers.positionForward:update(
             target.position.forward,
-            currentPosition.forward,
+            0.0,
             dt,
             currentVelocity.forward
         )
         forwardPositionTerms = forwardResult.terms
         targetVelocity.forward = targetVelocity.forward + forwardResult.output
     else
-        forwardPositionTerms = self.controllers.positionForward:reset()
+        self.controllers.positionForward:reset()
     end
 
     if target.position.right ~= nil then
         rightResult = self.controllers.positionRight:update(
             target.position.right,
-            currentPosition.right,
+            0.0,
             dt,
             currentVelocity.right
         )
         rightPositionTerms = rightResult.terms
         targetVelocity.right = targetVelocity.right + rightResult.output
     else
-        rightPositionTerms = self.controllers.positionRight:reset()
+        self.controllers.positionRight:reset()
     end
 
     local forwardVelocityResult = self.controllers.velocityForward:update(
@@ -113,15 +112,13 @@ function Horizontal:update(state, target, feedforwardInput, dt)
             position = {
                 forward = {
                     target = target.position.forward,
-                    current = currentPosition.forward,
-                    error = forwardResult and forwardResult.terms.error or nil,
+                    current = 0.0,
                     output = forwardResult and forwardResult.output or nil,
                     pid = forwardPositionTerms,
                 },
                 right = {
                     target = target.position.right,
-                    current = currentPosition.right,
-                    error = rightResult and rightResult.terms.error or nil,
+                    current = 0.0,
                     output = rightResult and rightResult.output or nil,
                     pid = rightPositionTerms,
                 },
@@ -130,14 +127,12 @@ function Horizontal:update(state, target, feedforwardInput, dt)
                 forward = {
                     target = targetVelocity.forward,
                     current = currentVelocity.forward,
-                    error = forwardVelocityResult.terms.error,
                     output = forwardVelocityResult.output,
                     pid = forwardVelocityResult.terms,
                 },
                 right = {
                     target = targetVelocity.right,
                     current = currentVelocity.right,
-                    error = rightVelocityResult.terms.error,
                     output = rightVelocityResult.output,
                     pid = rightVelocityResult.terms,
                 },

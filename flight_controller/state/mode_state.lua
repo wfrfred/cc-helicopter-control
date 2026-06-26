@@ -71,7 +71,6 @@ function State:update(request)
     local overrideActive = manualOverrideActive(manualInput)
     local lateralEdge = lateralActive and not self.lastManualLateral
     local nextMode = self.name
-    local resetHorizontal = false
 
     self.lastState = request.state
 
@@ -111,7 +110,6 @@ function State:update(request)
         else
             self.modes[self.name]:enter(ctx)
         end
-        resetHorizontal = true
     elseif self.name == modes.navigation
         and command ~= nil
         and command.action == "activate"
@@ -122,7 +120,6 @@ function State:update(request)
             dt = ctx.dt,
             command = command,
         })
-        resetHorizontal = true
     end
 
     self.modes[self.name]:update(ctx)
@@ -131,9 +128,6 @@ function State:update(request)
 
     return {
         name = self.name,
-        reset = {
-            horizontal = resetHorizontal,
-        },
     }
 end
 

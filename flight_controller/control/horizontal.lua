@@ -42,8 +42,8 @@ function Horizontal:update(state, target, feedforwardInput, dt)
 
     if target.position.forward ~= nil then
         forwardResult = self.controllers.positionForward:update(
-            currentPosition.forward,
             target.position.forward,
+            currentPosition.forward,
             dt,
             currentVelocity.forward
         )
@@ -55,8 +55,8 @@ function Horizontal:update(state, target, feedforwardInput, dt)
 
     if target.position.right ~= nil then
         rightResult = self.controllers.positionRight:update(
-            currentPosition.right,
             target.position.right,
+            currentPosition.right,
             dt,
             currentVelocity.right
         )
@@ -67,13 +67,13 @@ function Horizontal:update(state, target, feedforwardInput, dt)
     end
 
     local forwardVelocityResult = self.controllers.velocityForward:update(
-        currentVelocity.forward,
         targetVelocity.forward,
+        currentVelocity.forward,
         dt
     )
     local rightVelocityResult = self.controllers.velocityRight:update(
-        currentVelocity.right,
         targetVelocity.right,
+        currentVelocity.right,
         dt
     )
     local forwardVelocityFeedforward = mathx.directionalAffine(
@@ -114,16 +114,16 @@ function Horizontal:update(state, target, feedforwardInput, dt)
                 target = tablex.record.copy(target.position),
                 current = tablex.record.copy(currentPosition),
                 error = {
-                    forward = forwardResult and forwardResult.error or nil,
-                    right = rightResult and rightResult.error or nil,
+                    forward = forwardResult and forwardResult.terms.error or nil,
+                    right = rightResult and rightResult.terms.error or nil,
                 },
             },
             velocity = {
                 target = targetVelocity,
                 current = tablex.record.copy(currentVelocity),
                 error = {
-                    forward = forwardVelocityResult.error,
-                    right = rightVelocityResult.error,
+                    forward = forwardVelocityResult.terms.error,
+                    right = rightVelocityResult.terms.error,
                 },
             },
             output = {

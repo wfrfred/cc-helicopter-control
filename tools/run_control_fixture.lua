@@ -178,30 +178,30 @@ local function checkPid()
     assert(controller.last == nil, "pid should not expose last()")
     assert(controller.terms == nil, "pid should not expose terms()")
 
-    local first = controller:update(10.0, 13.0, 0.1)
+    local first = controller:update(13.0, 10.0, 0.1)
 
-    assertClose("pid first error", first.error, 3.0)
-    assertClose("pid first derivative", first.derivative, 0.0)
-    assertClose("pid first integral", first.integral, 0.3)
+    assertClose("pid first error", first.terms.error, 3.0)
+    assertClose("pid first derivative", first.terms.derivative, 0.0)
+    assertClose("pid first integral", first.terms.integral, 0.3)
     assertClose("pid first output", first.output, 6.3)
 
-    local second = controller:update(12.0, 13.0, 0.1)
+    local second = controller:update(13.0, 12.0, 0.1)
 
-    assertClose("pid current derivative", second.derivative, 20.0)
-    assertClose("pid trapezoid integral", second.integral, 0.5)
+    assertClose("pid current derivative", second.terms.derivative, 20.0)
+    assertClose("pid trapezoid integral", second.terms.integral, 0.5)
     assertClose("pid measurement d term", second.terms.d, -10.0)
     assertClose("pid second output", second.output, -7.5)
 
-    local explicit = controller:update(12.0, 13.0, 0.1, 4.0)
+    local explicit = controller:update(13.0, 12.0, 0.1, 4.0)
 
-    assertClose("pid explicit derivative", explicit.derivative, 4.0)
+    assertClose("pid explicit derivative", explicit.terms.derivative, 4.0)
     assertClose("pid explicit derivative output", explicit.output, 0.6)
 
     local resetTerms = controller:reset()
-    local afterReset = controller:update(1.0, 2.0, 0.1)
+    local afterReset = controller:update(2.0, 1.0, 0.1)
 
     assertClose("pid reset terms", resetTerms.output, 0.0)
-    assertClose("pid reset derivative", afterReset.derivative, 0.0)
+    assertClose("pid reset derivative", afterReset.terms.derivative, 0.0)
 end
 
 local function canonicalState()

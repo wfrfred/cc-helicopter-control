@@ -53,7 +53,7 @@ function Controller:reset()
     return zeroTerms()
 end
 
-function Controller:update(current, target, dt, derivative)
+function Controller:update(target, current, dt, derivative)
     assert(dt > 0, "pid dt must be positive")
     assert(target ~= nil, "pid target must be set")
     assert(current ~= nil, "pid current must be set")
@@ -87,6 +87,11 @@ function Controller:update(current, target, dt, derivative)
     local raw_output = p_term + i_term + d_term
     local output = clamp(raw_output, self.out_min, self.out_max)
     local terms = {
+        target = target,
+        current = current,
+        error = error,
+        derivative = currentDerivative,
+        integral = self.integral,
         p = p_term,
         i = i_term,
         d = d_term,
@@ -98,11 +103,6 @@ function Controller:update(current, target, dt, derivative)
     self.last_current = current
 
     return {
-        target = target,
-        current = current,
-        error = error,
-        integral = self.integral,
-        derivative = currentDerivative,
         output = output,
         terms = terms,
     }

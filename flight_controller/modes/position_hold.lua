@@ -13,7 +13,7 @@ end
 
 local function buildTerms(self, state)
     local terms = horizontalVector(self.position)
-    local height = self.lastHeight
+    local height = self.height
     local headingError = state == nil and 0.0
         or mathx.wrapPi(self.heading - state.navigation.heading.angle)
 
@@ -39,11 +39,11 @@ local function buildTarget(self, ctx)
     target.horizontal.position.forward = position.forward
     target.horizontal.position.right = position.right
 
-    if self.lastHeight.active then
-        target.altitude.position = ctx.state.body.pose.height - self.lastHeight.target
+    if self.height.active then
+        target.altitude.position = ctx.state.body.pose.height - self.height.target
     end
 
-    target.altitude.feedforward.position = -self.lastHeight.rate
+    target.altitude.feedforward.position = -self.height.rate
     target.yaw.angle = self.heading
 
     return target
@@ -51,18 +51,18 @@ end
 
 function position_hold.new(initialState, control)
     local self = setmetatable({
-        height = lock.new({
+        heightLock = lock.new({
             initial = initialState.body.pose.height,
             target_rate = control.vertical.target_rate,
             rate_deadband = control.vertical.lock.speed_deadband,
             relock_timeout = control.vertical.lock.relock_timeout,
         }),
-        lastHeight = nil,
+        height = nil,
         heading = mathx.wrapPi(initialState.navigation.heading.angle),
         position = horizontalVector(initialState.world.position),
     }, Hold)
 
-    self.lastHeight = self.height:locked(initialState.body.pose.height)
+    self.height = self.heightLock:locked(initialState.body.pose.height)
 
     return self
 end
@@ -72,12 +72,12 @@ function Hold:enter(ctx)
     self.heading = mathx.wrapPi(ctx.state.navigation.heading.angle)
 
     if ctx.input.manual.velocity.up == 0.0 then
-        self.lastHeight = self.height:locked(ctx.state.body.pose.height)
+        self.height = self.heightLock:locked(ctx.state.body.pose.height)
     end
 end
 
 function Hold:update(ctx)
-    self.lastHeight = self.height:update({
+    self.height = self.heightLock:update({
         input = ctx.input.manual.velocity.up,
         value = ctx.state.body.pose.height,
         rate = ctx.state.world.velocity.y,

@@ -55,8 +55,12 @@ local function waypointCatalog(navigationConfig)
     end)
 end
 
-local function navigationView(runtime, navigationConfig)
-    runtime = runtime or {}
+local function modeTerms(input)
+    return input.mode and input.mode.terms or {}
+end
+
+local function navigationView(input)
+    local runtime = input.mode and input.mode.name == "navigation" and modeTerms(input) or {}
 
     return {
         active = runtime.active == true,
@@ -68,12 +72,12 @@ local function navigationView(runtime, navigationConfig)
         target = runtime.target,
         arrived = runtime.arrived,
         reason = runtime.reason,
-        waypoints = waypointCatalog(navigationConfig),
+        waypoints = waypointCatalog(input.navigationConfig),
     }
 end
 
 local function heightView(input)
-    local height = input.height or {}
+    local height = modeTerms(input).height or {}
 
     return {
         value = input.state.body.pose.height,
@@ -85,7 +89,7 @@ local function heightView(input)
 end
 
 local function headingView(input)
-    local heading = input.heading or {}
+    local heading = modeTerms(input).heading or {}
 
     return {
         angle = input.state.navigation.heading.angle,
@@ -259,7 +263,7 @@ function terms.running(input)
         heading = headingView(input),
         state = telemetryState(input.state),
         control = controlView(input.control),
-        navigation = navigationView(input.navigation, input.navigationConfig),
+        navigation = navigationView(input),
         command = input.command,
         rotor = input.rotor,
     }

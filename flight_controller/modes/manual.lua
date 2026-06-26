@@ -30,8 +30,8 @@ function manual.active(input)
 end
 
 local function buildTerms(self)
-    local height = self.lastHeight
-    local heading = self.lastHeading
+    local height = self.height
+    local heading = self.heading
 
     return {
         roll = self.roll,
@@ -50,8 +50,8 @@ local function buildTerms(self)
 end
 
 local function buildTarget(self, ctx)
-    local height = self.lastHeight
-    local heading = self.lastHeading
+    local height = self.height
+    local heading = self.heading
     local target = common.target("attitude")
 
     if height.active then
@@ -84,13 +84,13 @@ end
 function manual.new(initialState, control)
     local self = setmetatable({
         control = control,
-        height = lock.new({
+        heightLock = lock.new({
             initial = initialState.body.pose.height,
             target_rate = control.vertical.target_rate,
             rate_deadband = control.vertical.lock.speed_deadband,
             relock_timeout = control.vertical.lock.relock_timeout,
         }),
-        heading = lock.new({
+        headingLock = lock.new({
             initial = initialState.navigation.heading.angle,
             target_rate = control.heading.target_rate,
             rate_deadband = control.heading.lock.rate_deadband,
@@ -100,14 +100,14 @@ function manual.new(initialState, control)
                 return mathx.wrapPi(target - value)
             end,
         }),
-        lastHeight = nil,
-        lastHeading = nil,
+        height = nil,
+        heading = nil,
         roll = control.attitude.home.roll,
         pitch = control.attitude.home.pitch,
     }, Manual)
 
-    self.lastHeight = self.height:locked(initialState.body.pose.height)
-    self.lastHeading = self.heading:locked(initialState.navigation.heading.angle)
+    self.height = self.heightLock:locked(initialState.body.pose.height)
+    self.heading = self.headingLock:locked(initialState.navigation.heading.angle)
 
     return self
 end
@@ -129,24 +129,24 @@ function Manual:enter(ctx)
         control.attitude.limit.pitch
     )
     if ctx.input.manual.velocity.up == 0.0 then
-        self.lastHeight = self.height:locked(ctx.state.body.pose.height)
+        self.height = self.heightLock:locked(ctx.state.body.pose.height)
     end
 
     if ctx.input.manual.heading.rate == 0.0 then
-        self.lastHeading = self.heading:locked(ctx.state.navigation.heading.angle)
+        self.heading = self.headingLock:locked(ctx.state.navigation.heading.angle)
     end
 end
 
 function Manual:update(ctx)
     local input = ctx.input
 
-    self.lastHeight = self.height:update({
+    self.height = self.heightLock:update({
         input = input.manual.velocity.up,
         value = ctx.state.body.pose.height,
         rate = ctx.state.world.velocity.y,
         dt = ctx.dt,
     })
-    self.lastHeading = self.heading:update({
+    self.heading = self.headingLock:update({
         input = input.manual.heading.rate,
         value = ctx.state.navigation.heading.angle,
         rate = ctx.state.navigation.heading.rate,

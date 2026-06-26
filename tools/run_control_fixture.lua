@@ -1425,26 +1425,14 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
         },
         mode = {
             name = "cruise",
-            terms = {},
-        },
-        height = {
-            target = 80.0,
-            error = 0.0,
-        },
-        heading = {
-            target = 0.0,
-            error = 0.0,
-        },
-        navigation = {
-            active = false,
-            waypoints = {
-                {
-                    id = "runtime_should_not_supply_catalog",
-                    position = {
-                        x = 0.0,
-                        y = 0.0,
-                        z = 0.0,
-                    },
+            terms = {
+                height = {
+                    target = 80.0,
+                    error = 0.0,
+                },
+                heading = {
+                    target = 0.0,
+                    error = 0.0,
                 },
             },
         },
@@ -1953,9 +1941,6 @@ local function checkControllerTerms()
             name = "manual",
             terms = {},
         },
-        height = {},
-        heading = {},
-        navigation = {},
         navigationConfig = config.navigation,
         command = command,
         control = terms,

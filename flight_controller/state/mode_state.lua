@@ -45,7 +45,7 @@ function mode_state.new(initialState, config)
             cruise = cruise_mode.new(),
             navigation = navigation_mode.new(config.navigation),
         },
-        lastManualLateral = false,
+        previousManualLateral = false,
     }, State)
 end
 
@@ -63,7 +63,7 @@ function State:update(request)
     }
     local lateralActive = manual_mode.active(manualInput)
     local overrideActive = manualOverrideActive(manualInput)
-    local lateralEdge = lateralActive and not self.lastManualLateral
+    local lateralEdge = lateralActive and not self.previousManualLateral
     local nextMode = self.name
 
     if self.name == modes.navigation and overrideActive then
@@ -117,7 +117,7 @@ function State:update(request)
     local result = self.modes[self.name]:update(ctx)
     result.name = self.name
 
-    self.lastManualLateral = lateralActive
+    self.previousManualLateral = lateralActive
 
     return result
 end

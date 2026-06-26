@@ -85,9 +85,9 @@ assert(controlTerms.attitude[oldReducedOrientation] == nil, "attitude terms shou
 assert(attitude_math[oldReducedFrameHelper] == nil, "reduced target frame helper should be removed")
 
 assertClose("neutral collective", command.collective, 1.0)
-assertClose("neutral roll", command.roll, -0.0467649)
-assertClose("neutral pitch", command.pitch, -0.33031404)
-assertClose("neutral yaw", command.yaw, 0.00813396)
+assertClose("neutral roll", command.roll, -0.03)
+assertClose("neutral pitch", command.pitch, -0.33)
+assertClose("neutral yaw", command.yaw, 0.0)
 
 local hold = horizontal.new(config.control)
 local holdTarget = common.target("position").horizontal

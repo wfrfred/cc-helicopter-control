@@ -1,9 +1,6 @@
 local actuator_protocol = require("protocol.actuator")
+local flight_system = require("app.flight_system")
 local config = require("config")
-local Controller = require("control.controller")
-local flight_state = require("state.flight_state")
-local mixer_module = require("hardware.mixer")
-local mode_state = require("state.mode_state")
 local rotor_phase = require("hardware.rotor_phase")
 local telemetryTerms = require("telemetry.terms")
 local input_protocol = require("protocol.input")
@@ -59,36 +56,25 @@ local function sleepLoop(loopStart)
     end
 end
 
-local function publishWaiting(shared, flight, state, now)
+local function publishWaiting(shared, state, now)
     shared.telemetryTime = now
     shared.telemetry = telemetryTerms.waiting({
-        flight = flight,
         state = state,
         now = now,
     })
 end
 
-local function publishRunning(shared, input)
-    shared.telemetryTime = input.now
-    shared.telemetry = telemetryTerms.running(input)
-end
-
-local function makeInitialMachines(initialState)
+local function makeRuntime(initialState)
     return {
-        flight = flight_state.new(config.control.sensor_age),
-        mode = mode_state.new(initialState, config),
-        controller = Controller.new(config.control),
-        mixer = mixer_module.new(config.hardware.rotor, config.calibration.rotor),
+        flight = flight_system.new(initialState, config),
         phase = rotor_phase.new(config.hardware.rotor),
         actuator = actuator_protocol.new(config.hardware.rotor),
     }
 end
 
 function control_task.run(shared)
-    local machines = nil
+    local runtime = nil
     local lastLoopTime = os.clock() - config.control.loop.dt
-    local telemetryTimer = 0.0
-    local flightMachine = flight_state.new(config.control.sensor_age)
 
     while shared.running do
         local loopStart = os.clock()
@@ -97,72 +83,42 @@ function control_task.run(shared)
 
         local input, inputAge, inputStale = readInputOrDefault(shared, loopStart)
         local state = shared.state
-        local flight = flightMachine:update({
-            state = state,
-            input = input,
-            inputStale = inputStale,
-            now = loopStart,
-        })
 
-        if flight.name == "waiting_sensors" then
-            publishWaiting(shared, flight, state, loopStart)
+        if not flight_system.ready(state) then
+            runtime = nil
+            publishWaiting(shared, state, loopStart)
             sleep(0.1)
         else
-            if machines == nil then
-                machines = makeInitialMachines(state)
-                flightMachine = machines.flight
+            if runtime == nil then
+                runtime = makeRuntime(state)
             end
 
             local navigationCommand = takeNavigationCommand(shared)
             local inputEvent = inputEventSnapshot(input)
-            local modeResult = machines.mode:update({
+            local result = runtime.flight:update({
+                now = loopStart,
+                dt = dt,
                 input = input,
+                inputEvent = inputEvent,
+                inputAge = inputAge,
+                inputStale = inputStale,
+                inputSender = shared.inputSender,
                 state = state,
                 navigationCommand = navigationCommand,
-                dt = dt,
+                navigationConfig = config.navigation,
+                rotorPhase = runtime.phase:read(),
             })
 
             consumeCruiseToggle(shared, input)
 
-            local control = machines.controller:update({
-                state = state,
-                target = modeResult.target,
-                dt = dt,
-            })
-            local command = control.output
-            local controlTerms = control.terms
-            local rotorOutput = machines.mixer:update({
-                commands = command,
-                phase = machines.phase:read(),
-            })
+            runtime.actuator:send(result.rotor)
 
-            machines.actuator:send(rotorOutput)
+            shared.commands = result.command
+            shared.controlTerms = result.controlTerms
 
-            shared.commands = command
-            shared.controlTerms = controlTerms
-
-            telemetryTimer = telemetryTimer + dt
-            if telemetryTimer >= config.control.loop.telemetry_dt then
-                telemetryTimer = 0.0
-                publishRunning(shared, {
-                    now = loopStart,
-                    dt = dt,
-                    input = input,
-                    inputEvent = inputEvent,
-                    inputAge = inputAge,
-                    inputStale = inputStale,
-                    inputSender = shared.inputSender,
-                    state = state,
-                    flight = flight,
-                    mode = {
-                        name = modeResult.name,
-                        terms = modeResult.terms,
-                    },
-                    navigationConfig = config.navigation,
-                    command = command,
-                    control = controlTerms,
-                    rotor = rotorOutput.blades,
-                })
+            if result.telemetry ~= nil then
+                shared.telemetryTime = loopStart
+                shared.telemetry = result.telemetry
             end
 
             sleepLoop(loopStart)

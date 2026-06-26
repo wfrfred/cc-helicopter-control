@@ -35,21 +35,21 @@ config.navigation = {
         {
             id = "home",
             name = "Home",
-            position = { x = -213, y = 81, z = 264 },
+            position = { x = -213.3, y = 83, z = 264 },
 
             approaches = {
                 {
-                    id = "home_west",
-                    name = "Home West Approach",
+                    id = "home_approach",
+                    name = "Home Approach",
                     heading = math.rad(-90),
                     distance = 40.0,
-                    altitude = 100,
-                    finalAltitude = 81,
+                    altitude = 120,
+                    finalAltitude = 83,
                 },
             },
 
             hold = {
-                altitude = 81,
+                altitude = 83,
                 heading = math.rad(-90),
             },
         },
@@ -92,11 +92,6 @@ config.control = {
 
     input = {
         stale_dt = 0.5,
-    },
-
-    sensor_age = {
-        warn_dt = 0.25,
-        fault_dt = 1.0,
     },
 
     collective = {
@@ -157,7 +152,7 @@ config.control = {
     },
 
     attitude_allocator = {
-        enabled = true,
+        enabled = false,
         model = "affine_tensor",
 
         base_matrix = {

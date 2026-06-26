@@ -2,13 +2,13 @@ local env = require("tools.test_env")
 env.install()
 
 local baseline = require("tools.fixtures.control_baseline")
+local flight_system = require("app.flight_system")
 local attitude_math = require("lib.attitude_math")
 local common = require("modes.common")
 local config = require("config")
 local Controller = require("control.controller")
-local flight_state = require("state.flight_state")
 local input_protocol = require("protocol.input")
-local mode_state = require("state.mode_state")
+local mode_state = require("app.mode_state")
 local mixer = require("hardware.mixer")
 local monitor_view = require("monitor_view")
 local pid = require("lib.pid")
@@ -598,34 +598,50 @@ local function checkProtocolDecode()
     assert(not ok, "runtime input should reject UI-only navigation toggle")
 end
 
-local function checkFlightState()
-    local machine = flight_state.new(config.control.sensor_age)
-    local waiting = machine:update({
-        state = nil,
-        input = input_protocol.defaultInput(),
-        inputStale = false,
-        now = 1.0,
-    })
-    assert(waiting.name == "waiting_sensors", "missing sensors should wait")
+local function checkFlightSystem()
+    assert(not flight_system.ready(nil), "missing state should not initialize flight system")
+    assert(not flight_system.ready(canonicalState()), "state without body frame should not initialize flight system")
+    assert(flight_system.ready(runtimeState()), "complete runtime state should initialize flight system")
 
-    local stale = machine:update({
-        state = canonicalState(),
-        input = input_protocol.defaultInput(),
-        inputStale = true,
-        now = 1.0,
-    })
-    assert(stale.name == "running", "ready sensors should run")
-    assert(stale.reason == "input_stale_zeroed", "stale input should be reported")
+    local incomplete = runtimeState()
+    incomplete.body.angular.velocity = nil
+    assert(not flight_system.ready(incomplete), "incomplete state should not initialize flight system")
 
-    local aged = machine:update({
-        state = canonicalState(),
-        input = input_protocol.defaultInput(),
+    local state = runtimeState()
+    local system = flight_system.new(state, config)
+    local input = input_protocol.defaultInput()
+    local frame = {
+        now = 1.0,
+        dt = config.control.loop.dt,
+        input = input,
+        inputEvent = {
+            cruiseToggle = false,
+            holdCapture = false,
+        },
+        inputAge = 0.0,
         inputStale = false,
-        now = 2.1,
-    })
-    assert(aged.name == "running", "sensor age fault should not stop control")
-    assert(aged.reason == "sensor_age_fault", "sensor age fault should be reported")
-    assert(aged.sensorAge.max >= config.control.sensor_age.fault_dt, "sensor age max should be reported")
+        inputSender = 12,
+        state = state,
+        navigationCommand = nil,
+        navigationConfig = config.navigation,
+        rotorPhase = {
+            upper = 0.0,
+            lower = 0.0,
+        },
+    }
+    local first = system:update(frame)
+
+    assert(type(first.command) == "table", "flight system should return controller command")
+    assert(type(first.controlTerms) == "table", "flight system should return control terms")
+    assert(type(first.rotor.blades) == "table", "flight system should return rotor output")
+    assert(first.telemetry == nil, "flight system should respect telemetry cadence")
+
+    frame.now = frame.now + frame.dt
+    local second = system:update(frame)
+
+    assert(second.telemetry.status == "running", "flight system should build running telemetry")
+    assert(second.telemetry.mode.name == "position_hold", "flight telemetry should include active mode")
+    assert(second.telemetry.mode.target == nil, "flight telemetry should not expose mode controller target")
 end
 
 local function checkModeUpdateShape()
@@ -1423,7 +1439,7 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
             name = "running",
             reason = "ready",
         },
-        mode = {
+        modeResult = {
             name = "cruise",
             terms = {
                 height = {
@@ -1437,14 +1453,18 @@ local function checkTelemetryPreservesConsumedCruiseEvent()
             },
         },
         navigationConfig = config.navigation,
-        command = {
-            collective = 0.0,
-            roll = 0.0,
-            pitch = 0.0,
-            yaw = 0.0,
+        controlResult = {
+            output = {
+                collective = 0.0,
+                roll = 0.0,
+                pitch = 0.0,
+                yaw = 0.0,
+            },
+            terms = {},
         },
-        control = {},
-        rotor = {},
+        rotorResult = {
+            blades = {},
+        },
     })
 
     assert(telemetry.input.event.cruiseToggle == true, "telemetry should preserve consumed cruise event")
@@ -1937,14 +1957,18 @@ local function checkControllerTerms()
         flight = {
             name = "running",
         },
-        mode = {
+        modeResult = {
             name = "manual",
             terms = {},
         },
         navigationConfig = config.navigation,
-        command = command,
-        control = terms,
-        rotor = {},
+        controlResult = {
+            output = command,
+            terms = terms,
+        },
+        rotorResult = {
+            blades = {},
+        },
     })
 
     assertClose(
@@ -2181,7 +2205,7 @@ checkFrozenBaseline()
 checkTablex()
 checkPid()
 checkProtocolDecode()
-checkFlightState()
+checkFlightSystem()
 checkModeUpdateShape()
 checkModeTermsSnapshotsAreCopied()
 checkNavigationUpdateTargetOverride()
@@ -2222,6 +2246,8 @@ assertOldRuntimeModuleRemoved("rotor")
 assertOldRuntimeModuleRemoved("target_state")
 assertOldRuntimeModuleRemoved("trajectory")
 assertOldRuntimeModuleRemoved("navigation")
+assertOldRuntimeModuleRemoved("state.flight_state")
+assertOldRuntimeModuleRemoved("state.mode_state")
 assertOldRuntimeModuleRemoved("lib.attitude_allocator")
 
 print("control fixtures ok")

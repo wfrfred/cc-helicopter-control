@@ -55,12 +55,26 @@ local function waypointCatalog(navigationConfig)
     end)
 end
 
+local function modeResult(input)
+    return input.modeResult or input.mode or {}
+end
+
 local function modeTerms(input)
-    return input.mode and input.mode.terms or {}
+    return modeResult(input).terms or {}
+end
+
+local function modeView(input)
+    local result = modeResult(input)
+
+    return {
+        name = result.name,
+        terms = result.terms,
+    }
 end
 
 local function navigationView(input)
-    local runtime = input.mode and input.mode.name == "navigation" and modeTerms(input) or {}
+    local result = modeResult(input)
+    local runtime = result.name == "navigation" and modeTerms(input) or {}
 
     return {
         active = runtime.active == true,
@@ -241,6 +255,10 @@ local function controlView(control)
 end
 
 function terms.running(input)
+    local controlTerms = input.controlResult and input.controlResult.terms or input.control
+    local command = input.controlResult and input.controlResult.output or input.command
+    local rotor = input.rotorResult and input.rotorResult.blades or input.rotor
+
     return {
         status = "running",
         time = input.now,
@@ -258,14 +276,14 @@ function terms.running(input)
             sender = input.inputSender,
         },
         flight = input.flight,
-        mode = input.mode,
+        mode = modeView(input),
         height = heightView(input),
         heading = headingView(input),
         state = telemetryState(input.state),
-        control = controlView(input.control),
+        control = controlView(controlTerms),
         navigation = navigationView(input),
-        command = input.command,
-        rotor = input.rotor,
+        command = command,
+        rotor = rotor,
     }
 end
 

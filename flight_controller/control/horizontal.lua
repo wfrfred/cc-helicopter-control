@@ -111,32 +111,46 @@ function Horizontal:update(state, target, feedforwardInput, dt)
         },
         terms = {
             position = {
-                target = tablex.record.copy(target.position),
-                current = tablex.record.copy(currentPosition),
-                error = {
-                    forward = forwardResult and forwardResult.terms.error or nil,
-                    right = rightResult and rightResult.terms.error or nil,
+                forward = {
+                    target = target.position.forward,
+                    current = currentPosition.forward,
+                    error = forwardResult and forwardResult.terms.error or nil,
+                    output = forwardResult and forwardResult.output or nil,
+                    pid = forwardPositionTerms,
+                },
+                right = {
+                    target = target.position.right,
+                    current = currentPosition.right,
+                    error = rightResult and rightResult.terms.error or nil,
+                    output = rightResult and rightResult.output or nil,
+                    pid = rightPositionTerms,
                 },
             },
             velocity = {
-                target = targetVelocity,
-                current = tablex.record.copy(currentVelocity),
-                error = {
-                    forward = forwardVelocityResult.terms.error,
-                    right = rightVelocityResult.terms.error,
+                forward = {
+                    target = targetVelocity.forward,
+                    current = currentVelocity.forward,
+                    error = forwardVelocityResult.terms.error,
+                    output = forwardVelocityResult.output,
+                    pid = forwardVelocityResult.terms,
+                },
+                right = {
+                    target = targetVelocity.right,
+                    current = currentVelocity.right,
+                    error = rightVelocityResult.terms.error,
+                    output = rightVelocityResult.output,
+                    pid = rightVelocityResult.terms,
                 },
             },
             output = {
                 angle = tablex.record.copy(angle),
             },
-            pid = {
-                position = {
-                    forward = forwardPositionTerms,
-                    right = rightPositionTerms,
-                },
-                velocity = {
-                    forward = forwardVelocityResult.terms,
-                    right = rightVelocityResult.terms,
+            feedforward = {
+                position = tablex.record.copy(feedforwardInput.position),
+                velocity = tablex.record.copy(feedforwardInput.velocity),
+                velocityTarget = {
+                    forward = forwardVelocityFeedforward,
+                    right = rightVelocityFeedforward,
                 },
             },
         },

@@ -74,11 +74,15 @@ function Vertical:update(state, target, feedforwardInput, dt)
                 target = target.position,
                 current = state.position,
                 error = positionResult and positionResult.terms.error or nil,
+                output = positionResult and positionResult.output or nil,
+                pid = positionTerms,
             },
             velocity = {
                 target = targetVelocity,
                 current = state.velocity,
                 error = verticalSpeedResult.terms.error,
+                output = verticalSpeedResult.output,
+                pid = verticalSpeedResult.terms,
             },
             output = {
                 collective = collective,
@@ -90,14 +94,11 @@ function Vertical:update(state, target, feedforwardInput, dt)
             feedforward = {
                 position = feedforwardInput.position,
                 velocity = feedforwardInput.velocity,
+                speed = speedFeedforward,
             },
             tilt = {
                 compensation = tiltCompensation,
                 verticalFactor = tiltVerticalFactor,
-            },
-            pid = {
-                position = positionTerms,
-                velocity = verticalSpeedResult.terms,
             },
         },
     }

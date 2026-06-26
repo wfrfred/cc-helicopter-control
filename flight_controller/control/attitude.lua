@@ -66,40 +66,31 @@ function Attitude:update(state, target, feedforwardInput, dt)
     return {
         output = commands,
         terms = {
-            target = tablex.record.merge({
-                orientation = target.orientation,
-            }, tablex.record.transpose({ "roll", "pitch", "yaw" }, {
-                angle = tablex.record.map(angleResults, function(result)
-                    return result.terms.target
-                end),
-                rate = rateTargets,
-            })),
-            current = tablex.record.transpose({ "roll", "pitch", "yaw" }, {
-                angle = tablex.record.map(angleResults, function(result)
-                    return result.terms.current
-                end),
-                rate = tablex.record.pick(rates, { "roll", "pitch", "yaw" }),
-            }),
-            error = tablex.record.transpose({ "roll", "pitch", "yaw" }, {
-                angle = tablex.record.map(angleResults, function(result)
-                    return result.terms.error
-                end),
-                rate = tablex.record.map(rateResults, function(result)
-                    return result.terms.error
-                end),
-            }),
+            orientation = target.orientation,
+            angle = tablex.record.map(angleResults, function(result)
+                return {
+                    target = result.terms.target,
+                    current = result.terms.current,
+                    error = result.terms.error,
+                    output = result.output,
+                    pid = result.terms,
+                }
+            end),
+            rate = tablex.record.map(rateResults, function(result, axis)
+                return {
+                    target = rateTargets[axis],
+                    current = rates[axis],
+                    error = result.terms.error,
+                    output = result.output,
+                    pid = result.terms,
+                }
+            end),
             output = tablex.record.copy(commands),
             feedforward = {
                 angle = tablex.record.copy(angleFeedforward),
                 rate = tablex.record.copy(rateFeedforward),
                 rateTarget = tablex.record.copy(rateTargetFeedforward),
             },
-            pid = tablex.record.map(self.controllers, function(_controller, axis)
-                return {
-                    angle = angleResults[axis].terms,
-                    rate = rateResults[axis].terms,
-                }
-            end),
         },
     }
 end

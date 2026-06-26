@@ -909,7 +909,7 @@ local function checkNavigationHeadingWrap()
         math.abs(target.yaw.angle - state.navigation.heading.angle) > math.pi,
         "navigation target should expose raw yaw target, not wrapped debug error"
     )
-    assert(math.abs(control.terms.attitude.error.yaw.angle) < math.pi, "attitude yaw error should wrap")
+    assert(math.abs(control.terms.attitude.angle.yaw.error) < math.pi, "attitude yaw error should wrap")
 end
 
 local function checkNavigationVelocityFrame()
@@ -1929,7 +1929,7 @@ local function checkControllerTerms()
     assert(math.abs(terms.allocation.finalCommands.pitch - command.pitch) < 1.0e-6, "final pitch should match top-level command")
     assert(math.abs(terms.allocation.finalCommands.yaw - command.yaw) < 1.0e-6, "final yaw should match top-level command")
     assert(terms.horizontal.kind == "attitude", "manual target should bypass horizontal position controller")
-    assert(type(terms.vertical.pid.position.output) == "number", "vertical should own position pid terms")
+    assert(type(terms.vertical.position.pid.output) == "number", "vertical should own position pid terms")
     assert(config.control.attitude.time_constant == nil, "attitude time_constant should be removed")
     assertClose("heading target rate", config.control.heading.target_rate, math.rad(60))
     assert(type(config.control.pid.attitude.roll.angle) == "table", "roll angle pid config should exist")
@@ -1945,18 +1945,54 @@ local function checkControllerTerms()
     assertClose("yaw angle ki", config.control.pid.attitude.yaw.angle.ki, 0.0)
     assertClose("yaw angle kd", config.control.pid.attitude.yaw.angle.kd, 0.25)
     assertClose("yaw rate feedforward bias", config.control.attitude.rate_feedforward.yaw.bias, 0.0)
-    assert(type(terms.attitude.pid.roll.angle.output) == "number", "attitude should own roll angle pid terms")
-    assert(type(terms.attitude.pid.pitch.angle.output) == "number", "attitude should own pitch angle pid terms")
-    assert(type(terms.attitude.pid.yaw.angle.output) == "number", "attitude should own yaw angle pid terms")
-    assert(terms.attitude.current.roll.angle == 0.0, "roll angle pid current should be zero quaternion-error reference")
-    assert(terms.attitude.current.roll.angle ~= state.body.pose.roll, "roll angle pid current should not be body pose roll")
-    assert(math.abs(terms.attitude.target.roll.rate - terms.attitude.pid.roll.angle.output) < 1.0e-6, "roll rate target should come from angle pid output")
-    assert(type(terms.attitude.pid.roll.rate.output) == "number", "attitude should own rate pid terms")
+    assert(type(terms.attitude.angle.roll.pid.output) == "number", "attitude should own roll angle pid terms")
+    assert(type(terms.attitude.angle.pitch.pid.output) == "number", "attitude should own pitch angle pid terms")
+    assert(type(terms.attitude.angle.yaw.pid.output) == "number", "attitude should own yaw angle pid terms")
+    assert(terms.attitude.angle.roll.current == 0.0, "roll angle pid current should be zero quaternion-error reference")
+    assert(terms.attitude.angle.roll.current ~= state.body.pose.roll, "roll angle pid current should not be body pose roll")
+    assert(math.abs(terms.attitude.rate.roll.target - terms.attitude.angle.roll.output) < 1.0e-6, "roll rate target should come from angle pid output")
+    assert(type(terms.attitude.rate.roll.pid.output) == "number", "attitude should own rate pid terms")
     assert(math.abs(
         terms.allocation.rawCommands.roll
-            - terms.attitude.pid.roll.rate.output
+            - terms.attitude.rate.roll.output
             - terms.attitude.feedforward.rateTarget.roll
     ) < 1.0e-6, "rate pid output plus feedforward should match raw roll command")
+
+    local telemetry = telemetryTerms.running({
+        now = 1.0,
+        dt = config.control.loop.dt,
+        input = input_protocol.defaultInput(),
+        inputEvent = {},
+        inputAge = 0.0,
+        inputStale = false,
+        inputSender = 1,
+        state = state,
+        flight = {
+            name = "running",
+        },
+        mode = {
+            name = "manual",
+            terms = {},
+        },
+        height = {},
+        heading = {},
+        navigation = {},
+        navigationConfig = config.navigation,
+        command = command,
+        control = terms,
+        rotor = {},
+    })
+
+    assertClose(
+        "telemetry attitude view rate target",
+        telemetry.control.attitude.target.roll.rate,
+        terms.attitude.rate.roll.target
+    )
+    assertClose(
+        "telemetry vertical pid view",
+        telemetry.control.vertical.pid.velocity.output,
+        terms.vertical.velocity.pid.output
+    )
 end
 
 local function checkControllerResetInput()
@@ -2032,10 +2068,10 @@ local function checkControllerTargetSemantics()
     local terms = control.terms
 
     assert(terms.vertical.position.target == nil, "nil down position should not run position loop")
-    assertClose("nil yaw target should hold current yaw", terms.attitude.error.yaw.angle, 0.0)
+    assertClose("nil yaw target should hold current yaw", terms.attitude.angle.yaw.error, 0.0)
     assert(terms.horizontal.kind == "position", "position target should use horizontal position branch")
-    assert(terms.horizontal.position.error.forward == nil, "nil forward position should not run position pid")
-    assert(terms.horizontal.position.error.right == nil, "nil right position should not run position pid")
+    assert(terms.horizontal.position.forward.error == nil, "nil forward position should not run position pid")
+    assert(terms.horizontal.position.right.error == nil, "nil right position should not run position pid")
 
     target = neutralTarget()
     target.altitude.position = 0.0
@@ -2066,8 +2102,8 @@ local function checkControllerTargetSemantics()
 
     terms = control.terms
 
-    assertClose("nil forward position uses feedforward only", terms.horizontal.velocity.target.forward, 2.0)
-    assertClose("nil right position uses zero feedforward only", terms.horizontal.velocity.target.right, 0.0)
+    assertClose("nil forward position uses feedforward only", terms.horizontal.velocity.forward.target, 2.0)
+    assertClose("nil right position uses zero feedforward only", terms.horizontal.velocity.right.target, 0.0)
 
     target = neutralTarget()
     target.horizontal.feedforward.velocity.right = 0.1
@@ -2147,23 +2183,23 @@ local function checkAttitudeExternalFeedforward()
     assertClose("roll rate feedforward term", terms.attitude.feedforward.rate.roll, 0.125)
     assertClose("pitch rate feedforward term", terms.attitude.feedforward.rate.pitch, -0.250)
     assertClose("yaw rate feedforward term", terms.attitude.feedforward.rate.yaw, 0.375)
-    assertClose("roll rate target feedforward", terms.attitude.target.roll.rate, terms.attitude.pid.roll.angle.output + 0.25)
-    assertClose("pitch rate target feedforward", terms.attitude.target.pitch.rate, terms.attitude.pid.pitch.angle.output - 0.50)
-    assertClose("yaw rate target feedforward", terms.attitude.target.yaw.rate, terms.attitude.pid.yaw.angle.output + 0.75)
+    assertClose("roll rate target feedforward", terms.attitude.rate.roll.target, terms.attitude.angle.roll.output + 0.25)
+    assertClose("pitch rate target feedforward", terms.attitude.rate.pitch.target, terms.attitude.angle.pitch.output - 0.50)
+    assertClose("yaw rate target feedforward", terms.attitude.rate.yaw.target, terms.attitude.angle.yaw.output + 0.75)
     assertClose(
         "roll command feedforward",
         terms.allocation.rawCommands.roll,
-        terms.attitude.pid.roll.rate.output + terms.attitude.feedforward.rateTarget.roll + 0.125
+        terms.attitude.rate.roll.output + terms.attitude.feedforward.rateTarget.roll + 0.125
     )
     assertClose(
         "pitch command feedforward",
         terms.allocation.rawCommands.pitch,
-        terms.attitude.pid.pitch.rate.output + terms.attitude.feedforward.rateTarget.pitch - 0.250
+        terms.attitude.rate.pitch.output + terms.attitude.feedforward.rateTarget.pitch - 0.250
     )
     assertClose(
         "yaw command feedforward",
         terms.allocation.rawCommands.yaw,
-        terms.attitude.pid.yaw.rate.output + terms.attitude.feedforward.rateTarget.yaw + 0.375
+        terms.attitude.rate.yaw.output + terms.attitude.feedforward.rateTarget.yaw + 0.375
     )
 end
 

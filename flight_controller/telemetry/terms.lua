@@ -96,6 +96,127 @@ local function headingView(input)
     }
 end
 
+local function axisFields(axes, field)
+    axes = axes or {}
+
+    return {
+        forward = axes.forward and axes.forward[field] or nil,
+        right = axes.right and axes.right[field] or nil,
+    }
+end
+
+local function pidAxes(axes)
+    axes = axes or {}
+
+    return {
+        forward = axes.forward and axes.forward.pid or nil,
+        right = axes.right and axes.right.pid or nil,
+    }
+end
+
+local function horizontalControlView(horizontal)
+    if horizontal == nil or horizontal.kind ~= "position" then
+        return horizontal
+    end
+
+    return {
+        kind = horizontal.kind,
+        position = {
+            target = axisFields(horizontal.position, "target"),
+            current = axisFields(horizontal.position, "current"),
+            error = axisFields(horizontal.position, "error"),
+        },
+        velocity = {
+            target = axisFields(horizontal.velocity, "target"),
+            current = axisFields(horizontal.velocity, "current"),
+            error = axisFields(horizontal.velocity, "error"),
+        },
+        output = horizontal.output,
+        feedforward = horizontal.feedforward,
+        pid = {
+            position = pidAxes(horizontal.position),
+            velocity = pidAxes(horizontal.velocity),
+        },
+    }
+end
+
+local function attitudeAxisFields(attitude, field)
+    attitude = attitude or {}
+
+    return tablex.record.transpose({ "roll", "pitch", "yaw" }, {
+        angle = tablex.record.map(attitude.angle or {}, function(loop)
+            return loop[field]
+        end),
+        rate = tablex.record.map(attitude.rate or {}, function(loop)
+            return loop[field]
+        end),
+    })
+end
+
+local function attitudePidView(attitude)
+    attitude = attitude or {}
+
+    return tablex.record.map(attitude.angle or {}, function(angleLoop, axis)
+        local rateLoop = attitude.rate and attitude.rate[axis] or {}
+
+        return {
+            angle = angleLoop.pid,
+            rate = rateLoop.pid,
+        }
+    end)
+end
+
+local function attitudeControlView(attitude)
+    if attitude == nil then
+        return nil
+    end
+
+    return {
+        target = tablex.record.merge({
+            orientation = attitude.orientation,
+        }, attitudeAxisFields(attitude, "target")),
+        current = attitudeAxisFields(attitude, "current"),
+        error = attitudeAxisFields(attitude, "error"),
+        output = attitude.output,
+        feedforward = attitude.feedforward,
+        pid = attitudePidView(attitude),
+    }
+end
+
+local function verticalControlView(vertical)
+    if vertical == nil then
+        return nil
+    end
+
+    return tablex.record.merge(vertical, {
+        position = {
+            target = vertical.position and vertical.position.target or nil,
+            current = vertical.position and vertical.position.current or nil,
+            error = vertical.position and vertical.position.error or nil,
+        },
+        velocity = {
+            target = vertical.velocity and vertical.velocity.target or nil,
+            current = vertical.velocity and vertical.velocity.current or nil,
+            error = vertical.velocity and vertical.velocity.error or nil,
+        },
+        pid = {
+            position = vertical.position and vertical.position.pid or nil,
+            velocity = vertical.velocity and vertical.velocity.pid or nil,
+        },
+    })
+end
+
+local function controlView(control)
+    control = control or {}
+
+    return {
+        horizontal = horizontalControlView(control.horizontal),
+        vertical = verticalControlView(control.vertical),
+        attitude = attitudeControlView(control.attitude),
+        allocation = control.allocation,
+    }
+end
+
 function terms.running(input)
     return {
         status = "running",
@@ -118,7 +239,7 @@ function terms.running(input)
         height = heightView(input),
         heading = headingView(input),
         state = telemetryState(input.state),
-        control = input.control,
+        control = controlView(input.control),
         navigation = navigationView(input.navigation, input.navigationConfig),
         command = input.command,
         rotor = input.rotor,

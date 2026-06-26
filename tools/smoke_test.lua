@@ -82,8 +82,9 @@ local oldReducedOrientation = "reduced" .. "Orientation"
 local oldReducedFrameHelper = "reduced" .. "FrameFromTargetDown"
 
 assert(config.control.heading[oldYawPriority] == nil, "heading yaw-priority config should be removed")
-assert(controlTerms.attitude.target[oldYawPriorityTerm] == nil, "attitude target should not expose yaw-priority")
-assert(controlTerms.attitude.target[oldReducedOrientation] == nil, "attitude target should not expose reduced orientation")
+assert(controlTerms.attitude.target == nil, "attitude terms should not expose split target wrapper")
+assert(controlTerms.attitude[oldYawPriorityTerm] == nil, "attitude terms should not expose yaw-priority")
+assert(controlTerms.attitude[oldReducedOrientation] == nil, "attitude terms should not expose reduced orientation")
 assert(attitude_math[oldReducedFrameHelper] == nil, "reduced target frame helper should be removed")
 
 assertClose("neutral collective", command.collective, 1.0)

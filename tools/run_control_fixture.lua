@@ -664,6 +664,24 @@ local function checkModeUpdateShape()
     assert(result[oldCruise] == nil, "mode update should not expose cruise target internals")
     assert(result.navigation == nil, "mode update should not expose navigation telemetry")
     assert(result.reset == nil, "mode update should not expose controller reset")
+
+    local returned = {
+        target = {},
+        terms = {},
+    }
+    machine.modes.position_hold.update = function()
+        return returned
+    end
+    result = machine:update({
+        input = input_protocol.defaultInput(),
+        state = canonicalState(),
+        navigationCommand = nil,
+        dt = config.control.loop.dt,
+    })
+
+    assert(result ~= returned, "mode state should wrap mode result without mutating it")
+    assert(result.name == "position_hold", "mode state should add active mode name")
+    assert(returned.name == nil, "mode state should not write name into mode-owned result")
 end
 
 local function checkModeTermsSnapshotsAreCopied()
@@ -924,6 +942,17 @@ local function checkNavigationVelocityFrame()
     assertClose("frame vector round-trip x", roundTrip.x, worldVelocity.x)
     assertClose("frame vector round-trip y", roundTrip.y, worldVelocity.y)
     assertClose("frame vector round-trip z", roundTrip.z, worldVelocity.z)
+end
+
+local function checkSublevelAngularVelocityFrame()
+    local rawAngularVelocity = config.calibration.body_axis.forward * 0.25
+        + config.calibration.body_axis.right * -0.50
+        + config.calibration.body_axis.down * 0.75
+    local angular = frames.bodyAngularFromSublevel(rawAngularVelocity, config.calibration.body_axis)
+
+    assertClose("sublevel angular roll", angular.roll, 0.25)
+    assertClose("sublevel angular pitch", angular.pitch, -0.50)
+    assertClose("sublevel angular yaw", angular.yaw, 0.75)
 end
 
 local function checkEulerHeadingRateKinematics()
@@ -2218,6 +2247,7 @@ checkModeUpdateReturnsTargetAndTerms()
 checkNavigationUpdateBuildsConsistentTargetAndTerms()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
+checkSublevelAngularVelocityFrame()
 checkEulerHeadingRateKinematics()
 checkManualEnterCapturesCurrentPose()
 checkManualHeadingFeedforwardUsesCurrentPose()

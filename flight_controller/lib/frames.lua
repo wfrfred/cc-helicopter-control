@@ -4,6 +4,8 @@ local frame = require("lib.frame")
 ---
 --- FRD tables are plain `{ forward, right, down }`; `Frame` methods use vector
 --- coordinates where x/y/z mean forward/right/down in the local frame.
+--- `bodyFromPose` and `bodyAngularFromSublevel` are SableCC API-boundary
+--- adapters; the rest of the system consumes semantic body/world/nav values.
 local frames = {}
 
 local function shortest(q)
@@ -22,6 +24,10 @@ local function quaternionFromBasis(basis)
     })
 
     return shortest(quaternion.fromMatrix(rotation):normalize())
+end
+
+local function component(value, axis)
+    return value.x * axis.x + value.y * axis.y + value.z * axis.z
 end
 
 function frames.vectorFromFrd(frd)
@@ -88,6 +94,14 @@ function frames.bodyFromPose(rawPose, bodyAxis)
         right = q:mul(bodyAxis.right),
         down = q:mul(bodyAxis.down),
     }, rawPose.position)
+end
+
+function frames.bodyAngularFromSublevel(rawAngularVelocity, bodyAxis)
+    return {
+        roll = component(rawAngularVelocity, bodyAxis.forward),
+        pitch = component(rawAngularVelocity, bodyAxis.right),
+        yaw = component(rawAngularVelocity, bodyAxis.down),
+    }
 end
 
 return frames

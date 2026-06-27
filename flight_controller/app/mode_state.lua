@@ -2,6 +2,7 @@ local cruise_mode = require("modes.cruise")
 local manual_mode = require("modes.manual")
 local navigation_mode = require("modes.navigation")
 local position_hold_mode = require("modes.position_hold")
+local tablex = require("lib.tablex")
 
 --- Coordinates mode lifecycle and dispatches to the active mode.
 ---
@@ -114,8 +115,9 @@ function State:update(request)
         })
     end
 
-    local modeResult = self.modes[self.name]:update(ctx)
-    modeResult.name = self.name
+    local modeResult = tablex.record.merge(self.modes[self.name]:update(ctx), {
+        name = self.name,
+    })
 
     self.previousManualLateral = lateralActive
 

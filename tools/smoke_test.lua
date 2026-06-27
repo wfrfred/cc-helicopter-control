@@ -124,7 +124,11 @@ local lockResult = heightLock:update({
     rate = 0.0,
     dt = config.control.loop.dt,
 })
-assert(lockResult.active == false, "manual climb should disable height lock feedback")
+assert(lockResult.locked == false, "manual climb should disable height lock feedback")
+assert(lockResult.manual == true, "manual climb should be marked as manual lock input")
+assert(lockResult.active == nil, "lock result should not expose old active field")
+assert(lockResult.pending == nil, "lock result should not expose pending state")
+assert(lockResult.source == nil, "lock result should not expose display source")
 assertClose("manual climb commanded rate", lockResult.rate, config.control.vertical.target_rate)
 
 local navState = {

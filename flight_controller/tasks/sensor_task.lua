@@ -6,6 +6,12 @@ local sensor_task = {}
 
 local bodyAxis = config.calibration.body_axis
 
+--- SableCC sensor boundary contract:
+--- - `getLinearVelocity()` returns a world-frame free vector.
+--- - `getAngularVelocity()` returns a sublevel-local angular vector.
+--- - `bodyAxis` maps sublevel-local axes into this controller's body FRD axes
+---   and must not leak beyond sensor/API decoding helpers.
+
 local function buildPose(rawPosition, bodyFrame)
     local basis = bodyFrame:basis()
     local forwardHorizontal = vector.new(basis.forward.x, 0.0, basis.forward.z)
@@ -110,12 +116,7 @@ end
 
 local function readAngularVelocity(bodyFrame)
     local rawAngularVelocity = sublevel.getAngularVelocity()
-    local bodyAngularVelocity = bodyFrame:componentsOf(rawAngularVelocity)
-    local angular = {
-        roll = bodyAngularVelocity.x,
-        pitch = bodyAngularVelocity.y,
-        yaw = bodyAngularVelocity.z,
-    }
+    local angular = frames.bodyAngularFromSublevel(rawAngularVelocity, bodyAxis)
 
     return {
         raw = {

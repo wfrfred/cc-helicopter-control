@@ -2,8 +2,15 @@ local mathx = require("lib.mathx")
 
 --- Coordinate frame with origin and orientation expressed in world coordinates.
 ---
---- Vector and point methods take CC `vector` values. Flight-control FRD tables
---- are adapted in `lib.frames`, not accepted here implicitly.
+--- Contract:
+--- - `qWorldFromLocal` is the local-frame-to-world-frame orientation.
+--- - Local vector coordinates are CC `vector` values. For FRD frames, local
+---   x/y/z mean forward/right/down.
+--- - `Frame` accepts and returns only CC `vector` and `quaternion` values.
+---   Flight-control FRD plain tables are adapted in `lib.frames`.
+--- - `componentsOf` and `vector` are for free vectors.
+--- - `coordinatesOf` and `point` are for points and use `origin`.
+--- - `localOrientationOf` and `worldOrientation` compose object orientations.
 local frame = {}
 
 local Frame = {}

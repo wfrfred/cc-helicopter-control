@@ -34,24 +34,23 @@ function Lock:capture(value)
     self.pendingTime = 0.0
 end
 
-function Lock:targetFor(value, rate, active, pending, source)
+function Lock:result(value, rate, locked, manual)
     local target = self.normalize(self.target)
     local current = self.normalize(value)
 
     return {
         target = target,
         rate = rate or 0.0,
-        active = active,
-        pending = pending,
+        locked = locked,
+        manual = manual,
         error = self.error(target, current),
-        source = source,
     }
 end
 
 function Lock:locked(value)
     self:capture(value)
 
-    return self:targetFor(value, 0.0, true, false, "locked")
+    return self:result(value, 0.0, true, false)
 end
 
 function Lock:update(request)
@@ -66,7 +65,7 @@ function Lock:update(request)
         self.pending = false
         self.pendingTime = 0.0
 
-        return self:targetFor(value, command * self.targetRate, false, false, "manual")
+        return self:result(value, command * self.targetRate, false, true)
     end
 
     if self.wasManual then
@@ -84,11 +83,11 @@ function Lock:update(request)
         if stopped or timedOut then
             self:capture(value)
         else
-            return self:targetFor(value, 0.0, false, true, "pending")
+            return self:result(value, 0.0, false, false)
         end
     end
 
-    return self:targetFor(value, 0.0, true, false, "locked")
+    return self:result(value, 0.0, true, false)
 end
 
 return lock

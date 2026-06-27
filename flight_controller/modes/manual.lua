@@ -53,16 +53,16 @@ local function buildTarget(self, ctx)
     local heading = self.heading
     local target = common.target("attitude")
 
-    if height.active then
+    if height.locked then
         target.altitude.position = ctx.state.body.pose.height - height.target
     end
 
     target.altitude.feedforward.position = -height.rate
     target.horizontal.angle.roll = self.roll
     target.horizontal.angle.pitch = self.pitch
-    target.yaw.angle = heading.active and heading.target or ctx.state.navigation.heading.angle
+    target.yaw.angle = heading.locked and heading.target or ctx.state.navigation.heading.angle
 
-    if heading.source == "manual" then
+    if heading.manual then
         local angleFeedforward = ctx.state.body.frame:componentsOf(
             vector.new(0.0, -heading.rate, 0.0)
         )

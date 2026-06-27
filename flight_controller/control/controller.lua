@@ -5,6 +5,12 @@ local horizontal_control = require("control.horizontal")
 local tablex = require("lib.tablex")
 local vertical_control = require("control.vertical")
 
+--- Maps the mode-level target contract into child-controller inputs.
+---
+--- Modes produce control-semantics targets. This composition layer translates
+--- that stable target contract into horizontal, vertical, attitude, and
+--- allocation controller calls; child controllers stay narrow and do not know
+--- about mode ownership or telemetry terms.
 local controller = {}
 
 local Controller = {}

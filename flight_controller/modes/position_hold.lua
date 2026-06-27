@@ -39,7 +39,7 @@ local function buildTarget(self, ctx)
     target.horizontal.position.forward = position.forward
     target.horizontal.position.right = position.right
 
-    if self.height.active then
+    if self.height.locked then
         target.altitude.position = ctx.state.body.pose.height - self.height.target
     end
 

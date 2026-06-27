@@ -189,11 +189,6 @@ config.control = {
     },
 
     position_hold = {
-        attitude_limit = {
-            roll = math.rad(12),
-            pitch = math.rad(10),
-        },
-
         velocity_feedforward = {
             forward = {
                 gain_neg = 0.0200,
@@ -233,48 +228,48 @@ config.control = {
 
         position = {
             forward = {
-                kp = 0.20,
-                ki = 0.04,
-                kd = 0.12,
-                i_min = -0.25,
-                i_max = 0.25,
-                out_min = -6.0,
-                out_max = 6.0,
+                kp = 0.40,
+                ki = 0.12,
+                kd = 0.20,
+                i_min = -0.42,
+                i_max = 0.42,
+                out_min = -20.0,
+                out_max = 20.0,
                 deadband = 0.05,
             },
 
             right = {
-                kp = 0.22,
-                ki = 0.04,
-                kd = 0.14,
-                i_min = -0.35,
-                i_max = 0.35,
-                out_min = -6.0,
-                out_max = 6.0,
+                kp = 0.45,
+                ki = 0.12,
+                kd = 0.25,
+                i_min = -0.75,
+                i_max = 0.75,
+                out_min = -20.0,
+                out_max = 20.0,
                 deadband = 0.05,
             },
         },
 
         velocity = {
             forward = {
-                kp = 0.035,
-                ki = 0.010,
+                kp = 0.050,
+                ki = 0.020,
                 kd = 0.00,
-                i_min = -0.2,
-                i_max = 0.2,
-                out_min = -math.rad(10),
-                out_max = math.rad(10),
+                i_min = -0.4,
+                i_max = 0.4,
+                out_min = -math.rad(25),
+                out_max = math.rad(25),
                 deadband = 0.05,
             },
 
             right = {
-                kp = 0.040,
-                ki = 0.010,
+                kp = 0.070,
+                ki = 0.025,
                 kd = 0.00,
-                i_min = -0.2,
-                i_max = 0.2,
-                out_min = -math.rad(12),
-                out_max = math.rad(12),
+                i_min = -0.4,
+                i_max = 0.4,
+                out_min = -math.rad(30),
+                out_max = math.rad(30),
                 deadband = 0.05,
             },
         },

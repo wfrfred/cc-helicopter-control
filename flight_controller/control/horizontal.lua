@@ -22,7 +22,6 @@ function horizontal.new(control)
     return setmetatable({
         control = control,
         controllers = controllers,
-        attitudeLimit = control.position_hold.attitude_limit or control.attitude.limit,
         velocityFeedforward = control.position_hold.velocity_feedforward,
     }, Horizontal)
 end
@@ -69,13 +68,13 @@ function Horizontal:update(state, target, feedforwardInput, dt)
     local commands = {
         roll = mathx.clamp(
             tiltCommand.right,
-            -self.attitudeLimit.roll,
-            self.attitudeLimit.roll
+            -self.control.attitude.limit.roll,
+            self.control.attitude.limit.roll
         ),
         pitch = mathx.clamp(
             -tiltCommand.forward,
-            -self.attitudeLimit.pitch,
-            self.attitudeLimit.pitch
+            -self.control.attitude.limit.pitch,
+            self.control.attitude.limit.pitch
         ),
     }
 

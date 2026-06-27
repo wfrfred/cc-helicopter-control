@@ -2274,20 +2274,6 @@ local function checkControllerTargetSemantics()
 
     assertClose("velocity feedforward adds to roll target", terms.horizontal.output.roll, 0.1)
 
-    target = neutralTarget(state)
-    target.horizontal.feedforward.velocity.forward = -1.0
-    target.horizontal.feedforward.velocity.right = 1.0
-    control = controller:update({
-        state = state,
-        target = target,
-        dt = config.control.loop.dt,
-    })
-
-    terms = control.terms
-
-    assertClose("position branch roll target should use hold limit", terms.horizontal.output.roll, config.control.position_hold.attitude_limit.roll)
-    assertClose("position branch pitch target should use hold limit", terms.horizontal.output.pitch, config.control.position_hold.attitude_limit.pitch)
-
     target = common.target("attitude")
     target.horizontal.angle.roll = 0.1
     target.horizontal.angle.pitch = -0.2

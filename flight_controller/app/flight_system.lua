@@ -16,10 +16,8 @@ function flight_system.ready(state)
         and state.world.velocity ~= nil
         and state.body ~= nil
         and state.body.frame ~= nil
-        and state.body.frame.forward ~= nil
-        and state.body.frame.right ~= nil
-        and state.body.frame.down ~= nil
-        and state.body.orientation ~= nil
+        and state.body.frame.origin ~= nil
+        and state.body.frame.qWorldFromLocal ~= nil
         and state.body.pose ~= nil
         and state.body.pose.height ~= nil
         and state.body.angular ~= nil

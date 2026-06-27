@@ -1,7 +1,11 @@
 local mathx = {}
 
 function mathx.atan2(y, x)
-    return math.atan2(y, x)
+    if math.atan2 ~= nil then
+        return math.atan2(y, x)
+    end
+
+    return math.atan(y, x)
 end
 
 function mathx.wrapPi(x)
@@ -80,22 +84,6 @@ function mathx.safeNormalizeVector(v, fallback)
     assert(fallback ~= nil, "safe normalize fallback must be set")
 
     return mathx.normalizeVector(fallback)
-end
-
-function mathx.component(value, axis)
-    return (value.x or 0.0) * (axis.x or 0.0)
-        + (value.y or 0.0) * (axis.y or 0.0)
-        + (value.z or 0.0) * (axis.z or 0.0)
-end
-
-function mathx.project(value, axes)
-    local out = {}
-
-    for name, axis in pairs(axes) do
-        out[name] = mathx.component(value, axis)
-    end
-
-    return out
 end
 
 return mathx

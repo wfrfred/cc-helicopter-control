@@ -1,4 +1,5 @@
 local common = require("modes.common")
+local frames = require("lib.frames")
 local mathx = require("lib.mathx")
 
 local cruise = {}
@@ -30,7 +31,7 @@ local function buildTerms(self, state)
 end
 
 local function buildTarget(self, ctx)
-    local feedforward = common.frdFromWorld(self.velocity, self.heading)
+    local feedforward = frames.frdFromVector(frames.level(self.heading):componentsOf(self.velocity))
     local target = common.target("position")
 
     target.altitude.position = ctx.state.body.pose.height - self.height

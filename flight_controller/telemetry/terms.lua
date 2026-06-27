@@ -2,6 +2,14 @@ local tablex = require("lib.tablex")
 
 local terms = {}
 
+local function frameView(frame)
+    return {
+        origin = frame.origin,
+        qWorldFromLocal = frame.qWorldFromLocal,
+        basis = frame:basis(),
+    }
+end
+
 function terms.waiting(input)
     local state = input.state
     local haveState = state ~= nil
@@ -12,8 +20,7 @@ function terms.waiting(input)
         havePose = haveState
             and state.body ~= nil
             and state.body.pose ~= nil
-            and state.body.frame ~= nil
-            and state.body.orientation ~= nil,
+            and state.body.frame ~= nil,
         haveRates = haveState
             and state.body ~= nil
             and state.body.angular ~= nil
@@ -36,7 +43,7 @@ local function telemetryState(state)
             velocity = state.world.velocity,
         },
         body = {
-            frame = state.body.frame,
+            frame = frameView(state.body.frame),
             pose = state.body.pose,
             velocity = state.body.velocity,
             angular = state.body.angular,

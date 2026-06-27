@@ -1,27 +1,18 @@
 local mathx = require("lib.mathx")
-local attitude_math = require("lib.attitude_math")
 local config = require("config")
+local frames = require("lib.frames")
 
 local sensor_task = {}
 
 local bodyAxis = config.calibration.body_axis
 
-local function buildBodyFrame(rawPose)
-    local q = rawPose.orientation:normalize()
-
-    return {
-        forward = q:mul(bodyAxis.forward),
-        right = q:mul(bodyAxis.right),
-        down = q:mul(bodyAxis.down),
-    }
-end
-
 local function buildPose(rawPosition, bodyFrame)
-    local forwardHorizontal = vector.new(bodyFrame.forward.x, 0.0, bodyFrame.forward.z)
+    local basis = bodyFrame:basis()
+    local forwardHorizontal = vector.new(basis.forward.x, 0.0, basis.forward.z)
     local horizontal = forwardHorizontal:length()
-    local roll = mathx.atan2(-bodyFrame.right.y, -bodyFrame.down.y)
-    local pitch = mathx.atan2(bodyFrame.forward.y, horizontal)
-    local heading = mathx.atan2(bodyFrame.forward.x, -bodyFrame.forward.z)
+    local roll = mathx.atan2(-basis.right.y, -basis.down.y)
+    local pitch = mathx.atan2(basis.forward.y, horizontal)
+    local heading = mathx.atan2(basis.forward.x, -basis.forward.z)
 
     return {
         height = rawPosition.y,
@@ -32,7 +23,8 @@ local function buildPose(rawPosition, bodyFrame)
 end
 
 function sensor_task.headingRateFromAngular(bodyFrame, angular)
-    local forward = bodyFrame.forward
+    local basis = bodyFrame:basis()
+    local forward = basis.forward
     local forwardHorizontal = vector.new(forward.x, 0.0, forward.z)
     local horizontal = forwardHorizontal:dot(forwardHorizontal)
 
@@ -44,22 +36,8 @@ function sensor_task.headingRateFromAngular(bodyFrame, angular)
         return (-forward.z * x + forward.x * z) / horizontal
     end
 
-    return (angular.pitch or 0.0) * fromForwardChange(-bodyFrame.down.x, -bodyFrame.down.z)
-        + (angular.yaw or 0.0) * fromForwardChange(bodyFrame.right.x, bodyFrame.right.z)
-end
-
-function sensor_task.navigationVelocity(worldVelocity, heading)
-    local frd = attitude_math.levelFrdFromWorld(worldVelocity, heading)
-
-    return {
-        forward = frd.forward,
-        right = frd.right,
-        up = -frd.down,
-    }
-end
-
-function sensor_task.bodyVelocityFromWorld(worldVelocity, bodyFrame)
-    return mathx.project(worldVelocity, bodyFrame)
+    return (angular.pitch or 0.0) * fromForwardChange(-basis.down.x, -basis.down.z)
+        + (angular.yaw or 0.0) * fromForwardChange(basis.right.x, basis.right.z)
 end
 
 local function makeState()
@@ -77,7 +55,7 @@ end
 
 local function readPose()
     local rawPose = sublevel.getLogicalPose()
-    local bodyFrame = buildBodyFrame(rawPose)
+    local bodyFrame = frames.bodyFromPose(rawPose, bodyAxis)
     local pose = buildPose(rawPose.position, bodyFrame)
 
     return {
@@ -90,7 +68,6 @@ local function readPose()
         },
         body = {
             frame = bodyFrame,
-            orientation = attitude_math.quaternionFromFrame(bodyFrame),
             pose = pose,
         },
         navigation = {
@@ -105,7 +82,10 @@ end
 local function readLinearVelocity(bodyFrame, heading)
     local rawVelocity = sublevel.getLinearVelocity()
     local worldVelocity = rawVelocity
-    local bodyVelocity = sensor_task.bodyVelocityFromWorld(worldVelocity, bodyFrame)
+    local bodyVelocity = frames.frdFromVector(bodyFrame:componentsOf(worldVelocity))
+    local navigationFrd = frames.frdFromVector(
+        frames.level(heading):componentsOf(worldVelocity)
+    )
 
     return {
         raw = {
@@ -118,7 +98,11 @@ local function readLinearVelocity(bodyFrame, heading)
             velocity = bodyVelocity,
         },
         navigation = {
-            velocity = sensor_task.navigationVelocity(worldVelocity, heading),
+            velocity = {
+                forward = navigationFrd.forward,
+                right = navigationFrd.right,
+                up = -navigationFrd.down,
+            },
         },
         time = os.clock(),
     }
@@ -126,11 +110,12 @@ end
 
 local function readAngularVelocity(bodyFrame)
     local rawAngularVelocity = sublevel.getAngularVelocity()
-    local angular = mathx.project(rawAngularVelocity, {
-        roll = bodyAxis.forward,
-        pitch = bodyAxis.right,
-        yaw = bodyAxis.down,
-    })
+    local bodyAngularVelocity = bodyFrame:componentsOf(rawAngularVelocity)
+    local angular = {
+        roll = bodyAngularVelocity.x,
+        pitch = bodyAngularVelocity.y,
+        yaw = bodyAngularVelocity.z,
+    }
 
     return {
         raw = {
@@ -173,7 +158,6 @@ function sensor_task.run(shared)
             shared.state.raw.orientation = pose.raw.orientation
             shared.state.world.position = pose.world.position
             shared.state.body.frame = pose.body.frame
-            shared.state.body.orientation = pose.body.orientation
             shared.state.body.pose = pose.body.pose
             shared.state.navigation.heading.angle = pose.navigation.heading.angle
             shared.state.time.pose = pose.time

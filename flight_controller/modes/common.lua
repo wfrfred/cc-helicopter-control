@@ -1,5 +1,3 @@
-local attitude_math = require("lib.attitude_math")
-
 local common = {}
 
 --- Returns an empty controller target for the selected horizontal branch.
@@ -100,10 +98,6 @@ function common.target(kind)
     end
 
     error("target kind must be position or attitude")
-end
-
-function common.frdFromWorld(value, heading)
-    return attitude_math.levelFrdFromWorld(value, heading)
 end
 
 return common

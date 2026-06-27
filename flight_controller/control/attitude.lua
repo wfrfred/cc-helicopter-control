@@ -1,4 +1,4 @@
-local attitude_math = require("lib.attitude_math")
+local frame = require("lib.frame")
 local mathx = require("lib.mathx")
 local pid = require("lib.pid")
 local tablex = require("lib.tablex")
@@ -41,10 +41,13 @@ function Attitude:update(state, target, feedforwardInput, dt)
     local rates = state.angularVelocity
     local angleFeedforward = feedforwardInput.angle
     local rateFeedforward = feedforwardInput.rate
-    local bodyAttitudeError = attitude_math.attitudeError(
-        state.orientation,
-        target.orientation
-    )
+    local attitudeError = frame.fromQuaternion(state.orientation)
+        :rotationVectorTo(target.orientation)
+    local bodyAttitudeError = {
+        roll = attitudeError.x,
+        pitch = attitudeError.y,
+        yaw = attitudeError.z,
+    }
     local angleResults = tablex.record.map(self.controllers, function(controller, axis)
         return controller.angle:update(bodyAttitudeError[axis], 0.0, dt, rates[axis])
     end)

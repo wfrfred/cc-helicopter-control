@@ -3,7 +3,7 @@ env.install()
 
 local config = require("config")
 local Controller = require("control.controller")
-local attitude_math = require("lib.attitude_math")
+local frames = require("lib.frames")
 local common = require("modes.common")
 local horizontal = require("control.horizontal")
 local lock = require("modes.lock")
@@ -17,8 +17,7 @@ local function assertClose(name, actual, expected, tolerance)
     )
 end
 
-local frame = attitude_math.frameFromPose(0.0, 0.0, 0.0)
-local orientation = attitude_math.quaternionFromFrame(frame)
+local frame = frames.bodyFromAngles(0.0, 0.0, 0.0)
 local controller = Controller.new(config.control)
 local controllerTarget = common.target("attitude")
 
@@ -36,7 +35,6 @@ local control = controller:update({
         },
         body = {
             frame = frame,
-            orientation = orientation,
             pose = {
                 roll = 0.0,
                 pitch = 0.0,
@@ -82,7 +80,7 @@ assert(config.control.heading[oldYawPriority] == nil, "heading yaw-priority conf
 assert(controlTerms.attitude.target == nil, "attitude terms should not expose split target wrapper")
 assert(controlTerms.attitude[oldYawPriorityTerm] == nil, "attitude terms should not expose yaw-priority")
 assert(controlTerms.attitude[oldReducedOrientation] == nil, "attitude terms should not expose reduced orientation")
-assert(attitude_math[oldReducedFrameHelper] == nil, "reduced target frame helper should be removed")
+assert(frames[oldReducedFrameHelper] == nil, "reduced target frame helper should be removed")
 
 assertClose("neutral collective", command.collective, 1.0)
 assertClose("neutral roll", command.roll, -0.03)

@@ -1,4 +1,5 @@
 local common = require("modes.common")
+local frames = require("lib.frames")
 local lock = require("modes.lock")
 local mathx = require("lib.mathx")
 
@@ -32,7 +33,7 @@ end
 
 local function buildTarget(self, ctx)
     local positionError = self.position - horizontalVector(ctx.state.world.position)
-    local position = common.frdFromWorld(positionError, self.heading)
+    local position = frames.frdFromVector(frames.level(self.heading):componentsOf(positionError))
     local target = common.target("position")
 
     target.horizontal.position.forward = position.forward

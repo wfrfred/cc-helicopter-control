@@ -3,7 +3,7 @@ env.install()
 
 local baseline = require("tools.fixtures.control_baseline")
 local flight_system = require("app.flight_system")
-local attitude_math = require("lib.attitude_math")
+local frames = require("lib.frames")
 local common = require("modes.common")
 local config = require("config")
 local Controller = require("control.controller")
@@ -205,6 +205,8 @@ local function checkPid()
 end
 
 local function canonicalState()
+    local frame = frames.bodyFromAngles(0.0, 0.0, 0.0)
+
     return {
         raw = {
             position = vector.new(-213.0, 80.0, 304.0),
@@ -216,9 +218,10 @@ local function canonicalState()
             velocity = vector.new(0.0, 0.0, 0.0),
         },
         body = {
-            frame = {},
-            orientation = {},
+            frame = frame,
             pose = {
+                roll = 0.0,
+                pitch = 0.0,
                 height = 80.0,
                 heading = 0.0,
             },
@@ -250,7 +253,7 @@ local function canonicalState()
 end
 
 local function runtimeState()
-    local frame = attitude_math.frameFromPose(0.0, 0.0, 0.0)
+    local frame = frames.bodyFromAngles(0.0, 0.0, 0.0)
 
     return {
         raw = {
@@ -264,7 +267,6 @@ local function runtimeState()
         },
         body = {
             frame = frame,
-            orientation = attitude_math.quaternionFromFrame(frame),
             pose = {
                 roll = 0.0,
                 pitch = 0.0,
@@ -346,12 +348,7 @@ local function makeRuntimeMachines(state)
 end
 
 local function worldFromFrd(value, yaw)
-    local forward = vector.new(math.sin(yaw), 0.0, -math.cos(yaw))
-    local right = vector.new(math.cos(yaw), 0.0, math.sin(yaw))
-
-    return forward * (value.forward or 0.0)
-        + right * (value.right or 0.0)
-        + vector.new(0.0, -(value.down or 0.0), 0.0)
+    return frames.level(yaw):vector(frames.vectorFromFrd(value))
 end
 
 local function legacyTarget(target, state)
@@ -600,7 +597,9 @@ end
 
 local function checkFlightSystem()
     assert(not flight_system.ready(nil), "missing state should not initialize flight system")
-    assert(not flight_system.ready(canonicalState()), "state without body frame should not initialize flight system")
+    local missingFrame = runtimeState()
+    missingFrame.body.frame = nil
+    assert(not flight_system.ready(missingFrame), "state without body frame should not initialize flight system")
     assert(flight_system.ready(runtimeState()), "complete runtime state should initialize flight system")
 
     local incomplete = runtimeState()
@@ -901,23 +900,30 @@ local function checkNavigationHeadingWrap()
 end
 
 local function checkNavigationVelocityFrame()
-    local velocity = sensor_task.navigationVelocity(vector.new(1.0, 2.0, 0.0), math.pi / 2)
+    local headingFrame = frames.level(math.pi / 2)
+    local velocity = frames.frdFromVector(
+        headingFrame:componentsOf(vector.new(1.0, 2.0, 0.0))
+    )
 
     assert(math.abs(velocity.forward - 1.0) < 1.0e-9, "navigation forward velocity should be heading-aligned")
     assert(math.abs(velocity.right) < 1.0e-9, "navigation right velocity should be heading-aligned")
-    assert(math.abs(velocity.up - 2.0) < 1.0e-9, "navigation up velocity should be world y")
+    assert(math.abs(velocity.down + 2.0) < 1.0e-9, "navigation down velocity should be negative world y")
 
-    local frame = attitude_math.frameFromPose(0.0, 0.0, math.pi / 2)
+    local frame = frames.bodyFromAngles(0.0, 0.0, math.pi / 2)
     local worldVelocity = vector.new(3.0, 2.0, 4.0)
-    local bodyVelocity = sensor_task.bodyVelocityFromWorld(worldVelocity, frame)
-    local navigationVelocity = sensor_task.navigationVelocity(worldVelocity, math.pi / 2)
+    local bodyVelocity = frames.frdFromVector(frame:componentsOf(worldVelocity))
+    local navigationFrd = frames.frdFromVector(headingFrame:componentsOf(worldVelocity))
+    local roundTrip = headingFrame:vector(frames.vectorFromFrd(navigationFrd))
 
     assertClose("world velocity body forward", bodyVelocity.forward, 3.0)
     assertClose("world velocity body right", bodyVelocity.right, 4.0)
     assertClose("world velocity body down", bodyVelocity.down, -2.0)
-    assertClose("world velocity navigation forward", navigationVelocity.forward, 3.0)
-    assertClose("world velocity navigation right", navigationVelocity.right, 4.0)
-    assertClose("world velocity navigation up", navigationVelocity.up, 2.0)
+    assertClose("world velocity navigation forward", navigationFrd.forward, 3.0)
+    assertClose("world velocity navigation right", navigationFrd.right, 4.0)
+    assertClose("world velocity navigation down", navigationFrd.down, -2.0)
+    assertClose("frame vector round-trip x", roundTrip.x, worldVelocity.x)
+    assertClose("frame vector round-trip y", roundTrip.y, worldVelocity.y)
+    assertClose("frame vector round-trip z", roundTrip.z, worldVelocity.z)
 end
 
 local function checkEulerHeadingRateKinematics()
@@ -925,10 +931,13 @@ local function checkEulerHeadingRateKinematics()
     local pitch = -0.42
     local heading = 0.80
     local headingRate = 0.70
-    local frame = attitude_math.frameFromPose(roll, pitch, heading)
-    local bodyRates = attitude_math.bodyRatesFromEulerRates(roll, pitch, {
-        heading = headingRate,
-    })
+    local frame = frames.bodyFromAngles(roll, pitch, heading)
+    local bodyAngularVelocity = frame:componentsOf(vector.new(0.0, -headingRate, 0.0))
+    local bodyRates = {
+        roll = bodyAngularVelocity.x,
+        pitch = bodyAngularVelocity.y,
+        yaw = bodyAngularVelocity.z,
+    }
     local projectedHeadingRate = sensor_task.headingRateFromAngular(frame, bodyRates)
 
     assertClose("heading rate kinematics", projectedHeadingRate, headingRate)
@@ -973,6 +982,11 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
     })
     state.body.pose.roll = 0.25
     state.body.pose.pitch = -0.20
+    state.body.frame = frames.bodyFromAngles(
+        state.body.pose.roll,
+        state.body.pose.pitch,
+        state.body.pose.heading
+    )
     machines.mode.modes.manual.roll = -0.10
     machines.mode.modes.manual.pitch = 0.30
     machines.mode.name = "manual"
@@ -984,28 +998,22 @@ local function checkManualHeadingFeedforwardUsesCurrentPose()
         dt = config.control.loop.dt,
     })
     local target = mode.target
-    local expected = attitude_math.bodyRatesFromEulerRates(
-        state.body.pose.roll,
-        state.body.pose.pitch,
-        {
-            heading = config.control.heading.target_rate,
-        }
+    local expected = state.body.frame:componentsOf(
+        vector.new(0.0, -config.control.heading.target_rate, 0.0)
     )
-    local targetPoseRates = attitude_math.bodyRatesFromEulerRates(
+    local targetPoseRates = frames.bodyFromAngles(
         target.horizontal.angle.roll,
         target.horizontal.angle.pitch,
-        {
-            heading = config.control.heading.target_rate,
-        }
-    )
+        state.body.pose.heading
+    ):componentsOf(vector.new(0.0, -config.control.heading.target_rate, 0.0))
 
     assert(target.heading == nil, "controller target should not expose old heading target")
     assertClose("manual heading rate should use current yaw target", target.yaw.angle, state.navigation.heading.angle)
-    assertClose("manual heading roll feedforward", target.horizontal.feedforward.angle.roll, expected.roll)
-    assertClose("manual heading pitch feedforward", target.horizontal.feedforward.angle.pitch, expected.pitch)
-    assertClose("manual heading yaw feedforward", target.yaw.feedforward.angle, expected.yaw)
+    assertClose("manual heading roll feedforward", target.horizontal.feedforward.angle.roll, expected.x)
+    assertClose("manual heading pitch feedforward", target.horizontal.feedforward.angle.pitch, expected.y)
+    assertClose("manual heading yaw feedforward", target.yaw.feedforward.angle, expected.z)
     assert(
-        math.abs(target.horizontal.feedforward.angle.roll - targetPoseRates.roll) > 1.0e-6,
+        math.abs(target.horizontal.feedforward.angle.roll - targetPoseRates.x) > 1.0e-6,
         "manual heading feedforward should use current pose, not target attitude"
     )
 end
@@ -2014,11 +2022,11 @@ end
 local function checkVerticalTiltUsesBodyFrame()
     local state = runtimeState()
     local controller = Controller.new(config.control)
-    local frame = attitude_math.frameFromPose(0.4, -0.3, 0.8)
+    local frame = frames.bodyFromAngles(0.4, -0.3, 0.8)
     local target = common.target("attitude")
+    local basis = frame:basis()
 
     state.body.frame = frame
-    state.body.orientation = attitude_math.quaternionFromFrame(frame)
     state.body.pose.roll = 0.0
     state.body.pose.pitch = 0.0
     target.horizontal.angle.roll = 0.0
@@ -2032,7 +2040,7 @@ local function checkVerticalTiltUsesBodyFrame()
     })
     local expected = math.max(
         config.control.collective.tilt_compensation.min_factor,
-        math.min(1.0, -frame.down.y)
+        math.min(1.0, -basis.down.y)
     )
 
     assert(math.abs(expected - 1.0) > 1.0e-6, "test frame should be tilted")
@@ -2045,8 +2053,10 @@ local function checkControllerTargetSemantics()
 
     state.navigation.heading.angle = 1.25
     state.body.pose.heading = 1.25
-    state.body.orientation = attitude_math.quaternionFromFrame(
-        attitude_math.frameFromPose(state.body.pose.roll, state.body.pose.pitch, 1.25)
+    state.body.frame = frames.bodyFromAngles(
+        state.body.pose.roll,
+        state.body.pose.pitch,
+        1.25
     )
     local target = neutralTarget(state)
     local control = controller:update({

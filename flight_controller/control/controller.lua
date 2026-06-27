@@ -1,6 +1,6 @@
 local allocation_control = require("control.allocation")
-local attitude_math = require("lib.attitude_math")
 local attitude_control = require("control.attitude")
+local frames = require("lib.frames")
 local horizontal_control = require("control.horizontal")
 local tablex = require("lib.tablex")
 local vertical_control = require("control.vertical")
@@ -40,7 +40,9 @@ local function updateHorizontal(self, state, target, dt)
             self.horizontal:reset()
         end
 
-        local currentVelocity = attitude_math.levelFrdFromWorld(state.world.velocity, target.yaw.angle)
+        local currentVelocity = frames.frdFromVector(
+            frames.level(target.yaw.angle):componentsOf(state.world.velocity)
+        )
         local horizontalResult = self.horizontal:update(
             {
                 velocity = {
@@ -90,7 +92,7 @@ local function updateVertical(self, state, target, dt)
         {
             position = state.body.pose.height,
             velocity = state.world.velocity.y,
-            downAxis = state.body.frame.down,
+            downAxis = state.body.frame:basis().down,
         },
         {
             position = altitudePosition,
@@ -104,7 +106,7 @@ local function updateVertical(self, state, target, dt)
 end
 
 local function updateAttitude(self, state, target, horizontalResult, dt)
-    local attitudeFrame = attitude_math.frameFromPose(
+    local attitudeFrame = frames.bodyFromAngles(
         horizontalResult.output.roll,
         horizontalResult.output.pitch,
         target.yaw.angle
@@ -112,11 +114,11 @@ local function updateAttitude(self, state, target, horizontalResult, dt)
 
     return self.attitude:update(
         {
-            orientation = state.body.orientation,
+            orientation = state.body.frame.qWorldFromLocal,
             angularVelocity = state.body.angular.velocity,
         },
         {
-            orientation = attitude_math.quaternionFromFrame(attitudeFrame):normalize(),
+            orientation = attitudeFrame.qWorldFromLocal,
         },
         {
             angle = {

@@ -1,4 +1,5 @@
 local common = require("modes.common")
+local frames = require("lib.frames")
 local mathx = require("lib.mathx")
 local tablex = require("lib.tablex")
 
@@ -494,12 +495,14 @@ local function buildTerms(self, state, phaseTarget)
 end
 
 local function buildTarget(ctx, phaseTarget)
-    local positionError = {
-        x = phaseTarget.position.x - ctx.state.world.position.x,
-        y = phaseTarget.height - ctx.state.body.pose.height,
-        z = phaseTarget.position.z - ctx.state.world.position.z,
-    }
-    local position = common.frdFromWorld(positionError, phaseTarget.heading)
+    local positionError = vector.new(
+        phaseTarget.position.x - ctx.state.world.position.x,
+        phaseTarget.height - ctx.state.body.pose.height,
+        phaseTarget.position.z - ctx.state.world.position.z
+    )
+    local position = frames.frdFromVector(
+        frames.level(phaseTarget.heading):componentsOf(positionError)
+    )
     local target = common.target("position")
 
     target.horizontal.position.forward = position.forward

@@ -1,5 +1,4 @@
 local common = require("modes.common")
-local attitude_math = require("lib.attitude_math")
 local lock = require("modes.lock")
 local mathx = require("lib.mathx")
 
@@ -64,18 +63,13 @@ local function buildTarget(self, ctx)
     target.yaw.angle = heading.active and heading.target or ctx.state.navigation.heading.angle
 
     if heading.source == "manual" then
-        local pose = ctx.state.body.pose
-        local angleFeedforward = attitude_math.bodyRatesFromEulerRates(
-            pose.roll or self.control.attitude.home.roll,
-            pose.pitch or self.control.attitude.home.pitch,
-            {
-                heading = heading.rate,
-            }
+        local angleFeedforward = ctx.state.body.frame:componentsOf(
+            vector.new(0.0, -heading.rate, 0.0)
         )
 
-        target.horizontal.feedforward.angle.roll = angleFeedforward.roll
-        target.horizontal.feedforward.angle.pitch = angleFeedforward.pitch
-        target.yaw.feedforward.angle = angleFeedforward.yaw
+        target.horizontal.feedforward.angle.roll = angleFeedforward.x
+        target.horizontal.feedforward.angle.pitch = angleFeedforward.y
+        target.yaw.feedforward.angle = angleFeedforward.z
     end
 
     return target

@@ -1,11 +1,12 @@
 local frame = require("lib.frame")
+local mathx = require("lib.mathx")
 
 --- Flight-control constructors and FRD adapters for `lib.frame`.
 ---
 --- FRD tables are plain `{ forward, right, down }`; `Frame` methods use vector
 --- coordinates where x/y/z mean forward/right/down in the local frame.
---- `bodyFromPose` and `bodyAngularFromSublevel` are SableCC API-boundary
---- adapters; the rest of the system consumes semantic body/world/nav values.
+--- `body` and `bodyAngularVector` are SableCC API-boundary adapters; the rest
+--- of the system consumes semantic body/world/nav values.
 local frames = {}
 
 local function shortest(q)
@@ -86,7 +87,7 @@ function frames.bodyFromBasis(basis, origin)
     return frames.fromBasis(basis, origin)
 end
 
-function frames.bodyFromPose(rawPose, bodyAxis)
+function frames.body(rawPose, bodyAxis)
     local q = rawPose.orientation:normalize()
     local rawFrame = frame.fromQuaternion(q, rawPose.position)
 
@@ -97,12 +98,19 @@ function frames.bodyFromPose(rawPose, bodyAxis)
     }, rawPose.position)
 end
 
-function frames.bodyAngularFromSublevel(rawAngularVelocity, bodyAxis)
-    return {
-        roll = component(rawAngularVelocity, bodyAxis.forward),
-        pitch = component(rawAngularVelocity, bodyAxis.right),
-        yaw = component(rawAngularVelocity, bodyAxis.down),
-    }
+function frames.navigation(bodyFrame)
+    local basis = bodyFrame:basis()
+    local heading = mathx.atan2(basis.forward.x, -basis.forward.z)
+
+    return frames.levelAt(bodyFrame.origin, heading)
+end
+
+function frames.bodyAngularVector(rawAngularVelocity, bodyAxis)
+    return vector.new(
+        component(rawAngularVelocity, bodyAxis.forward),
+        component(rawAngularVelocity, bodyAxis.right),
+        component(rawAngularVelocity, bodyAxis.down)
+    )
 end
 
 return frames

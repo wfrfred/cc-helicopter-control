@@ -488,16 +488,15 @@ end
 local function drawCurrentAttitude(mon, x, y, width, telemetry)
     local state = telemetry.state
     local body = state.body
-    local pose = body.pose
-    local angular = body.angular
-    local rates = angular.velocity
+    local attitude = body.attitude
+    local rates = body.rates
 
     drawValueGrid(mon, x, y, width, {
-        { label = "ROLL", value = deg(pose.roll), pattern = "%+.1f" },
+        { label = "ROLL", value = deg(attitude.roll), pattern = "%+.1f" },
         { label = "RRATE", value = deg(rates.roll), pattern = "%+.1f" },
-        { label = "PITCH", value = deg(pose.pitch), pattern = "%+.1f" },
+        { label = "PITCH", value = deg(attitude.pitch), pattern = "%+.1f" },
         { label = "PRATE", value = deg(rates.pitch), pattern = "%+.1f" },
-        { label = "HEAD", value = deg(pose.heading), pattern = "%+.1f" },
+        { label = "HEAD", value = deg(attitude.heading), pattern = "%+.1f" },
         { label = "YRATE", value = deg(rates.yaw), pattern = "%+.1f" },
     })
 end
@@ -731,9 +730,8 @@ end
 
 local function drawNavigation(mon, x, y, width, limitY, telemetry, shared)
     local state = telemetry.state
-    local raw = state.raw
-    local position = raw.position
-    local velocity = raw.velocity
+    local position = state.world.position
+    local velocity = state.world.velocity
     local heading = telemetry.heading
     local navigation = telemetry.navigation
     local navTarget = navigation.target

@@ -2,6 +2,7 @@ local allocation_control = require("control.allocation")
 local attitude_control = require("control.attitude")
 local frames = require("lib.frames")
 local horizontal_control = require("control.horizontal")
+local mathx = require("lib.mathx")
 local tablex = require("lib.tablex")
 local vertical_control = require("control.vertical")
 
@@ -15,6 +16,26 @@ local controller = {}
 
 local Controller = {}
 Controller.__index = Controller
+
+local function axisFromVector(value)
+    return {
+        roll = value.x,
+        pitch = value.y,
+        yaw = value.z,
+    }
+end
+
+local function bodyAttitude(state)
+    local basis = state.frames.body:basis()
+    local forwardHorizontal = vector.new(basis.forward.x, 0.0, basis.forward.z)
+    local horizontal = forwardHorizontal:length()
+
+    return {
+        roll = mathx.atan2(-basis.right.y, -basis.down.y),
+        pitch = mathx.atan2(basis.forward.y, horizontal),
+        heading = mathx.atan2(basis.forward.x, -basis.forward.z),
+    }
+end
 
 function controller.new(control)
     return setmetatable({
@@ -88,23 +109,17 @@ local function updateHorizontal(self, state, target, dt)
 end
 
 local function updateVertical(self, state, target, dt)
-    local altitudePosition = nil
-
-    if target.altitude.position ~= nil then
-        altitudePosition = state.body.pose.height - target.altitude.position
-    end
-
     return self.vertical:update(
         {
-            position = state.body.pose.height,
-            velocity = state.world.velocity.y,
-            downAxis = state.body.frame:basis().down,
+            position = 0.0,
+            velocity = state.navigation.velocity.z,
+            downAxis = state.frames.body:basis().down,
         },
         {
-            position = altitudePosition,
+            position = target.altitude.position,
         },
         {
-            position = -target.altitude.feedforward.position,
+            position = target.altitude.feedforward.position,
             velocity = target.altitude.feedforward.velocity,
         },
         dt
@@ -120,8 +135,8 @@ local function updateAttitude(self, state, target, horizontalResult, dt)
 
     return self.attitude:update(
         {
-            orientation = state.body.frame.qWorldFromLocal,
-            angularVelocity = state.body.angular.velocity,
+            orientation = state.world.orientation,
+            angularVelocity = axisFromVector(state.body.angularVelocity),
         },
         {
             orientation = attitudeFrame.qWorldFromLocal,
@@ -152,7 +167,7 @@ local function updateAllocation(self, state, verticalResult, attitudeResult, dt)
 
     return self.allocation:update(
         {
-            pose = state.body.pose,
+            pose = bodyAttitude(state),
         },
         {
             commands = rawCommands,

@@ -30,6 +30,12 @@ local function configValue(config, name)
     return defaults[name]
 end
 
+local function heading(state)
+    local forward = state.frames.navigation:basis().forward
+
+    return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
+end
+
 local function assertFiniteNumber(name, value)
     assert(type(value) == "number", name .. " must be number")
     assert(value == value, name .. " must not be NaN")
@@ -416,7 +422,7 @@ local function activateRoute(self, id, state)
     assert(self.selected ~= nil, "navigation activation requires a selected waypoint")
 
     local position = state.world.position
-    local pose = state.body.pose
+    local currentHeading = heading(state)
     local approach = selectApproach(self.selected, position, self.config)
     local legs = buildApproachLegs(self.selected, approach, self.config)
 
@@ -429,7 +435,7 @@ local function activateRoute(self, id, state)
         holdPosition = tablex.record.copy(position),
         destination = tablex.record.copy(legs[#legs].position),
         cruiseAltitude = cruiseAltitude(self.selected, approach, position.y, legs),
-        arrivalHeading = approach and approach.heading or pose.heading,
+        arrivalHeading = approach and approach.heading or currentHeading,
     }
     self.inactiveReason = nil
 end
@@ -454,16 +460,18 @@ local function targetForRoute(route, state)
     end
 
     local position = state.world.position
-    local pose = state.body.pose
+    local attitude = {
+        heading = heading(state),
+    }
 
-    return targetForPhase(route, position, pose)
+    return targetForPhase(route, position, attitude)
 end
 
 local function motion(state)
     return {
         worldVelocity = horizontalVector(state.world.velocity),
-        verticalSpeed = state.world.velocity.y,
-        headingRate = state.navigation.heading.rate,
+        verticalSpeed = state.navigation.velocity.z,
+        headingRate = state.navigation.angularVelocity.z,
     }
 end
 
@@ -477,21 +485,21 @@ local function buildTerms(self, state, phaseTarget)
         terms.height = {
             target = phaseTarget.height,
             rate = 0.0,
-            error = phaseTarget.height - state.body.pose.height,
+            error = phaseTarget.height + state.navigation.position.z,
         }
         terms.heading = {
             target = phaseTarget.heading,
             rate = 0.0,
-            error = mathx.wrapPi(phaseTarget.heading - state.navigation.heading.angle),
+            error = mathx.wrapPi(phaseTarget.heading - heading(state)),
         }
     else
         terms.height = {
-            target = state.body.pose.height,
+            target = -state.navigation.position.z,
             rate = 0.0,
             error = 0.0,
         }
         terms.heading = {
-            target = state.navigation.heading.angle,
+            target = heading(state),
             rate = 0.0,
             error = 0.0,
         }
@@ -503,7 +511,7 @@ end
 local function buildTarget(ctx, phaseTarget)
     local positionError = vector.new(
         phaseTarget.position.x - ctx.state.world.position.x,
-        phaseTarget.height - ctx.state.body.pose.height,
+        0.0,
         phaseTarget.position.z - ctx.state.world.position.z
     )
     local position = frames.frdFromVector(
@@ -513,7 +521,7 @@ local function buildTarget(ctx, phaseTarget)
 
     target.horizontal.position.forward = position.forward
     target.horizontal.position.right = position.right
-    target.altitude.position = position.down
+    target.altitude.position = -phaseTarget.height - ctx.state.navigation.position.z
     target.yaw.angle = phaseTarget.heading
 
     return target
@@ -546,9 +554,11 @@ function Navigation:update(ctx)
 
     local routeMotion = motion(ctx.state)
     local position = ctx.state.world.position
-    local pose = ctx.state.body.pose
+    local attitude = {
+        heading = heading(ctx.state),
+    }
 
-    updatePhase(self.route, position, pose, routeMotion, self.config)
+    updatePhase(self.route, position, attitude, routeMotion, self.config)
 
     local phaseTarget = targetForRoute(self.route, ctx.state)
 

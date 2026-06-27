@@ -1,3 +1,4 @@
+local mathx = require("lib.mathx")
 local tablex = require("lib.tablex")
 
 local terms = {}
@@ -10,6 +11,32 @@ local function frameView(frame)
     }
 end
 
+local function bodyAttitude(state)
+    local basis = state.frames.body:basis()
+    local forwardHorizontal = vector.new(basis.forward.x, 0.0, basis.forward.z)
+    local horizontal = forwardHorizontal:length()
+
+    return {
+        roll = mathx.wrapPi(mathx.atan2(-basis.right.y, -basis.down.y)),
+        pitch = mathx.wrapPi(mathx.atan2(basis.forward.y, horizontal)),
+        heading = mathx.wrapPi(mathx.atan2(basis.forward.x, -basis.forward.z)),
+    }
+end
+
+local function bodyRates(state)
+    return {
+        roll = state.body.angularVelocity.x,
+        pitch = state.body.angularVelocity.y,
+        yaw = state.body.angularVelocity.z,
+    }
+end
+
+local function heading(state)
+    local forward = state.frames.navigation:basis().forward
+
+    return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
+end
+
 function terms.waiting(input)
     local state = input.state
     local haveState = state ~= nil
@@ -18,13 +45,13 @@ function terms.waiting(input)
         status = "waiting_sensors",
         time = input.now,
         havePose = haveState
-            and state.body ~= nil
-            and state.body.pose ~= nil
-            and state.body.frame ~= nil,
+            and state.frames ~= nil
+            and state.frames.body ~= nil
+            and state.world ~= nil
+            and state.world.position ~= nil,
         haveRates = haveState
             and state.body ~= nil
-            and state.body.angular ~= nil
-            and state.body.angular.velocity ~= nil,
+            and state.body.angularVelocity ~= nil,
         haveVelocity = haveState
             and state.world ~= nil
             and state.world.velocity ~= nil,
@@ -33,22 +60,31 @@ end
 
 local function telemetryState(state)
     return {
-        raw = {
-            position = state.raw.position,
-            velocity = state.raw.velocity,
-            angularVelocity = state.raw.angularVelocity,
+        frames = {
+            world = frameView(state.frames.world),
+            navigation = frameView(state.frames.navigation),
+            body = frameView(state.frames.body),
         },
         world = {
             position = state.world.position,
+            orientation = state.world.orientation,
             velocity = state.world.velocity,
+            angularVelocity = state.world.angularVelocity,
+        },
+        navigation = {
+            position = state.navigation.position,
+            orientation = state.navigation.orientation,
+            velocity = state.navigation.velocity,
+            angularVelocity = state.navigation.angularVelocity,
         },
         body = {
-            frame = frameView(state.body.frame),
-            pose = state.body.pose,
+            position = state.body.position,
+            orientation = state.body.orientation,
             velocity = state.body.velocity,
-            angular = state.body.angular,
+            angularVelocity = state.body.angularVelocity,
+            attitude = bodyAttitude(state),
+            rates = bodyRates(state),
         },
-        navigation = state.navigation,
     }
 end
 
@@ -90,23 +126,23 @@ local function heightView(input, modeTerms)
     local height = modeTerms.height or {}
 
     return {
-        value = input.state.body.pose.height,
+        value = -input.state.navigation.position.z,
         target = height.target,
-        rate = input.state.world.velocity.y,
+        rate = -input.state.navigation.velocity.z,
         targetRate = height.rate or 0.0,
         error = height.error or 0.0,
     }
 end
 
 local function headingView(input, modeTerms)
-    local heading = modeTerms.heading or {}
+    local headingTerms = modeTerms.heading or {}
 
     return {
-        angle = input.state.navigation.heading.angle,
-        target = heading.target,
-        rate = input.state.navigation.heading.rate,
-        targetRate = heading.rate or 0.0,
-        error = heading.error or 0.0,
+        angle = heading(input.state),
+        target = headingTerms.target,
+        rate = input.state.navigation.angularVelocity.z,
+        targetRate = headingTerms.rate or 0.0,
+        error = headingTerms.error or 0.0,
     }
 end
 
@@ -258,9 +294,9 @@ function terms.running(input)
         time = input.now,
         dt = input.dt,
         age = {
-            pose = input.now - input.state.time.pose,
-            angularVelocity = input.now - input.state.time.angularVelocity,
-            velocity = input.now - input.state.time.velocity,
+            pose = input.now - input.state.sampleTime.pose,
+            angularVelocity = input.now - input.state.sampleTime.angularVelocity,
+            velocity = input.now - input.state.sampleTime.velocity,
         },
         input = {
             manual = input.input.manual,

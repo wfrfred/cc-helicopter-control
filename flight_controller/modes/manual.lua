@@ -22,6 +22,23 @@ local function moveToward(x, target, rate, dt)
     return x - step
 end
 
+local function heading(state)
+    local forward = state.frames.navigation:basis().forward
+
+    return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
+end
+
+local function bodyAttitude(state)
+    local basis = state.frames.body:basis()
+    local forwardHorizontal = vector.new(basis.forward.x, 0.0, basis.forward.z)
+    local horizontal = forwardHorizontal:length()
+
+    return {
+        roll = mathx.wrapPi(mathx.atan2(-basis.right.y, -basis.down.y)),
+        pitch = mathx.wrapPi(mathx.atan2(basis.forward.y, horizontal)),
+    }
+end
+
 function manual.active(input)
     return input.manual.attitude.roll ~= 0.0
         or input.manual.attitude.pitch ~= 0.0
@@ -36,9 +53,9 @@ local function buildTerms(self)
         roll = self.roll,
         pitch = self.pitch,
         height = {
-            target = height.target,
-            rate = height.rate,
-            error = height.error,
+            target = -height.target,
+            rate = -height.rate,
+            error = -height.error,
         },
         heading = {
             target = heading.target,
@@ -50,21 +67,21 @@ end
 
 local function buildTarget(self, ctx)
     local height = self.height
-    local heading = self.heading
+    local headingState = self.heading
     local target = common.target("attitude")
 
     if height.locked then
-        target.altitude.position = ctx.state.body.pose.height - height.target
+        target.altitude.position = height.target - ctx.state.navigation.position.z
     end
 
-    target.altitude.feedforward.position = -height.rate
+    target.altitude.feedforward.position = height.rate
     target.horizontal.angle.roll = self.roll
     target.horizontal.angle.pitch = self.pitch
-    target.yaw.angle = heading.locked and heading.target or ctx.state.navigation.heading.angle
+    target.yaw.angle = headingState.locked and headingState.target or heading(ctx.state)
 
-    if heading.manual then
-        local angleFeedforward = ctx.state.body.frame:componentsOf(
-            vector.new(0.0, -heading.rate, 0.0)
+    if headingState.manual then
+        local angleFeedforward = ctx.state.frames.body:componentsOf(
+            vector.new(0.0, -headingState.rate, 0.0)
         )
 
         target.horizontal.feedforward.angle.roll = angleFeedforward.x
@@ -79,13 +96,13 @@ function manual.new(initialState, control)
     local self = setmetatable({
         control = control,
         heightLock = lock.new({
-            initial = initialState.body.pose.height,
+            initial = initialState.navigation.position.z,
             target_rate = control.vertical.target_rate,
             rate_deadband = control.vertical.lock.speed_deadband,
             relock_timeout = control.vertical.lock.relock_timeout,
         }),
         headingLock = lock.new({
-            initial = initialState.navigation.heading.angle,
+            initial = heading(initialState),
             target_rate = control.heading.target_rate,
             rate_deadband = control.heading.lock.rate_deadband,
             relock_timeout = control.heading.lock.relock_timeout,
@@ -100,17 +117,17 @@ function manual.new(initialState, control)
         pitch = control.attitude.home.pitch,
     }, Manual)
 
-    self.height = self.heightLock:locked(initialState.body.pose.height)
-    self.heading = self.headingLock:locked(initialState.navigation.heading.angle)
+    self.height = self.heightLock:locked(initialState.navigation.position.z)
+    self.heading = self.headingLock:locked(heading(initialState))
 
     return self
 end
 
 function Manual:enter(ctx)
     local control = self.control
-    local pose = ctx.state.body.pose
-    local roll = pose.roll or control.attitude.home.roll
-    local pitch = pose.pitch or control.attitude.home.pitch
+    local attitude = bodyAttitude(ctx.state)
+    local roll = attitude.roll or control.attitude.home.roll
+    local pitch = attitude.pitch or control.attitude.home.pitch
 
     self.roll = mathx.clamp(
         roll,
@@ -123,11 +140,11 @@ function Manual:enter(ctx)
         control.attitude.limit.pitch
     )
     if ctx.input.manual.velocity.up == 0.0 then
-        self.height = self.heightLock:locked(ctx.state.body.pose.height)
+        self.height = self.heightLock:locked(ctx.state.navigation.position.z)
     end
 
     if ctx.input.manual.heading.rate == 0.0 then
-        self.heading = self.headingLock:locked(ctx.state.navigation.heading.angle)
+        self.heading = self.headingLock:locked(heading(ctx.state))
     end
 end
 
@@ -135,15 +152,15 @@ function Manual:update(ctx)
     local input = ctx.input
 
     self.height = self.heightLock:update({
-        input = input.manual.velocity.up,
-        value = ctx.state.body.pose.height,
-        rate = ctx.state.world.velocity.y,
+        input = -input.manual.velocity.up,
+        value = ctx.state.navigation.position.z,
+        rate = ctx.state.navigation.velocity.z,
         dt = ctx.dt,
     })
     self.heading = self.headingLock:update({
         input = input.manual.heading.rate,
-        value = ctx.state.navigation.heading.angle,
-        rate = ctx.state.navigation.heading.rate,
+        value = heading(ctx.state),
+        rate = ctx.state.navigation.angularVelocity.z,
         dt = ctx.dt,
     })
 

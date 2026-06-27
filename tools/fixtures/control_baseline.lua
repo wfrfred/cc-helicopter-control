@@ -14,7 +14,7 @@ local cases = {
             target = {
                 roll = 0.0,
                 pitch = 0.0,
-                height = 80.0,
+                height = 0.0,
                 verticalSpeed = 0.0,
                 heightActive = true,
             },
@@ -39,7 +39,7 @@ local cases = {
             target = {
                 roll = 0.039269908169872414,
                 pitch = 0.0,
-                height = 80.0,
+                height = 0.0,
                 verticalSpeed = 0.0,
                 heightActive = true,
             },
@@ -64,7 +64,7 @@ local cases = {
             target = {
                 roll = 0.0,
                 pitch = 0.039269908169872414,
-                height = 80.0,
+                height = 0.0,
                 verticalSpeed = 0.0,
                 heightActive = true,
             },
@@ -113,7 +113,7 @@ local cases = {
             target = {
                 roll = 0.0,
                 pitch = 0.0,
-                height = 80.0,
+                height = 0.0,
                 verticalSpeed = 0.0,
                 heightActive = true,
             },
@@ -143,7 +143,7 @@ local cases = {
             cruise = {
                 x = 3.0,
                 z = -1.0,
-                height = 80.0,
+                height = 0.0,
                 heading = 0.0,
             },
             target = {

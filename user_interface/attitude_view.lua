@@ -88,7 +88,7 @@ function attitude_view.draw(mon, shared)
 
     local state = telemetry.state
     local body = state.body
-    drawHorizon(mon, body.pose)
+    drawHorizon(mon, body.attitude)
 end
 
 return attitude_view

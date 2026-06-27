@@ -11,14 +11,20 @@ local function horizontalVector(value)
     return vector.new(value.x, 0.0, value.z)
 end
 
+local function heading(state)
+    local forward = state.frames.navigation:basis().forward
+
+    return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
+end
+
 local function buildTerms(self, state)
-    local heightError = self.height - state.body.pose.height
-    local headingError = mathx.wrapPi(self.heading - state.navigation.heading.angle)
+    local heightError = -(self.height - state.navigation.position.z)
+    local headingError = mathx.wrapPi(self.heading - heading(state))
 
     return {
         velocity = horizontalVector(self.velocity),
         height = {
-            target = self.height,
+            target = -self.height,
             rate = 0.0,
             error = heightError,
         },
@@ -34,7 +40,7 @@ local function buildTarget(self, ctx)
     local feedforward = frames.frdFromVector(frames.level(self.heading):componentsOf(self.velocity))
     local target = common.target("position")
 
-    target.altitude.position = ctx.state.body.pose.height - self.height
+    target.altitude.position = self.height - ctx.state.navigation.position.z
     target.horizontal.feedforward.position.forward = feedforward.forward
     target.horizontal.feedforward.position.right = feedforward.right
     target.yaw.angle = self.heading
@@ -52,8 +58,8 @@ end
 
 function Cruise:enter(ctx)
     self.velocity = horizontalVector(ctx.state.world.velocity)
-    self.height = ctx.state.body.pose.height
-    self.heading = mathx.wrapPi(ctx.state.navigation.heading.angle)
+    self.height = ctx.state.navigation.position.z
+    self.heading = heading(ctx.state)
 end
 
 function Cruise:update(ctx)

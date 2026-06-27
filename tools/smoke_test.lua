@@ -3,6 +3,7 @@ env.install()
 
 local config = require("config")
 local Controller = require("control.controller")
+local control_state = require("app.control_state")
 local frames = require("lib.frames")
 local common = require("modes.common")
 local horizontal = require("control.horizontal")
@@ -17,7 +18,54 @@ local function assertClose(name, actual, expected, tolerance)
     )
 end
 
-local frame = frames.bodyFromAngles(0.0, 0.0, 0.0)
+local function rawPoseFromBodyFrame(position, bodyFrame)
+    local basis = bodyFrame:basis()
+    local rawFrame = frames.fromBasis({
+        forward = -basis.right,
+        right = -basis.down,
+        down = basis.forward,
+    }, position)
+
+    return {
+        position = position,
+        orientation = rawFrame.qWorldFromLocal,
+    }
+end
+
+local function stateFrom(options)
+    options = options or {}
+
+    local position = options.position or vector.new(0.0, 80.0, 0.0)
+    local velocity = options.velocity or vector.new(0.0, 0.0, 0.0)
+    local angularVelocity = options.angularVelocity or vector.new(0.0, 0.0, 0.0)
+    local bodyFrame = frames.bodyFromAngles(
+        options.roll or 0.0,
+        options.pitch or 0.0,
+        options.heading or 0.0,
+        position
+    )
+
+    return control_state.fromSensors({
+        pose = {
+            seq = 1,
+            time = 0.0,
+            raw = rawPoseFromBodyFrame(position, bodyFrame),
+        },
+        velocity = {
+            seq = 1,
+            time = 0.0,
+            world = velocity,
+        },
+        angularVelocity = {
+            seq = 1,
+            time = 0.0,
+            raw = angularVelocity,
+        },
+    }, {
+        bodyAxis = config.calibration.body_axis,
+    })
+end
+
 local controller = Controller.new(config.control)
 local controllerTarget = common.target("attitude")
 
@@ -27,45 +75,7 @@ controllerTarget.horizontal.angle.pitch = 0.0
 controllerTarget.yaw.angle = 0.0
 
 local control = controller:update({
-    state = {
-        raw = {},
-        world = {
-            position = vector.new(0.0, 80.0, 0.0),
-            velocity = vector.new(0.0, 0.0, 0.0),
-        },
-        body = {
-            frame = frame,
-            pose = {
-                roll = 0.0,
-                pitch = 0.0,
-                heading = 0.0,
-                height = 80.0,
-            },
-            angular = {
-                velocity = {
-                    roll = 0.0,
-                    pitch = 0.0,
-                    yaw = 0.0,
-                },
-            },
-        },
-        navigation = {
-            heading = {
-                angle = 0.0,
-                rate = 0.0,
-            },
-            velocity = {
-                forward = 0.0,
-                right = 0.0,
-                up = 0.0,
-            },
-        },
-        time = {
-            pose = 0.0,
-            velocity = 0.0,
-            angularVelocity = 0.0,
-        },
-    },
+    state = stateFrom(),
     target = controllerTarget,
     dt = config.control.loop.dt,
 })
@@ -131,24 +141,9 @@ assert(lockResult.pending == nil, "lock result should not expose pending state")
 assert(lockResult.source == nil, "lock result should not expose display source")
 assertClose("manual climb commanded rate", lockResult.rate, config.control.vertical.target_rate)
 
-local navState = {
-    world = {
-        position = vector.new(-213, 90, 304),
-        velocity = vector.new(0.0, 0.0, 0.0),
-    },
-    body = {
-        pose = {
-            heading = 0.0,
-            height = 90.0,
-        },
-    },
-    navigation = {
-        heading = {
-            angle = 0.0,
-            rate = 0.0,
-        },
-    },
-}
+local navState = stateFrom({
+    position = vector.new(-213, 90, 304),
+})
 local navMode = navigation.new(config.navigation)
 navMode:enter({
     command = { action = "activate", waypoint = "home" },

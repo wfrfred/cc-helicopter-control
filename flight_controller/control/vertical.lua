@@ -46,12 +46,9 @@ function Vertical:update(state, target, feedforwardInput, dt)
     end
 
     local verticalSpeedResult = self.controllers.speed:update(targetVelocity, state.velocity, dt)
-    local speedFeedforward = mathx.affine(
-        targetVelocity,
-        self.speedFeedforward.gain,
-        self.speedFeedforward.bias
-    )
-    local collectiveOut = verticalSpeedResult.output + speedFeedforward + feedforwardInput.velocity
+    local speedFeedforward = targetVelocity * self.speedFeedforward.gain
+    local downControl = verticalSpeedResult.output + speedFeedforward
+    local collectiveOut = self.speedFeedforward.bias - downControl + feedforwardInput.velocity
     local tiltVerticalFactor = mathx.clamp(
         -state.downAxis.y,
         self.collective.tilt_compensation.min_factor,

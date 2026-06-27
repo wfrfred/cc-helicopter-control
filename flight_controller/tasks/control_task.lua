@@ -4,6 +4,7 @@ local config = require("config")
 local rotor_phase = require("hardware.rotor_phase")
 local telemetryTerms = require("telemetry.terms")
 local input_protocol = require("protocol.input")
+local control_state = require("app.control_state")
 
 local control_task = {}
 
@@ -72,6 +73,18 @@ local function makeRuntime(initialState)
     }
 end
 
+local function readControlState(shared)
+    local samples = shared.sensors
+
+    if not control_state.ready(samples) then
+        return nil
+    end
+
+    return control_state.fromSensors(samples, {
+        bodyAxis = config.calibration.body_axis,
+    })
+end
+
 function control_task.run(shared)
     local runtime = nil
     local lastLoopTime = os.clock() - config.control.loop.dt
@@ -82,7 +95,7 @@ function control_task.run(shared)
         lastLoopTime = loopStart
 
         local input, inputAge, inputStale = readInputOrDefault(shared, loopStart)
-        local state = shared.state
+        local state = readControlState(shared)
 
         if not flight_system.ready(state) then
             runtime = nil

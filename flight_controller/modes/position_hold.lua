@@ -12,15 +12,21 @@ local function horizontalVector(value)
     return vector.new(value.x, 0.0, value.z)
 end
 
+local function heading(state)
+    local forward = state.frames.navigation:basis().forward
+
+    return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
+end
+
 local function buildTerms(self, state)
     local terms = horizontalVector(self.position)
     local height = self.height
-    local headingError = mathx.wrapPi(self.heading - state.navigation.heading.angle)
+    local headingError = mathx.wrapPi(self.heading - heading(state))
 
     terms.height = {
-        target = height.target,
-        rate = height.rate,
-        error = height.error,
+        target = -height.target,
+        rate = -height.rate,
+        error = -height.error,
     }
     terms.heading = {
         target = self.heading,
@@ -40,10 +46,10 @@ local function buildTarget(self, ctx)
     target.horizontal.position.right = position.right
 
     if self.height.locked then
-        target.altitude.position = ctx.state.body.pose.height - self.height.target
+        target.altitude.position = self.height.target - ctx.state.navigation.position.z
     end
 
-    target.altitude.feedforward.position = -self.height.rate
+    target.altitude.feedforward.position = self.height.rate
     target.yaw.angle = self.heading
 
     return target
@@ -52,35 +58,35 @@ end
 function position_hold.new(initialState, control)
     local self = setmetatable({
         heightLock = lock.new({
-            initial = initialState.body.pose.height,
+            initial = initialState.navigation.position.z,
             target_rate = control.vertical.target_rate,
             rate_deadband = control.vertical.lock.speed_deadband,
             relock_timeout = control.vertical.lock.relock_timeout,
         }),
         height = nil,
-        heading = mathx.wrapPi(initialState.navigation.heading.angle),
+        heading = heading(initialState),
         position = horizontalVector(initialState.world.position),
     }, Hold)
 
-    self.height = self.heightLock:locked(initialState.body.pose.height)
+    self.height = self.heightLock:locked(initialState.navigation.position.z)
 
     return self
 end
 
 function Hold:enter(ctx)
     self.position = horizontalVector(ctx.state.world.position)
-    self.heading = mathx.wrapPi(ctx.state.navigation.heading.angle)
+    self.heading = heading(ctx.state)
 
     if ctx.input.manual.velocity.up == 0.0 then
-        self.height = self.heightLock:locked(ctx.state.body.pose.height)
+        self.height = self.heightLock:locked(ctx.state.navigation.position.z)
     end
 end
 
 function Hold:update(ctx)
     self.height = self.heightLock:update({
-        input = ctx.input.manual.velocity.up,
-        value = ctx.state.body.pose.height,
-        rate = ctx.state.world.velocity.y,
+        input = -ctx.input.manual.velocity.up,
+        value = ctx.state.navigation.position.z,
+        rate = ctx.state.navigation.velocity.z,
         dt = ctx.dt,
     })
 

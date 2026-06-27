@@ -31,52 +31,57 @@ local function assertVector(path, value)
     assertFiniteNumber(path .. ".z", value.z)
 end
 
-local function assertAxis(path, value)
-    assertFiniteNumber(path .. ".roll", value.roll)
-    assertFiniteNumber(path .. ".pitch", value.pitch)
-    assertFiniteNumber(path .. ".yaw", value.yaw)
-end
-
 local function assertInitialState(state)
-    assertFiniteNumber("initialState.body.pose.height", state.body.pose.height)
-    assertFiniteNumber("initialState.navigation.heading.angle", state.navigation.heading.angle)
+    assertFiniteNumber("initialState.navigation.position.z", state.navigation.position.z)
     assertVector("initialState.world.position", state.world.position)
 end
 
 local function assertControlState(state)
+    assertFiniteTree("state.frames.world", state.frames.world)
+    assertFiniteTree("state.frames.navigation", state.frames.navigation)
+    assertFiniteTree("state.frames.body", state.frames.body)
     assertVector("state.world.position", state.world.position)
     assertVector("state.world.velocity", state.world.velocity)
-    assertFiniteTree("state.body.frame", state.body.frame)
-    assertFiniteNumber("state.body.pose.height", state.body.pose.height)
-    assertFiniteNumber("state.body.pose.roll", state.body.pose.roll)
-    assertFiniteNumber("state.body.pose.pitch", state.body.pose.pitch)
-    assertFiniteNumber("state.body.pose.heading", state.body.pose.heading)
-    assertAxis("state.body.angular.velocity", state.body.angular.velocity)
-    assertFiniteNumber("state.navigation.heading.angle", state.navigation.heading.angle)
-    assertFiniteNumber("state.navigation.heading.rate", state.navigation.heading.rate)
+    assertFiniteTree("state.world.orientation", state.world.orientation)
+    assertVector("state.world.angularVelocity", state.world.angularVelocity)
+    assertVector("state.navigation.position", state.navigation.position)
+    assertFiniteTree("state.navigation.orientation", state.navigation.orientation)
+    assertVector("state.navigation.velocity", state.navigation.velocity)
+    assertVector("state.navigation.angularVelocity", state.navigation.angularVelocity)
+    assertVector("state.body.position", state.body.position)
+    assertFiniteTree("state.body.orientation", state.body.orientation)
+    assertVector("state.body.velocity", state.body.velocity)
+    assertVector("state.body.angularVelocity", state.body.angularVelocity)
+    assertFiniteNumber("state.sampleTime.pose", state.sampleTime.pose)
+    assertFiniteNumber("state.sampleTime.velocity", state.sampleTime.velocity)
+    assertFiniteNumber("state.sampleTime.angularVelocity", state.sampleTime.angularVelocity)
 end
 
 function flight_system.ready(state)
     return state ~= nil
+        and state.frames ~= nil
+        and state.frames.world ~= nil
+        and state.frames.navigation ~= nil
+        and state.frames.body ~= nil
         and state.world ~= nil
         and state.world.position ~= nil
+        and state.world.orientation ~= nil
         and state.world.velocity ~= nil
+        and state.world.angularVelocity ~= nil
         and state.body ~= nil
-        and state.body.frame ~= nil
-        and state.body.frame.origin ~= nil
-        and state.body.frame.qWorldFromLocal ~= nil
-        and state.body.pose ~= nil
-        and state.body.pose.height ~= nil
-        and state.body.angular ~= nil
-        and state.body.angular.velocity ~= nil
+        and state.body.position ~= nil
+        and state.body.orientation ~= nil
+        and state.body.velocity ~= nil
+        and state.body.angularVelocity ~= nil
         and state.navigation ~= nil
-        and state.navigation.heading ~= nil
-        and state.navigation.heading.angle ~= nil
-        and state.navigation.heading.rate ~= nil
-        and state.time ~= nil
-        and state.time.pose ~= nil
-        and state.time.velocity ~= nil
-        and state.time.angularVelocity ~= nil
+        and state.navigation.position ~= nil
+        and state.navigation.orientation ~= nil
+        and state.navigation.velocity ~= nil
+        and state.navigation.angularVelocity ~= nil
+        and state.sampleTime ~= nil
+        and state.sampleTime.pose ~= nil
+        and state.sampleTime.velocity ~= nil
+        and state.sampleTime.angularVelocity ~= nil
 end
 
 function flight_system.new(initialState, config)

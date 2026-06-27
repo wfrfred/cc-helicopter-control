@@ -29,7 +29,7 @@ local input_protocol = require("protocol.input")
 assert(sublevel, "CC:Sable sublevel API not found")
 
 local shared = {
-    state = nil,
+    sensors = nil,
     input = input_protocol.defaultInput(),
     inputTime = 0.0,
     inputSender = nil,

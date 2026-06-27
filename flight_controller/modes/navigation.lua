@@ -30,11 +30,17 @@ local function configValue(config, name)
     return defaults[name]
 end
 
+local function assertFiniteNumber(name, value)
+    assert(type(value) == "number", name .. " must be number")
+    assert(value == value, name .. " must not be NaN")
+    assert(value ~= math.huge and value ~= -math.huge, name .. " must be finite")
+end
+
 local function assertPosition(value, name)
     assert(type(value) == "table", name .. " must be a position table")
-    assert(type(value.x) == "number", name .. ".x must be number")
-    assert(type(value.y) == "number", name .. ".y must be number")
-    assert(type(value.z) == "number", name .. ".z must be number")
+    assertFiniteNumber(name .. ".x", value.x)
+    assertFiniteNumber(name .. ".y", value.y)
+    assertFiniteNumber(name .. ".z", value.z)
 
     return value
 end

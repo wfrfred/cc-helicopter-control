@@ -1021,6 +1021,45 @@ local function checkNavigationVelocityFrame()
     assertClose("frame vector round-trip z", roundTrip.z, worldVelocity.z)
 end
 
+local function checkFrameVectorTransforms()
+    local headingFrame = frames.level(0.7)
+    local zero = headingFrame:componentsOf(vector.new(0.0, 0.0, 0.0))
+    local worldVector = vector.new(3.0, -4.0, 12.0)
+    local localVector = headingFrame:componentsOf(worldVector)
+    local roundTrip = headingFrame:vector(localVector)
+
+    assertClose("frame zero local x", zero.x, 0.0)
+    assertClose("frame zero local y", zero.y, 0.0)
+    assertClose("frame zero local z", zero.z, 0.0)
+    assertClose("frame preserves vector length", localVector:length(), worldVector:length())
+    assertClose("frame round-trip x", roundTrip.x, worldVector.x)
+    assertClose("frame round-trip y", roundTrip.y, worldVector.y)
+    assertClose("frame round-trip z", roundTrip.z, worldVector.z)
+
+    local quaternionMetatable = getmetatable(quaternion.identity())
+    local vectorMetatable = getmetatable(vector.new())
+    local originalMul = quaternionMetatable.__mul
+
+    quaternionMetatable.__mul = function(left, right)
+        if getmetatable(left) == vectorMetatable or getmetatable(right) == vectorMetatable then
+            error("Frame must not use quaternion-vector multiply")
+        end
+
+        return originalMul(left, right)
+    end
+
+    local ok, err = pcall(function()
+        local guardedFrame = frames.level(0.25)
+        guardedFrame:basis()
+        guardedFrame:componentsOf(vector.new(0.0, 0.0, 0.0))
+        guardedFrame:vector(vector.new(2.0, 0.0, -1.0))
+    end)
+
+    quaternionMetatable.__mul = originalMul
+
+    assert(ok, tostring(err))
+end
+
 local function checkSublevelAngularVelocityFrame()
     local rawAngularVelocity = config.calibration.body_axis.forward * 0.25
         + config.calibration.body_axis.right * -0.50
@@ -2324,6 +2363,7 @@ checkModeUpdateReturnsTargetAndTerms()
 checkNavigationUpdateBuildsConsistentTargetAndTerms()
 checkNavigationHeadingWrap()
 checkNavigationVelocityFrame()
+checkFrameVectorTransforms()
 checkSublevelAngularVelocityFrame()
 checkEulerHeadingRateKinematics()
 checkManualEnterCapturesCurrentPose()

@@ -24,6 +24,12 @@ local function shortest(q)
     return -q
 end
 
+local function rotateVector(q, value)
+    local t = q.v:cross(value) * 2.0
+
+    return value + t * q.a + q.v:cross(t)
+end
+
 function frame.new(origin, qWorldFromLocal)
     return setmetatable({
         origin = origin or vector.new(0.0, 0.0, 0.0),
@@ -43,18 +49,18 @@ function Frame:basis()
     local q = self.qWorldFromLocal
 
     return {
-        forward = q:mul(vector.new(1.0, 0.0, 0.0)),
-        right = q:mul(vector.new(0.0, 1.0, 0.0)),
-        down = q:mul(vector.new(0.0, 0.0, 1.0)),
+        forward = rotateVector(q, vector.new(1.0, 0.0, 0.0)),
+        right = rotateVector(q, vector.new(0.0, 1.0, 0.0)),
+        down = rotateVector(q, vector.new(0.0, 0.0, 1.0)),
     }
 end
 
 function Frame:componentsOf(worldVector)
-    return self.qWorldFromLocal:conjugate():mul(worldVector)
+    return rotateVector(self.qWorldFromLocal:conjugate(), worldVector)
 end
 
 function Frame:vector(localComponents)
-    return self.qWorldFromLocal:mul(localComponents)
+    return rotateVector(self.qWorldFromLocal, localComponents)
 end
 
 function Frame:coordinatesOf(worldPoint)

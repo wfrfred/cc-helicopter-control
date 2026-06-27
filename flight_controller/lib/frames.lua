@@ -88,11 +88,12 @@ end
 
 function frames.bodyFromPose(rawPose, bodyAxis)
     local q = rawPose.orientation:normalize()
+    local rawFrame = frame.fromQuaternion(q, rawPose.position)
 
     return frames.bodyFromBasis({
-        forward = q:mul(bodyAxis.forward),
-        right = q:mul(bodyAxis.right),
-        down = q:mul(bodyAxis.down),
+        forward = rawFrame:vector(bodyAxis.forward),
+        right = rawFrame:vector(bodyAxis.right),
+        down = rawFrame:vector(bodyAxis.down),
     }, rawPose.position)
 end
 

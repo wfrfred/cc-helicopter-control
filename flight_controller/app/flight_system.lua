@@ -80,9 +80,8 @@ function System:update(frame)
     end
 
     return {
-        command = controlResult.output,
-        controlTerms = controlResult.terms,
-        rotor = rotorResult,
+        controlResult = controlResult,
+        rotorResult = rotorResult,
         telemetry = telemetry,
     }
 end

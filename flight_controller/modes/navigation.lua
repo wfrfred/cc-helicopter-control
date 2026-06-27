@@ -479,12 +479,12 @@ local function buildTerms(self, state, phaseTarget)
         }
     else
         terms.height = {
-            target = state and state.body.pose.height or nil,
+            target = state.body.pose.height,
             rate = 0.0,
             error = 0.0,
         }
         terms.heading = {
-            target = state and state.navigation.heading.angle or nil,
+            target = state.navigation.heading.angle,
             rate = 0.0,
             error = 0.0,
         }

@@ -11,9 +11,8 @@ local function horizontalVector(value)
 end
 
 local function buildTerms(self, state)
-    local heightError = state == nil and 0.0 or self.height - state.body.pose.height
-    local headingError = state == nil and 0.0
-        or mathx.wrapPi(self.heading - state.navigation.heading.angle)
+    local heightError = self.height - state.body.pose.height
+    local headingError = mathx.wrapPi(self.heading - state.navigation.heading.angle)
 
     return {
         velocity = horizontalVector(self.velocity),

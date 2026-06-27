@@ -41,7 +41,7 @@ local function updateHorizontal(self, state, target, dt)
         end
 
         local currentVelocity = attitude_math.levelFrdFromWorld(state.world.velocity, target.yaw.angle)
-        local horizontal = self.horizontal:update(
+        local horizontalResult = self.horizontal:update(
             {
                 velocity = {
                     forward = currentVelocity.forward,
@@ -58,10 +58,10 @@ local function updateHorizontal(self, state, target, dt)
             dt
         )
 
-        horizontal.terms = tablex.record.merge({ kind = "position" }, horizontal.terms)
+        horizontalResult.terms = tablex.record.merge({ kind = "position" }, horizontalResult.terms)
         self.horizontalKind = "position"
 
-        return horizontal
+        return horizontalResult
     end
 
     if horizontalTarget.kind == "attitude" then
@@ -103,10 +103,10 @@ local function updateVertical(self, state, target, dt)
     )
 end
 
-local function updateAttitude(self, state, target, horizontal, dt)
+local function updateAttitude(self, state, target, horizontalResult, dt)
     local attitudeFrame = attitude_math.frameFromPose(
-        horizontal.output.roll,
-        horizontal.output.pitch,
+        horizontalResult.output.roll,
+        horizontalResult.output.pitch,
         target.yaw.angle
     )
 
@@ -134,12 +134,12 @@ local function updateAttitude(self, state, target, horizontal, dt)
     )
 end
 
-local function updateAllocation(self, state, vertical, attitude, dt)
+local function updateAllocation(self, state, verticalResult, attitudeResult, dt)
     local rawCommands = {
-        collective = vertical.output.collective,
-        roll = attitude.output.roll,
-        pitch = attitude.output.pitch,
-        yaw = attitude.output.yaw,
+        collective = verticalResult.output.collective,
+        roll = attitudeResult.output.roll,
+        pitch = attitudeResult.output.pitch,
+        yaw = attitudeResult.output.yaw,
     }
 
     return self.allocation:update(
@@ -157,18 +157,18 @@ end
 function Controller:update(input)
     local state = input.state
     local target = input.target
-    local horizontal = updateHorizontal(self, state, target, input.dt)
-    local vertical = updateVertical(self, state, target, input.dt)
-    local attitude = updateAttitude(self, state, target, horizontal, input.dt)
-    local allocation = updateAllocation(self, state, vertical, attitude, input.dt)
+    local horizontalResult = updateHorizontal(self, state, target, input.dt)
+    local verticalResult = updateVertical(self, state, target, input.dt)
+    local attitudeResult = updateAttitude(self, state, target, horizontalResult, input.dt)
+    local allocationResult = updateAllocation(self, state, verticalResult, attitudeResult, input.dt)
 
     return {
-        output = allocation.output,
+        output = allocationResult.output,
         terms = {
-            horizontal = horizontal.terms,
-            vertical = vertical.terms,
-            attitude = attitude.terms,
-            allocation = allocation.terms,
+            horizontal = horizontalResult.terms,
+            vertical = verticalResult.terms,
+            attitude = attitudeResult.terms,
+            allocation = allocationResult.terms,
         },
     }
 end

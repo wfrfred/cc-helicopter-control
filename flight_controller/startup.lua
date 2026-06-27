@@ -24,12 +24,13 @@ local sensor_task = require("tasks.sensor_task")
 local input_task = require("tasks.input_task")
 local control_task = require("tasks.control_task")
 local telemetry_task = require("tasks.telemetry_task")
+local input_protocol = require("protocol.input")
 
 assert(sublevel, "CC:Sable sublevel API not found")
 
 local shared = {
     state = nil,
-    input = input_task.defaultInput(),
+    input = input_protocol.defaultInput(),
     inputTime = 0.0,
     inputSender = nil,
     navigationCommand = nil,

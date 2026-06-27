@@ -95,7 +95,7 @@ function control_task.run(shared)
 
             local navigationCommand = takeNavigationCommand(shared)
             local inputEvent = inputEventSnapshot(input)
-            local result = runtime.flight:update({
+            local flightResult = runtime.flight:update({
                 now = loopStart,
                 dt = dt,
                 input = input,
@@ -111,14 +111,14 @@ function control_task.run(shared)
 
             consumeCruiseToggle(shared, input)
 
-            runtime.actuator:send(result.rotor)
+            runtime.actuator:send(flightResult.rotorResult)
 
-            shared.commands = result.command
-            shared.controlTerms = result.controlTerms
+            shared.commands = flightResult.controlResult.output
+            shared.controlTerms = flightResult.controlResult.terms
 
-            if result.telemetry ~= nil then
+            if flightResult.telemetry ~= nil then
                 shared.telemetryTime = loopStart
-                shared.telemetry = result.telemetry
+                shared.telemetry = flightResult.telemetry
             end
 
             sleepLoop(loopStart)

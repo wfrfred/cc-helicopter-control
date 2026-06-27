@@ -14,8 +14,7 @@ end
 local function buildTerms(self, state)
     local terms = horizontalVector(self.position)
     local height = self.height
-    local headingError = state == nil and 0.0
-        or mathx.wrapPi(self.heading - state.navigation.heading.angle)
+    local headingError = mathx.wrapPi(self.heading - state.navigation.heading.angle)
 
     terms.height = {
         target = height.target,

@@ -55,26 +55,15 @@ local function waypointCatalog(navigationConfig)
     end)
 end
 
-local function modeResult(input)
-    return input.modeResult or input.mode or {}
-end
-
-local function modeTerms(input)
-    return modeResult(input).terms or {}
-end
-
 local function modeView(input)
-    local result = modeResult(input)
-
     return {
-        name = result.name,
-        terms = result.terms,
+        name = input.modeResult.name,
+        terms = input.modeResult.terms,
     }
 end
 
-local function navigationView(input)
-    local result = modeResult(input)
-    local runtime = result.name == "navigation" and modeTerms(input) or {}
+local function navigationView(input, modeTerms)
+    local runtime = input.modeResult.name == "navigation" and modeTerms or {}
 
     return {
         active = runtime.active == true,
@@ -90,8 +79,8 @@ local function navigationView(input)
     }
 end
 
-local function heightView(input)
-    local height = modeTerms(input).height or {}
+local function heightView(input, modeTerms)
+    local height = modeTerms.height or {}
 
     return {
         value = input.state.body.pose.height,
@@ -102,8 +91,8 @@ local function heightView(input)
     }
 end
 
-local function headingView(input)
-    local heading = modeTerms(input).heading or {}
+local function headingView(input, modeTerms)
+    local heading = modeTerms.heading or {}
 
     return {
         angle = input.state.navigation.heading.angle,
@@ -255,9 +244,7 @@ local function controlView(control)
 end
 
 function terms.running(input)
-    local controlTerms = input.controlResult and input.controlResult.terms or input.control
-    local command = input.controlResult and input.controlResult.output or input.command
-    local rotor = input.rotorResult and input.rotorResult.blades or input.rotor
+    local modeTerms = input.modeResult.terms
 
     return {
         status = "running",
@@ -277,13 +264,13 @@ function terms.running(input)
         },
         flight = input.flight,
         mode = modeView(input),
-        height = heightView(input),
-        heading = headingView(input),
+        height = heightView(input, modeTerms),
+        heading = headingView(input, modeTerms),
         state = telemetryState(input.state),
-        control = controlView(controlTerms),
-        navigation = navigationView(input),
-        command = command,
-        rotor = rotor,
+        control = controlView(input.controlResult.terms),
+        navigation = navigationView(input, modeTerms),
+        command = input.controlResult.output,
+        rotor = input.rotorResult.blades,
     }
 end
 

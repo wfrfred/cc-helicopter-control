@@ -4,10 +4,6 @@ local config = require("config")
 
 local input_task = {}
 
-function input_task.defaultInput()
-    return input_protocol.defaultInput()
-end
-
 function input_task.run(shared)
     rednet.open(config.runtime.modem.control)
 

@@ -114,12 +114,12 @@ function State:update(request)
         })
     end
 
-    local result = self.modes[self.name]:update(ctx)
-    result.name = self.name
+    local modeResult = self.modes[self.name]:update(ctx)
+    modeResult.name = self.name
 
     self.previousManualLateral = lateralActive
 
-    return result
+    return modeResult
 end
 
 return mode_state

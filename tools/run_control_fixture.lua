@@ -631,9 +631,9 @@ local function checkFlightSystem()
     }
     local first = system:update(frame)
 
-    assert(type(first.command) == "table", "flight system should return controller command")
-    assert(type(first.controlTerms) == "table", "flight system should return control terms")
-    assert(type(first.rotor.blades) == "table", "flight system should return rotor output")
+    assert(type(first.controlResult.output) == "table", "flight system should return controller result")
+    assert(type(first.controlResult.terms) == "table", "flight system should return control terms")
+    assert(type(first.rotorResult.blades) == "table", "flight system should return rotor result")
     assert(first.telemetry == nil, "flight system should respect telemetry cadence")
 
     frame.now = frame.now + frame.dt

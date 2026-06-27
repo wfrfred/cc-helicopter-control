@@ -907,23 +907,17 @@ local function checkNavigationVelocityFrame()
     assert(math.abs(velocity.right) < 1.0e-9, "navigation right velocity should be heading-aligned")
     assert(math.abs(velocity.up - 2.0) < 1.0e-9, "navigation up velocity should be world y")
 
-    local rawVelocity = config.calibration.body_axis.forward * 3.0
-        + config.calibration.body_axis.right * 4.0
-        + config.calibration.body_axis.down * -2.0
-    local bodyVelocity = sensor_task.bodyVelocityFromRaw(rawVelocity)
     local frame = attitude_math.frameFromPose(0.0, 0.0, math.pi / 2)
-    local worldVelocity = sensor_task.worldVelocityFromBody(frame, bodyVelocity)
+    local worldVelocity = vector.new(3.0, 2.0, 4.0)
+    local bodyVelocity = sensor_task.bodyVelocityFromWorld(worldVelocity, frame)
     local navigationVelocity = sensor_task.navigationVelocity(worldVelocity, math.pi / 2)
 
-    assertClose("raw local velocity forward", bodyVelocity.forward, 3.0)
-    assertClose("raw local velocity right", bodyVelocity.right, 4.0)
-    assertClose("raw local velocity down", bodyVelocity.down, -2.0)
-    assertClose("body velocity world x", worldVelocity.x, 3.0)
-    assertClose("body velocity world y", worldVelocity.y, 2.0)
-    assertClose("body velocity world z", worldVelocity.z, 4.0)
-    assertClose("body velocity navigation forward", navigationVelocity.forward, 3.0)
-    assertClose("body velocity navigation right", navigationVelocity.right, 4.0)
-    assertClose("body velocity navigation up", navigationVelocity.up, 2.0)
+    assertClose("world velocity body forward", bodyVelocity.forward, 3.0)
+    assertClose("world velocity body right", bodyVelocity.right, 4.0)
+    assertClose("world velocity body down", bodyVelocity.down, -2.0)
+    assertClose("world velocity navigation forward", navigationVelocity.forward, 3.0)
+    assertClose("world velocity navigation right", navigationVelocity.right, 4.0)
+    assertClose("world velocity navigation up", navigationVelocity.up, 2.0)
 end
 
 local function checkEulerHeadingRateKinematics()

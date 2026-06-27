@@ -58,18 +58,8 @@ function sensor_task.navigationVelocity(worldVelocity, heading)
     }
 end
 
-function sensor_task.bodyVelocityFromRaw(rawVelocity)
-    return mathx.project(rawVelocity, {
-        forward = bodyAxis.forward,
-        right = bodyAxis.right,
-        down = bodyAxis.down,
-    })
-end
-
-function sensor_task.worldVelocityFromBody(bodyFrame, bodyVelocity)
-    return bodyFrame.forward * (bodyVelocity.forward or 0.0)
-        + bodyFrame.right * (bodyVelocity.right or 0.0)
-        + bodyFrame.down * (bodyVelocity.down or 0.0)
+function sensor_task.bodyVelocityFromWorld(worldVelocity, bodyFrame)
+    return mathx.project(worldVelocity, bodyFrame)
 end
 
 local function makeState()
@@ -114,8 +104,8 @@ end
 
 local function readLinearVelocity(bodyFrame, heading)
     local rawVelocity = sublevel.getLinearVelocity()
-    local bodyVelocity = sensor_task.bodyVelocityFromRaw(rawVelocity)
-    local worldVelocity = sensor_task.worldVelocityFromBody(bodyFrame, bodyVelocity)
+    local worldVelocity = rawVelocity
+    local bodyVelocity = sensor_task.bodyVelocityFromWorld(worldVelocity, bodyFrame)
 
     return {
         raw = {

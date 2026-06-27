@@ -606,6 +606,25 @@ local function checkFlightSystem()
     incomplete.body.angular.velocity = nil
     assert(not flight_system.ready(incomplete), "incomplete state should not initialize flight system")
 
+    local nan = 0.0 / 0.0
+    local noNavigationVelocity = runtimeState()
+    noNavigationVelocity.navigation.velocity = nil
+    assert(flight_system.ready(noNavigationVelocity), "navigation velocity should not gate flight system readiness")
+
+    local ignoredInitialState = runtimeState()
+    ignoredInitialState.navigation.velocity.forward = nan
+    assert(flight_system.new(ignoredInitialState, config), "navigation velocity should not gate flight system initialization")
+
+    local badInitialState = runtimeState()
+    badInitialState.navigation.heading.angle = nan
+
+    local ok, err = pcall(function()
+        flight_system.new(badInitialState, config)
+    end)
+
+    assert(not ok, "flight system should assert on non-finite initial state")
+    assert(string.find(tostring(err), "initialState.navigation.heading.angle", 1, true), "initial state assert should name the bad field")
+
     local state = runtimeState()
     local system = flight_system.new(state, config)
     local input = input_protocol.defaultInput()
@@ -641,6 +660,64 @@ local function checkFlightSystem()
     assert(second.telemetry.status == "running", "flight system should build running telemetry")
     assert(second.telemetry.mode.name == "position_hold", "flight telemetry should include active mode")
     assert(second.telemetry.mode.target == nil, "flight telemetry should not expose mode controller target")
+
+    local badRuntimeSystem = flight_system.new(state, config)
+    local badRuntimeFrame = tablex.record.merge(frame, {
+        state = runtimeState(),
+    })
+    badRuntimeFrame.state.navigation.heading.angle = nan
+
+    ok, err = pcall(function()
+        badRuntimeSystem:update(badRuntimeFrame)
+    end)
+
+    assert(not ok, "flight system should assert on non-finite runtime state")
+    assert(string.find(tostring(err), "state.navigation.heading.angle", 1, true), "runtime state assert should name the bad field")
+
+    local badControlSystem = flight_system.new(state, config)
+    badControlSystem.controller.update = function()
+        return {
+            output = {
+                collective = nan,
+                roll = 0.0,
+                pitch = 0.0,
+                yaw = 0.0,
+            },
+            terms = {},
+        }
+    end
+
+    ok, err = pcall(function()
+        badControlSystem:update(frame)
+    end)
+
+    assert(not ok, "flight system should assert before mixing non-finite controller output")
+    assert(string.find(tostring(err), "controlResult.output.collective", 1, true), "control output assert should name the bad field")
+
+    local badRotorSystem = flight_system.new(state, config)
+    badRotorSystem.mixer.update = function()
+        return {
+            phase = {
+                upper = 0.0,
+                lower = 0.0,
+            },
+            blades = {
+                upper = {
+                    [1] = nan,
+                },
+                lower = {
+                    [1] = 0.0,
+                },
+            },
+        }
+    end
+
+    ok, err = pcall(function()
+        badRotorSystem:update(frame)
+    end)
+
+    assert(not ok, "flight system should assert before exposing non-finite rotor output")
+    assert(string.find(tostring(err), "rotorResult.blades.upper.1", 1, true), "rotor output assert should name the bad field")
 end
 
 local function checkModeUpdateShape()

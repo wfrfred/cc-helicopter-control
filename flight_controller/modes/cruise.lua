@@ -1,4 +1,4 @@
-local common = require("modes.common")
+local controller = require("control.controller")
 local frames = require("lib.frames")
 local mathx = require("lib.mathx")
 
@@ -38,7 +38,7 @@ end
 
 local function buildTarget(self, ctx)
     local feedforward = frames.frdFromVector(frames.level(self.heading):componentsOf(self.velocity))
-    local target = common.target("position")
+    local target = controller.target("position")
 
     target.vertical.position = self.height - ctx.state.navigation.position.z
     target.horizontal.feedforward.position.forward = feedforward.forward

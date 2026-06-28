@@ -4,9 +4,8 @@ env.install()
 local baseline = require("tools.fixtures.control_baseline")
 local flight_system = require("app.flight_system")
 local frames = require("lib.frames")
-local common = require("modes.common")
+local control_controller = require("control.controller")
 local config = require("config")
-local Controller = require("control.controller")
 local input_protocol = require("protocol.input")
 local mode_state = require("app.mode_state")
 local control_state = require("app.control_state")
@@ -347,7 +346,7 @@ end
 local function makeRuntimeMachines(state)
     return {
         mode = mode_state.new(state, config),
-        controller = Controller.new(config.control),
+        controller = control_controller.new(config.control),
     }
 end
 
@@ -387,7 +386,7 @@ local function legacyTarget(target, state)
 end
 
 local function neutralTarget(state)
-    local target = common.target("position")
+    local target = control_controller.target("position")
 
     target.yaw.angle = heading(state)
 
@@ -983,7 +982,7 @@ local function checkNavigationHeadingWrap()
         dt = config.control.loop.dt,
     })
     local target = result.target
-    local controller = Controller.new(config.control)
+    local controller = control_controller.new(config.control)
 
     local control = controller:update({
         state = state,
@@ -2186,9 +2185,9 @@ end
 
 local function checkControllerResetsHorizontalOnPositionEntry()
     local state = runtimeState()
-    local controller = Controller.new(config.control)
+    local controller = control_controller.new(config.control)
     local resetCount = 0
-    local directTarget = common.target("attitude")
+    local directTarget = control_controller.target("attitude")
     local positionTarget = neutralTarget(state)
 
     controller.horizontal.reset = function()
@@ -2220,13 +2219,13 @@ end
 
 local function checkVerticalTiltUsesBodyFrame()
     local state = runtimeState()
-    local controller = Controller.new(config.control)
+    local controller = control_controller.new(config.control)
     setStatePose(state, {
         roll = 0.4,
         pitch = -0.3,
         heading = 0.8,
     })
-    local target = common.target("attitude")
+    local target = control_controller.target("attitude")
     local basis = state.frames.body:basis()
 
     target.horizontal.angle.roll = 0.0
@@ -2249,7 +2248,7 @@ end
 
 local function checkControllerTargetSemantics()
     local state = runtimeState()
-    local controller = Controller.new(config.control)
+    local controller = control_controller.new(config.control)
 
     setStatePose(state, {
         heading = 1.25,
@@ -2297,7 +2296,7 @@ local function checkControllerTargetSemantics()
 
     target = neutralTarget(state)
     target.yaw.angle = math.pi / 2
-    local velocityController = Controller.new(config.control)
+    local velocityController = control_controller.new(config.control)
     local savedVelocity = state.world.velocity
 
     state.world.velocity = vector.new(2.0, 0.0, 0.0)
@@ -2325,7 +2324,7 @@ local function checkControllerTargetSemantics()
 
     assertClose("velocity feedforward adds to roll target", terms.horizontal.output.roll, 0.1)
 
-    target = common.target("attitude")
+    target = control_controller.target("attitude")
     target.horizontal.angle.roll = 0.1
     target.horizontal.angle.pitch = -0.2
     target.yaw.angle = heading(state)

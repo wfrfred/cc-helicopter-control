@@ -1,4 +1,4 @@
-local common = require("modes.common")
+local controller = require("control.controller")
 local lock = require("modes.lock")
 local mathx = require("lib.mathx")
 
@@ -68,7 +68,7 @@ end
 local function buildTarget(self, ctx)
     local height = self.height
     local headingState = self.heading
-    local target = common.target("attitude")
+    local target = controller.target("attitude")
 
     if height.locked then
         target.vertical.position = height.target - ctx.state.navigation.position.z

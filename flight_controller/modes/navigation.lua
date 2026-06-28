@@ -1,4 +1,4 @@
-local common = require("modes.common")
+local controller = require("control.controller")
 local frames = require("lib.frames")
 local mathx = require("lib.mathx")
 local tablex = require("lib.tablex")
@@ -517,7 +517,7 @@ local function buildTarget(ctx, phaseTarget)
     local position = frames.frdFromVector(
         frames.level(phaseTarget.heading):componentsOf(positionError)
     )
-    local target = common.target("position")
+    local target = controller.target("position")
 
     target.horizontal.position.forward = position.forward
     target.horizontal.position.right = position.right

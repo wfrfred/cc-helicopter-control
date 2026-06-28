@@ -2,10 +2,9 @@ local env = require("tools.test_env")
 env.install()
 
 local config = require("config")
-local Controller = require("control.controller")
+local control_controller = require("control.controller")
 local control_state = require("app.control_state")
 local frames = require("lib.frames")
-local common = require("modes.common")
 local horizontal = require("control.horizontal")
 local lock = require("modes.lock")
 local navigation = require("modes.navigation")
@@ -66,8 +65,8 @@ local function stateFrom(options)
     })
 end
 
-local controller = Controller.new(config.control)
-local controllerTarget = common.target("attitude")
+local controller = control_controller.new(config.control)
+local controllerTarget = control_controller.target("attitude")
 
 controllerTarget.vertical.position = 0.0
 controllerTarget.horizontal.angle.roll = 0.0
@@ -98,7 +97,7 @@ assertClose("neutral pitch", command.pitch, -0.33)
 assertClose("neutral yaw", command.yaw, 0.0)
 
 local hold = horizontal.new(config.control)
-local holdTarget = common.target("position").horizontal
+local holdTarget = control_controller.target("position").horizontal
 
 holdTarget.position.forward = 0.0
 holdTarget.position.right = 0.0

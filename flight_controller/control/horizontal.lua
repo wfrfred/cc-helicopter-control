@@ -8,6 +8,20 @@ local horizontal = {}
 local Horizontal = {}
 Horizontal.__index = Horizontal
 
+---@class HorizontalControllerState
+---@field velocity { forward: number, right: number }
+
+---@class HorizontalControllerTarget
+---@field position { forward: number|nil, right: number|nil }
+
+---@class HorizontalControllerFeedforward
+---@field position { forward: number, right: number }
+---@field velocity { forward: number, right: number }
+
+---@class HorizontalControllerResult
+---@field output { roll: number, pitch: number }
+---@field terms table
+
 ---@param control table
 ---@return ControlHorizontalController
 function horizontal.new(control)
@@ -37,11 +51,11 @@ function Horizontal:reset()
 end
 
 --- Updates heading-level horizontal position/velocity control.
----@param state { velocity: { forward: number, right: number } }
----@param target { position: { forward: number|nil, right: number|nil } }
----@param feedforwardInput { position: { forward: number, right: number }, velocity: { forward: number, right: number } }
+---@param state HorizontalControllerState
+---@param target HorizontalControllerTarget
+---@param feedforwardInput HorizontalControllerFeedforward
 ---@param dt number
----@return { output: { roll: number, pitch: number }, terms: table }
+---@return HorizontalControllerResult
 function Horizontal:update(state, target, feedforwardInput, dt)
     local currentVelocity = state.velocity
     local targetVelocity = tablex.record.copy(feedforwardInput.position)

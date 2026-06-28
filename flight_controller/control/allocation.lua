@@ -7,6 +7,16 @@ local allocation = {}
 local Allocation = {}
 Allocation.__index = Allocation
 
+---@class AllocationControllerState
+---@field pose { roll: number, pitch: number, heading: number }
+
+---@class AllocationControllerTarget
+---@field commands { collective: number, roll: number, pitch: number, yaw: number }
+
+---@class AllocationControllerResult
+---@field output { collective: number, roll: number, pitch: number, yaw: number }
+---@field terms table
+
 local AXIS_INDEX = {
     roll = 1,
     pitch = 2,
@@ -93,11 +103,11 @@ end
 function Allocation:reset() end
 
 --- Applies attitude allocation and final output limits.
----@param state { pose: { roll: number, pitch: number, heading: number } }
----@param target { commands: { collective: number, roll: number, pitch: number, yaw: number } }
+---@param state AllocationControllerState
+---@param target AllocationControllerTarget
 ---@param _feedforwardInput table
 ---@param _dt number
----@return { output: { collective: number, roll: number, pitch: number, yaw: number }, terms: table }
+---@return AllocationControllerResult
 function Allocation:update(state, target, _feedforwardInput, _dt)
     local rawCommands = target.commands
     local allocated = tablex.record.pick(rawCommands, COMMAND_KEYS)

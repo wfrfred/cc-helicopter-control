@@ -8,6 +8,22 @@ local vertical = {}
 local Vertical = {}
 Vertical.__index = Vertical
 
+---@class VerticalControllerState
+---@field position number
+---@field velocity number
+---@field downAxis table
+
+---@class VerticalControllerTarget
+---@field position number|nil
+
+---@class VerticalControllerFeedforward
+---@field position number
+---@field velocity number
+
+---@class VerticalControllerResult
+---@field output { collective: number }
+---@field terms table
+
 ---@param control table
 ---@return ControlVerticalController
 function vertical.new(control)
@@ -30,11 +46,11 @@ function Vertical:reset()
 end
 
 --- Updates down-axis vertical position/velocity control.
----@param state { position: number, velocity: number, downAxis: table }
----@param target { position: number|nil }
----@param feedforwardInput { position: number, velocity: number }
+---@param state VerticalControllerState
+---@param target VerticalControllerTarget
+---@param feedforwardInput VerticalControllerFeedforward
 ---@param dt number
----@return { output: { collective: number }, terms: table }
+---@return VerticalControllerResult
 function Vertical:update(state, target, feedforwardInput, dt)
     local targetVelocity = feedforwardInput.position
     local positionResult = nil

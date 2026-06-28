@@ -9,6 +9,21 @@ local attitude = {}
 local Attitude = {}
 Attitude.__index = Attitude
 
+---@class AttitudeControllerState
+---@field orientation table
+---@field angularVelocity { roll: number, pitch: number, yaw: number }
+
+---@class AttitudeControllerTarget
+---@field orientation table
+
+---@class AttitudeControllerFeedforward
+---@field angle { roll: number, pitch: number, yaw: number }
+---@field rate { roll: number, pitch: number, yaw: number }
+
+---@class AttitudeControllerResult
+---@field output { roll: number, pitch: number, yaw: number }
+---@field terms table
+
 ---@param control table
 ---@return ControlAttitudeController
 function attitude.new(control)
@@ -41,11 +56,11 @@ function Attitude:reset()
 end
 
 --- Updates body attitude and angular-rate control.
----@param state { orientation: table, angularVelocity: { roll: number, pitch: number, yaw: number } }
----@param target { orientation: table }
----@param feedforwardInput { angle: { roll: number, pitch: number, yaw: number }, rate: { roll: number, pitch: number, yaw: number } }
+---@param state AttitudeControllerState
+---@param target AttitudeControllerTarget
+---@param feedforwardInput AttitudeControllerFeedforward
 ---@param dt number
----@return { output: { roll: number, pitch: number, yaw: number }, terms: table }
+---@return AttitudeControllerResult
 function Attitude:update(state, target, feedforwardInput, dt)
     local rates = state.angularVelocity
     local angleFeedforward = feedforwardInput.angle

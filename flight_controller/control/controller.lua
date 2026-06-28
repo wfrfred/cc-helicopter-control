@@ -18,6 +18,15 @@ local controller = {}
 local Controller = {}
 Controller.__index = Controller
 
+---@class ControlControllerInput
+---@field state table State returned by `app.control_state.fromSensors()`.
+---@field target ControlTarget
+---@field dt number
+
+---@class ControlControllerResult
+---@field output { collective: number, roll: number, pitch: number, yaw: number }
+---@field terms { horizontal: table, vertical: table, attitude: table, allocation: table }
+
 -- Target contract -----------------------------------------------------------
 
 ---@class ControlTarget
@@ -306,11 +315,8 @@ local function updateAllocation(self, state, verticalResult, attitudeResult, dt)
 end
 
 --- Updates the controller for one control tick.
----
---- `input.state` is the state returned by `app.control_state.fromSensors()`;
---- `input.target` is the controller target returned by `controller.target()`.
----@param input { state: table, target: ControlTarget, dt: number }
----@return { output: { collective: number, roll: number, pitch: number, yaw: number }, terms: { horizontal: table, vertical: table, attitude: table, allocation: table } }
+---@param input ControlControllerInput
+---@return ControlControllerResult
 function Controller:update(input)
     local state = input.state
     local target = input.target

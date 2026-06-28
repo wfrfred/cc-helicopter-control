@@ -4,6 +4,14 @@ local mathx = require("lib.mathx")
 
 local manual = {}
 
+---@class ManualMode
+---@field control table
+---@field heightLock table
+---@field headingLock table
+---@field height table
+---@field heading table
+---@field roll number
+---@field pitch number
 local Manual = {}
 Manual.__index = Manual
 
@@ -39,12 +47,16 @@ local function bodyAttitude(state)
     }
 end
 
+---@param input table
+---@return boolean
 function manual.active(input)
     return input.manual.attitude.roll ~= 0.0
         or input.manual.attitude.pitch ~= 0.0
         or input.manual.heading.rate ~= 0.0
 end
 
+---@param self ManualMode
+---@return table
 local function buildTerms(self)
     local height = self.height
     local heading = self.heading
@@ -65,6 +77,9 @@ local function buildTerms(self)
     }
 end
 
+---@param self ManualMode
+---@param ctx ModeContext
+---@return ControlTarget
 local function buildTarget(self, ctx)
     local height = self.height
     local headingState = self.heading
@@ -92,6 +107,9 @@ local function buildTarget(self, ctx)
     return target
 end
 
+---@param initialState ControlState
+---@param control table
+---@return ManualMode
 function manual.new(initialState, control)
     local self = setmetatable({
         control = control,
@@ -123,6 +141,7 @@ function manual.new(initialState, control)
     return self
 end
 
+---@param ctx ModeContext
 function Manual:enter(ctx)
     local control = self.control
     local attitude = bodyAttitude(ctx.state)
@@ -148,6 +167,8 @@ function Manual:enter(ctx)
     end
 end
 
+---@param ctx ModeContext
+---@return ModeResult
 function Manual:update(ctx)
     local input = ctx.input
 

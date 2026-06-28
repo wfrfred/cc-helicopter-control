@@ -5,6 +5,11 @@ local mathx = require("lib.mathx")
 
 local position_hold = {}
 
+---@class PositionHoldMode
+---@field heightLock table
+---@field height table
+---@field heading number
+---@field position vector
 local Hold = {}
 Hold.__index = Hold
 
@@ -18,6 +23,9 @@ local function heading(state)
     return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
 end
 
+---@param self PositionHoldMode
+---@param state ControlState
+---@return table
 local function buildTerms(self, state)
     local terms = horizontalVector(self.position)
     local height = self.height
@@ -37,6 +45,9 @@ local function buildTerms(self, state)
     return terms
 end
 
+---@param self PositionHoldMode
+---@param ctx ModeContext
+---@return ControlTarget
 local function buildTarget(self, ctx)
     local positionError = self.position - horizontalVector(ctx.state.world.position)
     local position = frames.frdFromVector(frames.level(self.heading):componentsOf(positionError))
@@ -55,6 +66,9 @@ local function buildTarget(self, ctx)
     return target
 end
 
+---@param initialState ControlState
+---@param control table
+---@return PositionHoldMode
 function position_hold.new(initialState, control)
     local self = setmetatable({
         heightLock = lock.new({
@@ -73,6 +87,7 @@ function position_hold.new(initialState, control)
     return self
 end
 
+---@param ctx ModeContext
 function Hold:enter(ctx)
     self.position = horizontalVector(ctx.state.world.position)
     self.heading = heading(ctx.state)
@@ -82,6 +97,8 @@ function Hold:enter(ctx)
     end
 end
 
+---@param ctx ModeContext
+---@return ModeResult
 function Hold:update(ctx)
     self.height = self.heightLock:update({
         input = -ctx.input.manual.velocity.up,

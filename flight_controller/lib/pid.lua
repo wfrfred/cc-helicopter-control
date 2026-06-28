@@ -2,9 +2,46 @@ local mathx = require("lib.mathx")
 
 local pid = {}
 
+---@class PidConfig
+---@field kp number|nil
+---@field ki number|nil
+---@field kd number|nil
+---@field i_min number|nil
+---@field i_max number|nil
+---@field out_min number|nil
+---@field out_max number|nil
+---@field deadband number|nil
+
+---@class PidTerms
+---@field error number
+---@field derivative number
+---@field integral number
+---@field p number
+---@field i number
+---@field d number
+---@field raw number
+
+---@class PidResult
+---@field output number
+---@field terms PidTerms
+
+---@class PidController
+---@field kp number
+---@field ki number
+---@field kd number
+---@field i_min number|nil
+---@field i_max number|nil
+---@field out_min number|nil
+---@field out_max number|nil
+---@field deadband number
+---@field integral number
+---@field last_error number|nil
+---@field last_current number|nil
 local Controller = {}
 Controller.__index = Controller
 
+---@param config PidConfig
+---@return PidController
 function pid.new(config)
     local self = {
         kp = config.kp or 0.0,
@@ -33,6 +70,11 @@ function Controller:reset()
     self.last_current = nil
 end
 
+---@param target number
+---@param current number
+---@param dt number
+---@param derivative number|nil
+---@return PidResult
 function Controller:update(target, current, dt, derivative)
     assert(dt > 0, "pid dt must be positive")
     assert(target ~= nil, "pid target must be set")

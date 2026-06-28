@@ -4,6 +4,10 @@ local mathx = require("lib.mathx")
 
 local cruise = {}
 
+---@class CruiseMode
+---@field velocity vector|nil
+---@field height number|nil
+---@field heading number|nil
 local Cruise = {}
 Cruise.__index = Cruise
 
@@ -17,6 +21,9 @@ local function heading(state)
     return mathx.wrapPi(mathx.atan2(forward.x, -forward.z))
 end
 
+---@param self CruiseMode
+---@param state ControlState
+---@return table
 local function buildTerms(self, state)
     local heightError = -(self.height - state.navigation.position.z)
     local headingError = mathx.wrapPi(self.heading - heading(state))
@@ -36,6 +43,9 @@ local function buildTerms(self, state)
     }
 end
 
+---@param self CruiseMode
+---@param ctx ModeContext
+---@return ControlTarget
 local function buildTarget(self, ctx)
     local feedforward = frames.frdFromVector(frames.level(self.heading):componentsOf(self.velocity))
     local target = controller.target("position")
@@ -48,6 +58,7 @@ local function buildTarget(self, ctx)
     return target
 end
 
+---@return CruiseMode
 function cruise.new()
     return setmetatable({
         velocity = nil,
@@ -56,12 +67,15 @@ function cruise.new()
     }, Cruise)
 end
 
+---@param ctx ModeContext
 function Cruise:enter(ctx)
     self.velocity = horizontalVector(ctx.state.world.velocity)
     self.height = ctx.state.navigation.position.z
     self.heading = heading(ctx.state)
 end
 
+---@param ctx ModeContext
+---@return ModeResult
 function Cruise:update(ctx)
     return {
         target = buildTarget(self, ctx),

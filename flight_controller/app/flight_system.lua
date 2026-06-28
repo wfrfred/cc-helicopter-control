@@ -6,6 +6,30 @@ local telemetryTerms = require("telemetry.terms")
 
 local flight_system = {}
 
+---@class FlightSystemFrame
+---@field now number
+---@field dt number
+---@field input table
+---@field inputEvent table
+---@field inputAge number
+---@field inputStale boolean
+---@field inputSender string|nil
+---@field state ControlState
+---@field navigationCommand table|nil
+---@field navigationConfig table
+---@field rotorPhase table
+
+---@class FlightSystemResult
+---@field controlResult ControlControllerResult
+---@field rotorResult table
+---@field telemetry table|nil
+
+---@class FlightSystem
+---@field mode FlightModeState
+---@field controller ControlController
+---@field mixer table
+---@field telemetryDt number
+---@field telemetryTimer number
 local System = {}
 System.__index = System
 
@@ -57,6 +81,8 @@ local function assertControlState(state)
     assertFiniteNumber("state.sampleTime.angularVelocity", state.sampleTime.angularVelocity)
 end
 
+---@param state ControlState|nil
+---@return boolean
 function flight_system.ready(state)
     return state ~= nil
         and state.frames ~= nil
@@ -84,6 +110,9 @@ function flight_system.ready(state)
         and state.sampleTime.angularVelocity ~= nil
 end
 
+---@param initialState ControlState
+---@param config table
+---@return FlightSystem
 function flight_system.new(initialState, config)
     assertInitialState(initialState)
 
@@ -96,6 +125,8 @@ function flight_system.new(initialState, config)
     }, System)
 end
 
+---@param frame FlightSystemFrame
+---@return FlightSystemResult
 function System:update(frame)
     assertControlState(frame.state)
     assertFiniteTree("rotorPhase", frame.rotorPhase)

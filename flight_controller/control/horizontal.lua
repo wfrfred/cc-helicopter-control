@@ -5,6 +5,9 @@ local tablex = require("lib.tablex")
 local horizontal = {}
 
 ---@class ControlHorizontalController
+---@field control table
+---@field controllers { forward: { position: PidController, velocity: PidController }, right: { position: PidController, velocity: PidController } }
+---@field velocityFeedforward { forward: table, right: table }
 local Horizontal = {}
 Horizontal.__index = Horizontal
 

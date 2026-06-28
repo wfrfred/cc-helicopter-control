@@ -3,7 +3,21 @@ local tablex = require("lib.tablex")
 
 local allocation = {}
 
+---@class AllocationTransformTerm
+---@field row integer
+---@field col integer
+---@field axis "roll"|"pitch"
+---@field gain number
+---@field limit number
+
+---@class AllocationTransform
+---@field enabled boolean
+---@field baseMatrix table|nil
+---@field terms AllocationTransformTerm[]|nil
+
 ---@class ControlAllocationController
+---@field attitudeTransform AllocationTransform
+---@field outputLimits table
 local Allocation = {}
 Allocation.__index = Allocation
 
@@ -11,10 +25,10 @@ Allocation.__index = Allocation
 ---@field pose { roll: number, pitch: number, heading: number }
 
 ---@class AllocationControllerTarget
----@field commands { collective: number, roll: number, pitch: number, yaw: number }
+---@field commands ControlCommands
 
 ---@class AllocationControllerResult
----@field output { collective: number, roll: number, pitch: number, yaw: number }
+---@field output ControlCommands
 ---@field terms table
 
 local AXIS_INDEX = {
@@ -30,6 +44,9 @@ local COMMAND_KEYS = {
     "yaw",
 }
 
+---@param transform AllocationTransform
+---@param pose { roll: number, pitch: number, heading: number }
+---@return table
 local function scheduledMatrix(transform, pose)
     if #transform.terms == 0 then
         return transform.baseMatrix

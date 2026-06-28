@@ -15,16 +15,27 @@ local vertical_control = require("control.vertical")
 local controller = {}
 
 ---@class ControlController
+---@field horizontal ControlHorizontalController
+---@field vertical ControlVerticalController
+---@field attitude ControlAttitudeController
+---@field allocation ControlAllocationController
+---@field horizontalKind "position"|"attitude"|nil
 local Controller = {}
 Controller.__index = Controller
 
+---@class ControlCommands
+---@field collective number
+---@field roll number
+---@field pitch number
+---@field yaw number
+
 ---@class ControlControllerInput
----@field state table State returned by `app.control_state.fromSensors()`.
+---@field state ControlState
 ---@field target ControlTarget
 ---@field dt number
 
 ---@class ControlControllerResult
----@field output { collective: number, roll: number, pitch: number, yaw: number }
+---@field output ControlCommands
 ---@field terms { horizontal: table, vertical: table, attitude: table, allocation: table }
 
 -- Target contract -----------------------------------------------------------
@@ -160,6 +171,8 @@ local function axisFromVector(value)
     }
 end
 
+---@param state ControlState
+---@return { roll: number, pitch: number, heading: number }
 local function bodyAttitude(state)
     local basis = state.frames.body:basis()
     local forwardHorizontal = vector.new(basis.forward.x, 0.0, basis.forward.z)
@@ -196,6 +209,11 @@ function Controller:reset()
     self.horizontalKind = nil
 end
 
+---@param self ControlController
+---@param state ControlState
+---@param target ControlTarget
+---@param dt number
+---@return HorizontalControllerResult|{ output: { roll: number, pitch: number }, terms: table }
 local function updateHorizontal(self, state, target, dt)
     local horizontalTarget = target.horizontal
 
@@ -245,6 +263,11 @@ local function updateHorizontal(self, state, target, dt)
     error("unknown horizontal target kind: " .. tostring(horizontalTarget.kind))
 end
 
+---@param self ControlController
+---@param state ControlState
+---@param target ControlTarget
+---@param dt number
+---@return VerticalControllerResult
 local function updateVertical(self, state, target, dt)
     return self.vertical:update(
         {
@@ -263,6 +286,12 @@ local function updateVertical(self, state, target, dt)
     )
 end
 
+---@param self ControlController
+---@param state ControlState
+---@param target ControlTarget
+---@param horizontalResult { output: { roll: number, pitch: number } }
+---@param dt number
+---@return AttitudeControllerResult
 local function updateAttitude(self, state, target, horizontalResult, dt)
     local attitudeFrame = frames.bodyFromAngles(
         horizontalResult.output.roll,
@@ -294,6 +323,12 @@ local function updateAttitude(self, state, target, horizontalResult, dt)
     )
 end
 
+---@param self ControlController
+---@param state ControlState
+---@param verticalResult VerticalControllerResult
+---@param attitudeResult AttitudeControllerResult
+---@param dt number
+---@return AllocationControllerResult
 local function updateAllocation(self, state, verticalResult, attitudeResult, dt)
     local rawCommands = {
         collective = verticalResult.output.collective,

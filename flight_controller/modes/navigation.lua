@@ -5,6 +5,51 @@ local tablex = require("lib.tablex")
 
 local navigation = {}
 
+---@class NavigationWaypoint
+---@field id string
+---@field name string|nil
+---@field position vector
+---@field approaches NavigationApproach[]|nil
+---@field hold table|nil
+---@field cruiseAltitude number|nil
+---@field waypointRadius number|nil
+---@field arrivalRadius number|nil
+
+---@class NavigationApproach
+---@field id string
+---@field name string|nil
+---@field enabled boolean|nil
+---@field path vector[]|nil
+---@field entry vector|nil
+---@field heading number|nil
+---@field distance number|nil
+---@field altitude number|nil
+---@field finalAltitude number|nil
+---@field cruiseAltitude number|nil
+
+---@class NavigationLeg
+---@field kind string
+---@field position vector
+---@field heading number|nil
+---@field radius number
+
+---@class NavigationRoute
+---@field waypoint NavigationWaypoint
+---@field approach NavigationApproach|nil
+---@field legs NavigationLeg[]
+---@field legIndex integer
+---@field phase string
+---@field holdPosition vector
+---@field destination vector
+---@field cruiseAltitude number
+---@field arrivalHeading number
+
+---@class NavigationMode
+---@field config table
+---@field waypoints NavigationWaypoint[]
+---@field selected NavigationWaypoint|nil
+---@field route NavigationRoute|nil
+---@field inactiveReason string|nil
 local Navigation = {}
 Navigation.__index = Navigation
 
@@ -527,6 +572,8 @@ local function buildTarget(ctx, phaseTarget)
     return target
 end
 
+---@param config table|nil
+---@return NavigationMode
 function navigation.new(config)
     config = config or {}
 
@@ -539,6 +586,7 @@ function navigation.new(config)
     }, Navigation)
 end
 
+---@param ctx ModeEnterContext
 function Navigation:enter(ctx)
     local command = ctx.command
 
@@ -549,6 +597,8 @@ function Navigation:enter(ctx)
     applyCommand(self, command, ctx.state)
 end
 
+---@param ctx ModeContext
+---@return ModeResult
 function Navigation:update(ctx)
     assert(self.route ~= nil, "navigation target requires active route")
 
@@ -568,6 +618,7 @@ function Navigation:update(ctx)
     }
 end
 
+---@param ctx ModeContext
 function Navigation:exit(ctx)
     if self.route ~= nil then
         cancelRoute(self)

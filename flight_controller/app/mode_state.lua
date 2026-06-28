@@ -27,6 +27,34 @@ local tablex = require("lib.tablex")
 
 local mode_state = {}
 
+---@class ModeContext
+---@field input table
+---@field state ControlState
+---@field dt number
+
+---@class ModeEnterContext: ModeContext
+---@field command table|nil
+
+---@class ModeResult
+---@field name string|nil
+---@field target ControlTarget
+---@field terms table
+
+---@class ModeController
+---@field enter fun(self: ModeController, ctx: ModeEnterContext|ModeContext)
+---@field update fun(self: ModeController, ctx: ModeContext): ModeResult
+---@field exit fun(self: ModeController, ctx: ModeContext)
+
+---@class ModeStateRequest
+---@field input table
+---@field state ControlState
+---@field navigationCommand table|nil
+---@field dt number
+
+---@class FlightModeState
+---@field name "manual"|"position_hold"|"cruise"|"navigation"
+---@field modes { manual: ModeController, position_hold: ModeController, cruise: ModeController, navigation: ModeController }
+---@field previousManualLateral boolean
 local State = {}
 State.__index = State
 
@@ -37,6 +65,9 @@ local modes = {
     navigation = "navigation",
 }
 
+---@param initialState ControlState
+---@param config table
+---@return FlightModeState
 function mode_state.new(initialState, config)
     return setmetatable({
         name = modes.position_hold,
@@ -50,10 +81,14 @@ function mode_state.new(initialState, config)
     }, State)
 end
 
+---@param input table
+---@return boolean
 local function manualOverrideActive(input)
     return manual_mode.active(input) or input.manual.velocity.up ~= 0.0
 end
 
+---@param request ModeStateRequest
+---@return ModeResult
 function State:update(request)
     local command = request.navigationCommand
     local manualInput = request.input

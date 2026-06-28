@@ -8,6 +8,8 @@ local control_state = require("app.control_state")
 
 local control_task = {}
 
+---@param dt number
+---@return number
 local function clampDt(dt)
     if dt <= 0 then
         return config.control.loop.dt
@@ -16,6 +18,9 @@ local function clampDt(dt)
     return math.min(dt, config.control.loop.max_dt)
 end
 
+---@param shared table
+---@param now number
+---@return table, number, boolean
 local function readInputOrDefault(shared, now)
     local inputAge = now - shared.inputTime
 
@@ -26,6 +31,8 @@ local function readInputOrDefault(shared, now)
     return shared.input, inputAge, false
 end
 
+---@param shared table
+---@return table|nil
 local function takeNavigationCommand(shared)
     local command = shared.navigationCommand
     shared.navigationCommand = nil
@@ -33,12 +40,16 @@ local function takeNavigationCommand(shared)
     return command
 end
 
+---@param shared table
+---@param input table
 local function consumeCruiseToggle(shared, input)
     if shared.input == input then
         shared.input.event.cruiseToggle = false
     end
 end
 
+---@param input table
+---@return table
 local function inputEventSnapshot(input)
     return {
         cruiseToggle = input.event.cruiseToggle,
@@ -46,6 +57,7 @@ local function inputEventSnapshot(input)
     }
 end
 
+---@param loopStart number
 local function sleepLoop(loopStart)
     local elapsed = os.clock() - loopStart
     local remain = config.control.loop.dt - elapsed
@@ -57,6 +69,9 @@ local function sleepLoop(loopStart)
     end
 end
 
+---@param shared table
+---@param state ControlState|nil
+---@param now number
 local function publishWaiting(shared, state, now)
     shared.telemetryTime = now
     shared.telemetry = telemetryTerms.waiting({
@@ -65,6 +80,8 @@ local function publishWaiting(shared, state, now)
     })
 end
 
+---@param initialState ControlState
+---@return { flight: FlightSystem, phase: table, actuator: table }
 local function makeRuntime(initialState)
     return {
         flight = flight_system.new(initialState, config),
@@ -73,6 +90,8 @@ local function makeRuntime(initialState)
     }
 end
 
+---@param shared table
+---@return ControlState|nil
 local function readControlState(shared)
     local samples = shared.sensors
 
@@ -85,6 +104,7 @@ local function readControlState(shared)
     })
 end
 
+---@param shared table
 function control_task.run(shared)
     local runtime = nil
     local lastLoopTime = os.clock() - config.control.loop.dt
@@ -102,6 +122,7 @@ function control_task.run(shared)
             publishWaiting(shared, state, loopStart)
             sleep(0.1)
         else
+            ---@cast state ControlState
             if runtime == nil then
                 runtime = makeRuntime(state)
             end

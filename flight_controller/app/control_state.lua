@@ -2,6 +2,55 @@ local frames = require("lib.frames")
 
 local control_state = {}
 
+---@class PoseSample
+---@field seq integer
+---@field time number
+---@field raw RawPose
+
+---@class VelocitySample
+---@field seq integer
+---@field time number
+---@field world vector
+
+---@class AngularVelocitySample
+---@field seq integer
+---@field time number
+---@field raw vector Body-local raw angular velocity from SableCC.
+
+---@class SensorSamples
+---@field pose PoseSample
+---@field velocity VelocitySample
+---@field angularVelocity AngularVelocitySample
+
+---@class ControlPhysical
+---@field position vector
+---@field orientation quaternion
+---@field velocity vector
+---@field angularVelocity vector
+
+---@class ControlStateFrames
+---@field world Frame
+---@field navigation Frame Heading-level FRD frame at the body origin.
+---@field body Frame Body FRD frame at the raw pose origin.
+
+---@class ControlSampleTime
+---@field pose number
+---@field velocity number
+---@field angularVelocity number
+
+---@class ControlState
+---@field frames ControlStateFrames
+---@field world ControlPhysical
+---@field navigation ControlPhysical
+---@field body ControlPhysical
+---@field sampleTime ControlSampleTime
+
+---@class ControlStateOptions
+---@field bodyAxis BodyAxis
+
+---@param worldPhysical ControlPhysical
+---@param targetFrame Frame
+---@return ControlPhysical
 local function express(worldPhysical, targetFrame)
     return {
         position = targetFrame:coordinatesOf(worldPhysical.position),
@@ -11,6 +60,8 @@ local function express(worldPhysical, targetFrame)
     }
 end
 
+---@param samples SensorSamples|nil
+---@return boolean
 function control_state.ready(samples)
     return samples ~= nil
         and samples.pose ~= nil
@@ -26,6 +77,9 @@ function control_state.ready(samples)
         and samples.angularVelocity.time ~= nil
 end
 
+---@param samples SensorSamples
+---@param options ControlStateOptions
+---@return ControlState
 function control_state.fromSensors(samples, options)
     options = options or {}
     assert(options.bodyAxis ~= nil, "control_state.fromSensors requires bodyAxis")

@@ -7,6 +7,7 @@ local sensor_task = {}
 --- Sensor task publishes samples only; controller state is assembled at the
 --- control tick boundary.
 
+---@return { pose: PoseSample|nil, velocity: VelocitySample|nil, angularVelocity: AngularVelocitySample|nil }
 local function makeSensors()
     return {
         pose = nil,
@@ -15,6 +16,8 @@ local function makeSensors()
     }
 end
 
+---@param seq integer
+---@return PoseSample
 local function readPose(seq)
     return {
         seq = seq,
@@ -23,6 +26,8 @@ local function readPose(seq)
     }
 end
 
+---@param seq integer
+---@return VelocitySample
 local function readLinearVelocity(seq)
     return {
         seq = seq,
@@ -31,6 +36,8 @@ local function readLinearVelocity(seq)
     }
 end
 
+---@param seq integer
+---@return AngularVelocitySample
 local function readAngularVelocity(seq)
     return {
         seq = seq,
@@ -39,6 +46,7 @@ local function readAngularVelocity(seq)
     }
 end
 
+---@param shared table
 function sensor_task.run(shared)
     shared.sensors = makeSensors()
 

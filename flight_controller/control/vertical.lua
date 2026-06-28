@@ -5,13 +5,16 @@ local tablex = require("lib.tablex")
 local vertical = {}
 
 ---@class ControlVerticalController
+---@field collective table
+---@field controllers { height: PidController, speed: PidController }
+---@field speedFeedforward table
 local Vertical = {}
 Vertical.__index = Vertical
 
 ---@class VerticalControllerState
 ---@field position number
 ---@field velocity number
----@field downAxis table
+---@field downAxis vector
 
 ---@class VerticalControllerTarget
 ---@field position number|nil

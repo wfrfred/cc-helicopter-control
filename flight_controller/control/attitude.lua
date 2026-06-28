@@ -6,15 +6,17 @@ local tablex = require("lib.tablex")
 local attitude = {}
 
 ---@class ControlAttitudeController
+---@field controllers { roll: { angle: PidController, rate: PidController }, pitch: { angle: PidController, rate: PidController }, yaw: { angle: PidController, rate: PidController } }
+---@field rateFeedforward { roll: table, pitch: table, yaw: table }
 local Attitude = {}
 Attitude.__index = Attitude
 
 ---@class AttitudeControllerState
----@field orientation table
+---@field orientation quaternion
 ---@field angularVelocity { roll: number, pitch: number, yaw: number }
 
 ---@class AttitudeControllerTarget
----@field orientation table
+---@field orientation quaternion
 
 ---@class AttitudeControllerFeedforward
 ---@field angle { roll: number, pitch: number, yaw: number }

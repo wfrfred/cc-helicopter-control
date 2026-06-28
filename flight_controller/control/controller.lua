@@ -20,57 +20,23 @@ Controller.__index = Controller
 -- Target contract -----------------------------------------------------------
 
 ---@class ControlTarget
----@field horizontal ControlHorizontalPositionTarget|ControlHorizontalAttitudeTarget
+---@field horizontal ControlHorizontalTarget
 ---@field vertical ControlVerticalTarget
 ---@field yaw ControlYawTarget
 
----@class ControlHorizontalPositionTarget
----@field kind "position"
----@field position ControlHorizontalPosition
----@field feedforward ControlHorizontalFeedforward
-
----@class ControlHorizontalAttitudeTarget
----@field kind "attitude"
----@field angle ControlRollPitch
----@field feedforward ControlHorizontalAttitudeFeedforward
-
----@class ControlHorizontalPosition
----@field forward number|nil
----@field right number|nil
-
----@class ControlHorizontalFeedforward
----@field position ControlForwardRight
----@field velocity ControlForwardRight
----@field angle ControlRollPitch
----@field rate ControlRollPitch
-
----@class ControlHorizontalAttitudeFeedforward
----@field angle ControlRollPitch
----@field rate ControlRollPitch
+---@class ControlHorizontalTarget
+---@field kind "position"|"attitude"
+---@field position { forward: number|nil, right: number|nil }|nil Position branch only.
+---@field angle { roll: number, pitch: number }|nil Attitude branch only.
+---@field feedforward { position: { forward: number, right: number }|nil, velocity: { forward: number, right: number }|nil, angle: { roll: number, pitch: number }, rate: { roll: number, pitch: number } }
 
 ---@class ControlVerticalTarget
 ---@field position number|nil Down-axis local position. nil disables the height PID.
----@field feedforward ControlVerticalFeedforward
-
----@class ControlVerticalFeedforward
----@field position number Position-loop feedforward, contributes to down velocity target.
----@field velocity number Velocity-loop feedforward, contributes to collective command.
+---@field feedforward { position: number, velocity: number }
 
 ---@class ControlYawTarget
----@field angle number
----@field feedforward ControlYawFeedforward
-
----@class ControlYawFeedforward
----@field angle number
----@field rate number
-
----@class ControlForwardRight
----@field forward number
----@field right number
-
----@class ControlRollPitch
----@field roll number
----@field pitch number
+---@field angle number|nil
+---@field feedforward { angle: number, rate: number }
 
 --- Returns an empty controller target for the selected horizontal branch.
 ---

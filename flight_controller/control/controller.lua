@@ -14,6 +14,7 @@ local vertical_control = require("control.vertical")
 --- telemetry terms.
 local controller = {}
 
+---@class ControlController
 local Controller = {}
 Controller.__index = Controller
 
@@ -162,6 +163,8 @@ local function bodyAttitude(state)
     }
 end
 
+---@param control table
+---@return ControlController
 function controller.new(control)
     return setmetatable({
         horizontal = horizontal_control.new(control),
@@ -302,6 +305,12 @@ local function updateAllocation(self, state, verticalResult, attitudeResult, dt)
     )
 end
 
+--- Updates the controller for one control tick.
+---
+--- `input.state` is the state returned by `app.control_state.fromSensors()`;
+--- `input.target` is the controller target returned by `controller.target()`.
+---@param input { state: table, target: ControlTarget, dt: number }
+---@return { output: { collective: number, roll: number, pitch: number, yaw: number }, terms: { horizontal: table, vertical: table, attitude: table, allocation: table } }
 function Controller:update(input)
     local state = input.state
     local target = input.target

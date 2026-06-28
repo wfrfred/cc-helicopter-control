@@ -3,6 +3,7 @@ local tablex = require("lib.tablex")
 
 local allocation = {}
 
+---@class ControlAllocationController
 local Allocation = {}
 Allocation.__index = Allocation
 
@@ -42,6 +43,8 @@ local function scheduledMatrix(transform, pose)
     return out
 end
 
+---@param control table
+---@return ControlAllocationController
 function allocation.new(control)
     local config = control.attitude_allocator
     local enabled = config.enabled == true
@@ -89,6 +92,12 @@ end
 
 function Allocation:reset() end
 
+--- Applies attitude allocation and final output limits.
+---@param state { pose: { roll: number, pitch: number, heading: number } }
+---@param target { commands: { collective: number, roll: number, pitch: number, yaw: number } }
+---@param _feedforwardInput table
+---@param _dt number
+---@return { output: { collective: number, roll: number, pitch: number, yaw: number }, terms: table }
 function Allocation:update(state, target, _feedforwardInput, _dt)
     local rawCommands = target.commands
     local allocated = tablex.record.pick(rawCommands, COMMAND_KEYS)

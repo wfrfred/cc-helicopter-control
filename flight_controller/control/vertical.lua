@@ -4,9 +4,12 @@ local tablex = require("lib.tablex")
 
 local vertical = {}
 
+---@class ControlVerticalController
 local Vertical = {}
 Vertical.__index = Vertical
 
+---@param control table
+---@return ControlVerticalController
 function vertical.new(control)
     local controllers = {
         height = pid.new(control.pid.vertical.height),
@@ -26,6 +29,12 @@ function Vertical:reset()
     end)
 end
 
+--- Updates down-axis vertical position/velocity control.
+---@param state { position: number, velocity: number, downAxis: table }
+---@param target { position: number|nil }
+---@param feedforwardInput { position: number, velocity: number }
+---@param dt number
+---@return { output: { collective: number }, terms: table }
 function Vertical:update(state, target, feedforwardInput, dt)
     local targetVelocity = feedforwardInput.position
     local positionResult = nil

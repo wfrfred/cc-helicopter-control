@@ -5,9 +5,12 @@ local tablex = require("lib.tablex")
 
 local attitude = {}
 
+---@class ControlAttitudeController
 local Attitude = {}
 Attitude.__index = Attitude
 
+---@param control table
+---@return ControlAttitudeController
 function attitude.new(control)
     local controllers = {
         roll = {
@@ -37,6 +40,12 @@ function Attitude:reset()
     end)
 end
 
+--- Updates body attitude and angular-rate control.
+---@param state { orientation: table, angularVelocity: { roll: number, pitch: number, yaw: number } }
+---@param target { orientation: table }
+---@param feedforwardInput { angle: { roll: number, pitch: number, yaw: number }, rate: { roll: number, pitch: number, yaw: number } }
+---@param dt number
+---@return { output: { roll: number, pitch: number, yaw: number }, terms: table }
 function Attitude:update(state, target, feedforwardInput, dt)
     local rates = state.angularVelocity
     local angleFeedforward = feedforwardInput.angle

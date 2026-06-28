@@ -4,9 +4,12 @@ local tablex = require("lib.tablex")
 
 local horizontal = {}
 
+---@class ControlHorizontalController
 local Horizontal = {}
 Horizontal.__index = Horizontal
 
+---@param control table
+---@return ControlHorizontalController
 function horizontal.new(control)
     local controllers = {
         forward = {
@@ -33,6 +36,12 @@ function Horizontal:reset()
     end)
 end
 
+--- Updates heading-level horizontal position/velocity control.
+---@param state { velocity: { forward: number, right: number } }
+---@param target { position: { forward: number|nil, right: number|nil } }
+---@param feedforwardInput { position: { forward: number, right: number }, velocity: { forward: number, right: number } }
+---@param dt number
+---@return { output: { roll: number, pitch: number }, terms: table }
 function Horizontal:update(state, target, feedforwardInput, dt)
     local currentVelocity = state.velocity
     local targetVelocity = tablex.record.copy(feedforwardInput.position)

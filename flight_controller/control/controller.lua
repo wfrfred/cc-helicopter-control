@@ -116,11 +116,11 @@ local function updateVertical(self, state, target, dt)
             downAxis = state.frames.body:basis().down,
         },
         {
-            position = target.altitude.position,
+            position = target.vertical.position,
         },
         {
-            position = target.altitude.feedforward.position,
-            velocity = target.altitude.feedforward.velocity,
+            position = target.vertical.feedforward.position,
+            velocity = target.vertical.feedforward.velocity,
         },
         dt
     )

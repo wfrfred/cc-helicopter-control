@@ -20,16 +20,16 @@ local common = {}
 ---   - `feedforward.angle/rate.roll/pitch` are passed to the roll/pitch attitude
 ---     loops.
 ---
---- - `altitude.position` is a down-axis local position. nil disables the height
----   PID. `altitude.feedforward.position` is a down-axis velocity contribution;
----   `altitude.feedforward.velocity` is a collective command contribution.
+--- - `vertical.position` is a down-axis local position. nil disables the height
+---   PID. `vertical.feedforward.position` is a down-axis velocity contribution;
+---   `vertical.feedforward.velocity` is a collective command contribution.
 ---
 --- - `yaw.angle` is the yaw target passed to the attitude controller. Modes must
 ---   set it before returning the target; using current heading is the zero-error
 ---   yaw target. `yaw.feedforward.angle/rate` feed the yaw attitude loops.
 function common.target(kind)
     local target = {
-        altitude = {
+        vertical = {
             position = nil,
             feedforward = {
                 position = 0.0,

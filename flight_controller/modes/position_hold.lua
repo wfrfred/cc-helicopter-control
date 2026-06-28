@@ -46,10 +46,10 @@ local function buildTarget(self, ctx)
     target.horizontal.position.right = position.right
 
     if self.height.locked then
-        target.altitude.position = self.height.target - ctx.state.navigation.position.z
+        target.vertical.position = self.height.target - ctx.state.navigation.position.z
     end
 
-    target.altitude.feedforward.position = self.height.rate
+    target.vertical.feedforward.position = self.height.rate
     target.yaw.angle = self.heading
 
     return target

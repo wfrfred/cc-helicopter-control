@@ -362,12 +362,12 @@ local function legacyTarget(target, state)
     local positionDelta = worldFromFrd({
         forward = horizontalPosition.forward,
         right = horizontalPosition.right,
-        down = target.altitude.position,
+        down = target.vertical.position,
     }, target.yaw.angle)
     local height = nil
 
-    if target.altitude.position ~= nil then
-        height = -(state.navigation.position.z + target.altitude.position)
+    if target.vertical.position ~= nil then
+        height = -(state.navigation.position.z + target.vertical.position)
     end
 
     return {
@@ -375,11 +375,11 @@ local function legacyTarget(target, state)
         velocity = worldFromFrd({
             forward = horizontalVelocity.forward,
             right = horizontalVelocity.right,
-            down = target.altitude.feedforward.position,
+            down = target.vertical.feedforward.position,
         }, target.yaw.angle),
         height = height,
-        verticalSpeed = -target.altitude.feedforward.position,
-        heightActive = target.altitude.position ~= nil,
+        verticalSpeed = -target.vertical.feedforward.position,
+        heightActive = target.vertical.position ~= nil,
         heading = target.yaw.angle,
         roll = horizontalAttitude.roll,
         pitch = horizontalAttitude.pitch,
@@ -850,7 +850,7 @@ local function checkNavigationUpdateTargetOverride()
     assert(target.translation == nil, "controller target should not expose old translation target")
     assert(target.attitude == nil, "controller target should not expose old attitude target")
     assert(target.world == nil, "controller target should not expose old world target")
-    assert(target.vertical == nil, "controller target should not expose old vertical target")
+    assert(target.altitude == nil, "controller target should not expose old altitude target")
     assert(target.heading == nil, "controller target should not expose old heading target")
     assert(math.abs(legacy.position.x - 10.0) < 1.0e-6, "navigation should set horizontal target x")
     assert(math.abs(legacy.position.z - -20.0) < 1.0e-6, "navigation should set horizontal target z")
@@ -2270,7 +2270,7 @@ local function checkControllerTargetSemantics()
     assert(terms.horizontal.position.right.pid == nil, "nil right position should not run position pid")
 
     target = neutralTarget(state)
-    target.altitude.position = 0.0
+    target.vertical.position = 0.0
     control = controller:update({
         state = state,
         target = target,

@@ -40,7 +40,7 @@ local function buildTarget(self, ctx)
     local feedforward = frames.frdFromVector(frames.level(self.heading):componentsOf(self.velocity))
     local target = common.target("position")
 
-    target.altitude.position = self.height - ctx.state.navigation.position.z
+    target.vertical.position = self.height - ctx.state.navigation.position.z
     target.horizontal.feedforward.position.forward = feedforward.forward
     target.horizontal.feedforward.position.right = feedforward.right
     target.yaw.angle = self.heading

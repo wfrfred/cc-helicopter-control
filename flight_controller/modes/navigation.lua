@@ -521,7 +521,7 @@ local function buildTarget(ctx, phaseTarget)
 
     target.horizontal.position.forward = position.forward
     target.horizontal.position.right = position.right
-    target.altitude.position = -phaseTarget.height - ctx.state.navigation.position.z
+    target.vertical.position = -phaseTarget.height - ctx.state.navigation.position.z
     target.yaw.angle = phaseTarget.heading
 
     return target

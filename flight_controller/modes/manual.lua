@@ -71,10 +71,10 @@ local function buildTarget(self, ctx)
     local target = common.target("attitude")
 
     if height.locked then
-        target.altitude.position = height.target - ctx.state.navigation.position.z
+        target.vertical.position = height.target - ctx.state.navigation.position.z
     end
 
-    target.altitude.feedforward.position = height.rate
+    target.vertical.feedforward.position = height.rate
     target.horizontal.angle.roll = self.roll
     target.horizontal.angle.pitch = self.pitch
     target.yaw.angle = headingState.locked and headingState.target or heading(ctx.state)

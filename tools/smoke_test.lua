@@ -69,7 +69,7 @@ end
 local controller = Controller.new(config.control)
 local controllerTarget = common.target("attitude")
 
-controllerTarget.altitude.position = 0.0
+controllerTarget.vertical.position = 0.0
 controllerTarget.horizontal.angle.roll = 0.0
 controllerTarget.horizontal.angle.pitch = 0.0
 controllerTarget.yaw.angle = 0.0
